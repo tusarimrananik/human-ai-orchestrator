@@ -19,7 +19,6 @@ import {
   ListOrdered,
   ArrowUp,
   ArrowDown,
-  ArrowRight,
 } from 'lucide-react';
 
 interface Task {
@@ -115,14 +114,38 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  // Reorder Tasks (Move Up / Down in Triage list)
-  const moveTask = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+  // Reorder Tasks within Ready state or anywhere in global task array
+  const moveTask = (taskId: string, direction: 'up' | 'down') => {
+    const currentIndex = tasks.findIndex((t) => t.id === taskId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= tasks.length) return;
 
     const newTasks = [...tasks];
-    const [movedItem] = newTasks.splice(index, 1);
+    const [movedItem] = newTasks.splice(currentIndex, 1);
     newTasks.splice(targetIndex, 0, movedItem);
+    saveTasks(newTasks);
+  };
+
+  // Move a task within a filtered subgroup (like Ready list)
+  const moveTaskWithinGroup = (taskId: string, groupList: Task[], direction: 'up' | 'down') => {
+    const groupIdx = groupList.findIndex((t) => t.id === taskId);
+    if (groupIdx === -1) return;
+
+    const targetGroupIdx = direction === 'up' ? groupIdx - 1 : groupIdx + 1;
+    if (targetGroupIdx < 0 || targetGroupIdx >= groupList.length) return;
+
+    const targetTask = groupList[targetGroupIdx];
+
+    const idxA = tasks.findIndex((t) => t.id === taskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTask.id);
+    if (idxA === -1 || idxB === -1) return;
+
+    const newTasks = [...tasks];
+    const temp = newTasks[idxA];
+    newTasks[idxA] = newTasks[idxB];
+    newTasks[idxB] = temp;
     saveTasks(newTasks);
   };
 
@@ -147,7 +170,6 @@ export default function Page() {
     done: [],
   };
 
-  // Tasks in board are those that are committed (not in triage)
   filtered
     .filter((t) => t.manualStatus !== 'triage')
     .forEach((t) => {
@@ -201,12 +223,10 @@ export default function Page() {
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
 
-  // When clicking "Start" in Triage, send to Board (todo), where dependency logic automatically places it in Blocked or Ready!
   const startFromTriageToBoard = (id: string) => {
     saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'todo' } : t)));
   };
 
-  // Start execution directly on board
   const startInProgress = (id: string) => {
     saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'progress' } : t)));
   };
@@ -516,7 +536,7 @@ export default function Page() {
                     {list.length === 0 ? (
                       <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
                     ) : (
-                      list.map((t) => {
+                      list.map((t, idx) => {
                         const depNames = (t.dependencies || [])
                           .map((id) => tasks.find((x) => x.id === id))
                           .filter(Boolean) as Task[];
@@ -539,17 +559,40 @@ export default function Page() {
                               >
                                 {t.owner}
                               </span>
-                              <span
-                                className={`text-[9px] px-1 rounded font-semibold ${
-                                  t.priority === 'High'
-                                    ? 'text-rose-400 bg-rose-500/10'
-                                    : t.priority === 'Medium'
-                                    ? 'text-amber-400 bg-amber-500/10'
-                                    : 'text-zinc-400'
-                                }`}
-                              >
-                                {t.priority}
-                              </span>
+
+                              <div className="flex items-center gap-1">
+                                {colKey === 'ready' && (
+                                  <div className="flex items-center gap-0.5 mr-1">
+                                    <button
+                                      disabled={idx === 0}
+                                      onClick={() => moveTaskWithinGroup(t.id, list, 'up')}
+                                      className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
+                                      title="Move Up in Ready Priority"
+                                    >
+                                      <ArrowUp className="w-2.5 h-2.5" />
+                                    </button>
+                                    <button
+                                      disabled={idx === list.length - 1}
+                                      onClick={() => moveTaskWithinGroup(t.id, list, 'down')}
+                                      className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
+                                      title="Move Down in Ready Priority"
+                                    >
+                                      <ArrowDown className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                )}
+                                <span
+                                  className={`text-[9px] px-1 rounded font-semibold ${
+                                    t.priority === 'High'
+                                      ? 'text-rose-400 bg-rose-500/10'
+                                      : t.priority === 'Medium'
+                                      ? 'text-amber-400 bg-amber-500/10'
+                                      : 'text-zinc-400'
+                                  }`}
+                                >
+                                  {t.priority}
+                                </span>
+                              </div>
                             </div>
 
                             <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
@@ -660,7 +703,7 @@ export default function Page() {
                         <div className="flex flex-col gap-0.5">
                           <button
                             disabled={index === 0}
-                            onClick={() => moveTask(index, 'up')}
+                            onClick={() => moveTask(t.id, 'up')}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
                             title="Move Up"
                           >
@@ -668,7 +711,7 @@ export default function Page() {
                           </button>
                           <button
                             disabled={index === tasks.length - 1}
-                            onClick={() => moveTask(index, 'down')}
+                            onClick={() => moveTask(t.id, 'down')}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
                             title="Move Down"
                           >
@@ -742,7 +785,7 @@ export default function Page() {
                           <button
                             onClick={() => startFromTriageToBoard(t.id)}
                             className="flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold shadow"
-                            title="Commit task to Board (will be placed in Blocked or Ready automatically)"
+                            title="Commit task to Board (placed in Blocked or Ready automatically)"
                           >
                             <Play className="w-3 h-3 fill-white" /> Start (to Board)
                           </button>
