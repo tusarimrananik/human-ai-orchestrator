@@ -91,10 +91,10 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Idea chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Report ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Design UI layout', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2h', doneRule: 'Figma ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Build MVP', owner: 'Me', priority: 'High', deadline: '', estimate: '3h', doneRule: 'Deployed', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: a, name: 'Plan for algorithm Lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+          { id: b, name: 'Plan for micro lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+          { id: c, name: 'Write algorithm report prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+          { id: d, name: 'Write micro report prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -105,30 +105,45 @@ export default function Page() {
     setMounted(true);
   }, []);
 
-  // Propagates priority up the dependency chain so prerequisite tasks match high downstream priority
-  const cascadePriorityToPrerequisites = (taskList: Task[], taskId: string, newPriority: 'High' | 'Medium' | 'Low'): Task[] => {
+  // Cascade priority to both prerequisites AND downstream dependents
+  const cascadePriority = (taskList: Task[], taskId: string, newPriority: 'High' | 'Medium' | 'Low'): Task[] => {
     const updated = [...taskList];
     const targetScore = priorityScore(newPriority);
 
-    const visited = new Set<string>();
-    const queue: string[] = [taskId];
-
-    while (queue.length > 0) {
-      const currId = queue.shift()!;
-      if (visited.has(currId)) continue;
-      visited.add(currId);
-
+    // 1. Cascade UP to prerequisites
+    const visitedUp = new Set<string>();
+    const queueUp: string[] = [taskId];
+    while (queueUp.length > 0) {
+      const currId = queueUp.shift()!;
+      if (visitedUp.has(currId)) continue;
+      visitedUp.add(currId);
       const current = updated.find((t) => t.id === currId);
       if (!current) continue;
-
       (current.dependencies || []).forEach((depId) => {
         const depIdx = updated.findIndex((t) => t.id === depId);
         if (depIdx !== -1) {
-          const depTask = updated[depIdx];
-          if (priorityScore(depTask.priority) < targetScore) {
-            updated[depIdx] = { ...depTask, priority: newPriority };
+          if (priorityScore(updated[depIdx].priority) < targetScore) {
+            updated[depIdx] = { ...updated[depIdx], priority: newPriority };
           }
-          queue.push(depId);
+          queueUp.push(depId);
+        }
+      });
+    }
+
+    // 2. Cascade DOWN to downstream blocked tasks so entire pipeline aligns
+    const visitedDown = new Set<string>();
+    const queueDown: string[] = [taskId];
+    while (queueDown.length > 0) {
+      const currId = queueDown.shift()!;
+      if (visitedDown.has(currId)) continue;
+      visitedDown.add(currId);
+
+      updated.forEach((t, idx) => {
+        if ((t.dependencies || []).includes(currId)) {
+          if (priorityScore(t.priority) < targetScore) {
+            updated[idx] = { ...t, priority: newPriority };
+          }
+          queueDown.push(t.id);
         }
       });
     }
@@ -151,6 +166,7 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
+  // Reorder Tasks within a column/group
   const moveTaskWithinGroup = (taskId: string, groupList: Task[], direction: 'up' | 'down') => {
     const groupIdx = groupList.findIndex((t) => t.id === taskId);
     if (groupIdx === -1) return;
@@ -172,7 +188,7 @@ export default function Page() {
 
   const handlePriorityChange = (taskId: string, newPriority: 'High' | 'Medium' | 'Low') => {
     let updated = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
-    updated = cascadePriorityToPrerequisites(updated, taskId, newPriority);
+    updated = cascadePriority(updated, taskId, newPriority);
     saveTasks(updated);
   };
 
@@ -234,6 +250,7 @@ export default function Page() {
 
   const focus = getFocusTask();
 
+  // Straight / smooth horizontal dependency lines calculation
   useLayoutEffect(() => {
     if (view !== 'dependency' || !stageRef.current || !tasks.length) return;
 
@@ -259,15 +276,22 @@ export default function Page() {
           const y1 = a.top - stageRect.top + a.height / 2;
           const x2 = b.left - stageRect.left;
           const y2 = b.top - stageRect.top + b.height / 2;
-          const bend = Math.max(28, (x2 - x1) * 0.45);
 
-          const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 6} ${y2}`;
+          // If vertically aligned on almost same row, draw a perfectly straight line
+          const isNearlyStraight = Math.abs(y1 - y2) < 4;
+          let d = '';
+          if (isNearlyStraight) {
+            d = `M ${x1} ${y1} L ${x2 - 6} ${y2}`;
+          } else {
+            const bend = Math.max(24, (x2 - x1) * 0.45);
+            d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 6} ${y2}`;
+          }
           paths.push(d);
         });
       });
 
       setSvgContent({ width, height, paths });
-    }, 50);
+    }, 60);
 
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
@@ -296,12 +320,14 @@ export default function Page() {
   };
 
   const addSample = () => {
-    const a = uid(), b = uid(), c = uid(), d = uid();
+    const a = uid(), b = uid(), c = uid(), d = uid(), e = uid(), f = uid();
     const newSamples: Task[] = [
-      { id: a, name: 'Product Spec', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Approved', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-      { id: b, name: 'Competitor Analysis', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
-      { id: c, name: 'Wireframe Design', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1h', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-      { id: d, name: 'Engine Implementation', owner: 'Me', priority: 'High', deadline: '', estimate: '2h', doneRule: 'Tests pass', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: a, name: 'Plan for algorithm Lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+      { id: b, name: 'Plan for micro lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+      { id: c, name: 'Write algorithm report prompt', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+      { id: d, name: 'Write micro report prompt', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: e, name: 'AI: Generate algorithm report', owner: 'AI', priority: 'High', deadline: '', estimate: '1h', doneRule: 'Content ready', notes: '', dependencies: [c], manualStatus: 'todo', createdAt: Date.now() + 4 },
+      { id: f, name: 'AI: Generate micro report', owner: 'AI', priority: 'High', deadline: '', estimate: '1h', doneRule: 'Content ready', notes: '', dependencies: [d], manualStatus: 'todo', createdAt: Date.now() + 5 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -349,7 +375,7 @@ export default function Page() {
       updatedTasks = tasks.map((t) =>
         t.id === editId ? { ...t, ...data } : t
       );
-      updatedTasks = cascadePriorityToPrerequisites(updatedTasks, editId, taskPriority);
+      updatedTasks = cascadePriority(updatedTasks, editId, taskPriority);
     } else {
       const newId = uid();
       const newTask: Task = {
@@ -359,14 +385,15 @@ export default function Page() {
         ...data,
       };
       updatedTasks = [...tasks, newTask];
-      updatedTasks = cascadePriorityToPrerequisites(updatedTasks, newId, taskPriority);
+      updatedTasks = cascadePriority(updatedTasks, newId, taskPriority);
     }
 
     saveTasks(updatedTasks);
     setIsModalOpen(false);
   };
 
-  const getLevels = () => {
+  // Topological DAG calculation with parallel line alignment
+  const getAlignedLevels = () => {
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const memo = new Map<string, number>();
 
@@ -390,13 +417,39 @@ export default function Page() {
       (levels[l] ||= []).push(t);
     });
 
-    return levels;
+    // Sort nodes in each stage based on the index/position of their predecessor
+    // so lines go straight horizontally across parallel branches
+    const orderedLevelKeys = Object.keys(levels).map(Number).sort((a, b) => a - b);
+
+    // Track assigned lane/row position for each task
+    const laneMap = new Map<string, number>();
+
+    orderedLevelKeys.forEach((lvl) => {
+      const list = levels[lvl];
+      if (lvl === 0) {
+        // Root stage: use current array/user prioritized order
+        list.forEach((t, i) => laneMap.set(t.id, i));
+      } else {
+        // Successive stages: sort by predecessor's lane so tasks stay straight on the same horizontal row!
+        list.sort((a, b) => {
+          const predA = (a.dependencies || [])[0];
+          const predB = (b.dependencies || [])[0];
+          const laneA = predA ? laneMap.get(predA) ?? 999 : 999;
+          const laneB = predB ? laneMap.get(predB) ?? 999 : 999;
+          return laneA - laneB;
+        });
+        list.forEach((t, i) => {
+          const pred = (t.dependencies || [])[0];
+          const inheritedLane = pred ? laneMap.get(pred) : undefined;
+          laneMap.set(t.id, inheritedLane !== undefined ? inheritedLane : i);
+        });
+      }
+    });
+
+    return { levels, orderedLevels: orderedLevelKeys };
   };
 
-  const levels = getLevels();
-  const orderedLevels = Object.keys(levels)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const { levels, orderedLevels } = getAlignedLevels();
 
   if (!mounted) return null;
 
@@ -423,7 +476,7 @@ export default function Page() {
                 view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <GitFork className="w-3 h-3" /> DAG
+              <GitFork className="w-3 h-3" /> DAG Graph
             </button>
           </div>
         </div>
@@ -572,21 +625,19 @@ export default function Page() {
                         return (
                           <div
                             key={t.id}
-                            draggable={colKey === 'ready'}
+                            draggable
                             onDragStart={(e) => handleDragStart(e, t.id)}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
-                            className={`group p-2 rounded-md bg-zinc-950 border transition shadow-sm space-y-1 ${
+                            className={`group p-2 rounded-md bg-zinc-950 border transition shadow-sm space-y-1 cursor-grab active:cursor-grabbing ${
                               draggedTaskId === t.id
                                 ? 'border-indigo-500 opacity-60'
                                 : 'border-zinc-800/90 hover:border-zinc-700'
-                            } ${colKey === 'ready' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1">
-                                {colKey === 'ready' && (
-                                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
-                                )}
+                                <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
                                 <span
                                   className={`text-[9px] px-1 rounded font-semibold ${
                                     t.owner === 'Me'
@@ -594,14 +645,14 @@ export default function Page() {
                                       : t.owner === 'AI'
                                       ? 'bg-purple-500/10 text-purple-400'
                                       : 'bg-zinc-800 text-zinc-400'
-                                }`}
-                              >
-                                {t.owner}
-                              </span>
-                            </div>
+                                  }`}
+                                >
+                                  {t.owner}
+                                </span>
+                              </div>
 
-                            <div className="flex items-center gap-1">
-                              {colKey === 'ready' && (
+                              <div className="flex items-center gap-1">
+                                {/* Up/Down buttons across columns to prioritize */}
                                 <div className="flex items-center gap-0.5 mr-1">
                                   <button
                                     disabled={idx === 0}
@@ -626,335 +677,336 @@ export default function Page() {
                                     <ArrowDown className="w-2.5 h-2.5" />
                                   </button>
                                 </div>
-                              )}
 
-                              {/* Priority Pill Selector */}
-                              <select
-                                value={t.priority}
-                                onChange={(e) =>
-                                  handlePriorityChange(t.id, e.target.value as 'High' | 'Medium' | 'Low')
-                                }
-                                className={`text-[9px] px-1 rounded font-semibold border-0 cursor-pointer focus:outline-none ${
-                                  t.priority === 'High'
-                                    ? 'text-rose-400 bg-rose-500/10'
-                                    : t.priority === 'Medium'
-                                    ? 'text-amber-400 bg-amber-500/10'
-                                    : 'text-zinc-400 bg-zinc-800'
-                                }`}
+                                {/* Priority Selector with Auto-Cascade */}
+                                <select
+                                  value={t.priority}
+                                  onChange={(e) =>
+                                    handlePriorityChange(t.id, e.target.value as 'High' | 'Medium' | 'Low')
+                                  }
+                                  className={`text-[9px] px-1 rounded font-semibold border-0 cursor-pointer focus:outline-none ${
+                                    t.priority === 'High'
+                                      ? 'text-rose-400 bg-rose-500/10'
+                                      : t.priority === 'Medium'
+                                      ? 'text-amber-400 bg-amber-500/10'
+                                      : 'text-zinc-400 bg-zinc-800'
+                                  }`}
+                                >
+                                  <option value="High" className="bg-zinc-900 text-rose-400">
+                                    High
+                                  </option>
+                                  <option value="Medium" className="bg-zinc-900 text-amber-400">
+                                    Medium
+                                  </option>
+                                  <option value="Low" className="bg-zinc-900 text-zinc-300">
+                                    Low
+                                  </option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
+                              {t.name}
+                            </div>
+
+                            {waiting.length > 0 && (
+                              <div className="text-[10px] text-rose-400/90 bg-rose-500/10 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
+                              </div>
+                            )}
+
+                            {t.estimate && (
+                              <div className="text-[10px] text-zinc-500 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
+                              {colKey === 'ready' && (
+                                <button
+                                  onClick={() => startInProgress(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium"
+                                >
+                                  Start
+                                </button>
+                              )}
+                              {colKey === 'progress' && (
+                                <button
+                                  onClick={() => finishTask(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium"
+                                >
+                                  Done
+                                </button>
+                              )}
+                              {colKey === 'done' && (
+                                <button
+                                  onClick={() => reopenTask(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                                >
+                                  Reopen
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openTaskModal(t.id)}
+                                className="p-0.5 text-zinc-500 hover:text-zinc-300"
+                                title="Edit"
                               >
-                                <option value="High" className="bg-zinc-900 text-rose-400">
-                                  High
-                                </option>
-                                <option value="Medium" className="bg-zinc-900 text-amber-400">
-                                  Medium
-                                </option>
-                                <option value="Low" className="bg-zinc-900 text-zinc-300">
-                                  Low
-                                </option>
-                              </select>
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => deleteTask(t.id)}
+                                className="p-0.5 text-zinc-500 hover:text-rose-400"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
                             </div>
                           </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* DAG View (Aligned straight lanes across stages) */
+          <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
+            <div className="relative min-w-max pb-6" ref={stageRef}>
+              <svg
+                className="absolute inset-0 pointer-events-none z-10"
+                width={svgContent.width}
+                height={svgContent.height}
+                viewBox={`0 0 ${svgContent.width} ${svgContent.height}`}
+              >
+                <defs>
+                  <marker
+                    id="arrowHead"
+                    markerWidth="6"
+                    markerHeight="6"
+                    refX="5"
+                    refY="3"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L6,3 L0,6 z" fill="#6366f1" />
+                  </marker>
+                </defs>
+                {svgContent.paths.map((d, i) => (
+                  <path
+                    key={i}
+                    d={d}
+                    fill="none"
+                    stroke="#6366f1"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                    markerEnd="url(#arrowHead)"
+                  />
+                ))}
+              </svg>
 
-                          <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
+              <div className="grid grid-flow-col auto-cols-[210px] gap-16 items-start relative z-20">
+                {orderedLevels.map((level, index) => (
+                  <div key={level} className="flex flex-col gap-4">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+                      {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
+                    </div>
+                    {levels[level].map((t) => {
+                      const status = computedStatus(t);
+                      const badgeClass =
+                        status === 'ready'
+                          ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
+                          : status === 'blocked'
+                          ? 'border-rose-500/80 bg-rose-950/30 text-rose-300'
+                          : status === 'progress'
+                          ? 'border-blue-500/80 bg-blue-950/30 text-blue-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-400';
+
+                      return (
+                        <div
+                          key={t.id}
+                          data-node-id={t.id}
+                          className={`p-2.5 rounded-lg border-2 shadow transition ${badgeClass}`}
+                        >
+                          <div className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight">
                             {t.name}
                           </div>
-
-                          {waiting.length > 0 && (
-                            <div className="text-[10px] text-rose-400/90 bg-rose-500/10 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                              <Lock className="w-2.5 h-2.5 flex-shrink-0" />
-                              <span className="truncate">Waiting: {waiting.join(', ')}</span>
-                            </div>
-                          )}
-
-                          {t.estimate && (
-                            <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                              <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
-                            {colKey === 'ready' && (
-                              <button
-                                onClick={() => startInProgress(t.id)}
-                                className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium"
-                              >
-                                Start
-                              </button>
-                            )}
-                            {colKey === 'progress' && (
-                              <button
-                                onClick={() => finishTask(t.id)}
-                                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium"
-                              >
-                                Done
-                              </button>
-                            )}
-                            {colKey === 'done' && (
-                              <button
-                                onClick={() => reopenTask(t.id)}
-                                className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
-                              >
-                                Reopen
-                              </button>
-                            )}
-                            <button
-                              onClick={() => openTaskModal(t.id)}
-                              className="p-0.5 text-zinc-500 hover:text-zinc-300"
-                              title="Edit"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => deleteTask(t.id)}
-                              className="p-0.5 text-zinc-500 hover:text-rose-400"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1.5 pt-1 border-t border-zinc-800/80">
+                            <span>{t.owner}</span>
+                            <span className="font-semibold uppercase text-[9px]">{status}</span>
                           </div>
                         </div>
                       );
-                    })
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* DAG View */
-        <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
-          <div className="relative min-w-max pb-6" ref={stageRef}>
-            <svg
-              className="absolute inset-0 pointer-events-none z-10"
-              width={svgContent.width}
-              height={svgContent.height}
-              viewBox={`0 0 ${svgContent.width} ${svgContent.height}`}
-            >
-              <defs>
-                <marker
-                  id="arrowHead"
-                  markerWidth="6"
-                  markerHeight="6"
-                  refX="5"
-                  refY="3"
-                  orient="auto"
-                >
-                  <path d="M0,0 L6,3 L0,6 z" fill="#6366f1" />
-                </marker>
-              </defs>
-              {svgContent.paths.map((d, i) => (
-                <path
-                  key={i}
-                  d={d}
-                  fill="none"
-                  stroke="#6366f1"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 2"
-                  markerEnd="url(#arrowHead)"
-                />
-              ))}
-            </svg>
-
-            <div className="grid grid-flow-col auto-cols-[200px] gap-14 items-start relative z-20">
-              {orderedLevels.map((level, index) => (
-                <div key={level} className="flex flex-col gap-3">
-                  <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
-                    {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
+                    })}
                   </div>
-                  {levels[level].map((t) => {
-                    const status = computedStatus(t);
-                    const badgeClass =
-                      status === 'ready'
-                        ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
-                        : status === 'blocked'
-                        ? 'border-rose-500/80 bg-rose-950/30 text-rose-300'
-                        : status === 'progress'
-                        ? 'border-blue-500/80 bg-blue-950/30 text-blue-300'
-                        : 'border-zinc-700 bg-zinc-900 text-zinc-400';
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
 
-                    return (
-                      <div
-                        key={t.id}
-                        data-node-id={t.id}
-                        className={`p-2.5 rounded-lg border-2 shadow transition ${badgeClass}`}
-                      >
-                        <div className="text-xs font-bold text-zinc-100 truncate">{t.name}</div>
-                        <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
-                          <span>{t.owner}</span>
-                          <span className="font-semibold uppercase">{status}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+      {/* Task Edit/Create Modal */}
+      {isModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <span className="font-bold text-xs text-zinc-100">
+                {editId ? 'Edit Task' : 'New Task'}
+              </span>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                Task Name
+              </label>
+              <input
+                value={taskName}
+                onChange={(e) => setTaskName(e.target.value)}
+                placeholder="e.g. Build API authentication"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Assignee
+                </label>
+                <select
+                  value={taskOwner}
+                  onChange={(e) => setTaskOwner(e.target.value as any)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                >
+                  <option value="Me">Me (Human)</option>
+                  <option value="AI">AI Agent</option>
+                  <option value="Other">Other Person</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Priority
+                </label>
+                <select
+                  value={taskPriority}
+                  onChange={(e) => setTaskPriority(e.target.value as any)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                >
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-indigo-400 mb-1">
+                Dependencies (Prerequisites)
+              </label>
+              <div className="max-h-28 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
+                {tasks.filter((t) => t.id !== editId).length === 0 ? (
+                  <div className="text-[10px] text-zinc-600 italic">No other tasks available</div>
+                ) : (
+                  tasks
+                    .filter((t) => t.id !== editId)
+                    .map((t) => {
+                      const checked = selectedDeps.includes(t.id);
+                      return (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-2 text-[11px] text-zinc-300 cursor-pointer hover:bg-zinc-900 p-1 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedDeps([...selectedDeps, t.id]);
+                              else setSelectedDeps(selectedDeps.filter((id) => id !== t.id));
+                            }}
+                            className="rounded border-zinc-700"
+                          />
+                          <span className="truncate">{t.name}</span>
+                        </label>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Estimate
+                </label>
+                <input
+                  value={taskEstimate}
+                  onChange={(e) => setTaskEstimate(e.target.value)}
+                  placeholder="e.g. 45m"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Deadline
+                </label>
+                <input
+                  type="date"
+                  value={taskDeadline}
+                  onChange={(e) => setTaskDeadline(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveTask}
+                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
       )}
-    </main>
 
-    {/* Task Edit/Create Modal */}
-    {isModalOpen && (
-      <div
-        className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setIsModalOpen(false);
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const data = JSON.parse(r.result as string);
+              if (!Array.isArray(data)) throw new Error();
+              saveTasks(data);
+            } catch {
+              alert('Invalid JSON file');
+            }
+          };
+          r.readAsText(file);
         }}
-      >
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg p-4 space-y-3 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-            <span className="font-bold text-xs text-zinc-100">
-              {editId ? 'Edit Task' : 'New Task'}
-            </span>
-            <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-              Task Name
-            </label>
-            <input
-              value={taskName}
-              onChange={(e) => setTaskName(e.target.value)}
-              placeholder="e.g. Build API authentication"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Assignee
-              </label>
-              <select
-                value={taskOwner}
-                onChange={(e) => setTaskOwner(e.target.value as any)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-              >
-                <option value="Me">Me (Human)</option>
-                <option value="AI">AI Agent</option>
-                <option value="Other">Other Person</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Priority
-              </label>
-              <select
-                value={taskPriority}
-                onChange={(e) => setTaskPriority(e.target.value as any)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-              >
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-indigo-400 mb-1">
-              Dependencies (Prerequisites)
-            </label>
-            <div className="max-h-28 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
-              {tasks.filter((t) => t.id !== editId).length === 0 ? (
-                <div className="text-[10px] text-zinc-600 italic">No other tasks available</div>
-              ) : (
-                tasks
-                  .filter((t) => t.id !== editId)
-                  .map((t) => {
-                    const checked = selectedDeps.includes(t.id);
-                    return (
-                      <label
-                        key={t.id}
-                        className="flex items-center gap-2 text-[11px] text-zinc-300 cursor-pointer hover:bg-zinc-900 p-1 rounded"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedDeps([...selectedDeps, t.id]);
-                            else setSelectedDeps(selectedDeps.filter((id) => id !== t.id));
-                          }}
-                          className="rounded border-zinc-700"
-                        />
-                        <span className="truncate">{t.name}</span>
-                      </label>
-                    );
-                  })
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Estimate
-              </label>
-              <input
-                value={taskEstimate}
-                onChange={(e) => setTaskEstimate(e.target.value)}
-                placeholder="e.g. 45m"
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Deadline
-              </label>
-              <input
-                type="date"
-                value={taskDeadline}
-                onChange={(e) => setTaskDeadline(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={saveTask}
-              className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    <input
-      type="file"
-      ref={fileInputRef}
-      accept=".json"
-      style={{ display: 'none' }}
-      onChange={(e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const r = new FileReader();
-        r.onload = () => {
-          try {
-            const data = JSON.parse(r.result as string);
-            if (!Array.isArray(data)) throw new Error();
-            saveTasks(data);
-          } catch {
-            alert('Invalid JSON file');
-          }
-        };
-        r.readAsText(file);
-      }}
-    />
-  </div>
+      />
+    </div>
   );
 }
