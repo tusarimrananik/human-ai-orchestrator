@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   Play,
   CheckCircle2,
-  RotateCcw,
   Pencil,
   Trash2,
   Plus,
@@ -17,6 +16,9 @@ import {
   Clock,
   Lock,
   X,
+  ListOrdered,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface Task {
@@ -46,7 +48,7 @@ function priorityScore(p: string) {
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'board' | 'dependency'>('board');
+  const [view, setView] = useState<'board' | 'triage' | 'dependency'>('board');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
@@ -109,16 +111,21 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
+  // Reorder Tasks (Move Up / Down in Triage list)
+  const moveTask = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= tasks.length) return;
+
+    const newTasks = [...tasks];
+    const [movedItem] = newTasks.splice(index, 1);
+    newTasks.splice(targetIndex, 0, movedItem);
+    saveTasks(newTasks);
+  };
+
   const getFocusTask = () => {
+    // Pick the first READY task for Me in user's prioritized order
     const ready = tasks.filter((t) => computedStatus(t) === 'ready' && t.owner === 'Me');
-    ready.sort((a, b) => {
-      const p = priorityScore(b.priority) - priorityScore(a.priority);
-      if (p) return p;
-      const ad = a.deadline ? new Date(a.deadline).getTime() : Infinity;
-      const bd = b.deadline ? new Date(b.deadline).getTime() : Infinity;
-      return ad - bd;
-    });
-    return ready[0];
+    return ready[0] || null;
   };
 
   const q = search.toLowerCase();
@@ -136,9 +143,6 @@ export default function Page() {
     done: [],
   };
   filtered.forEach((t) => groups[computedStatus(t)].push(t));
-  Object.values(groups).forEach((arr) =>
-    arr.sort((a, b) => priorityScore(b.priority) - priorityScore(a.priority))
-  );
 
   const allGroups = { blocked: 0, ready: 0, progress: 0, done: 0 };
   tasks.forEach((t) => allGroups[computedStatus(t)]++);
@@ -312,6 +316,14 @@ export default function Page() {
               }`}
             >
               <LayoutGrid className="w-3 h-3" /> Board
+            </button>
+            <button
+              onClick={() => setView('triage')}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                view === 'triage' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <ListOrdered className="w-3 h-3" /> Triage
             </button>
             <button
               onClick={() => setView('dependency')}
@@ -561,7 +573,160 @@ export default function Page() {
               );
             })}
           </div>
+        ) : view === 'triage' ? (
+          /* Triage View with Up/Down Priority Ordering */
+          <div className="h-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg flex flex-col min-h-0 overflow-hidden">
+            <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between flex-shrink-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                <ListOrdered className="w-3.5 h-3.5" /> Triage Queue (Prioritize Tasks)
+              </span>
+              <span className="text-[10px] text-zinc-500">Top items are picked first for DO NOW</span>
+            </div>
+
+            <div className="p-2 space-y-1.5 overflow-y-auto flex-1">
+              {filtered.length === 0 ? (
+                <div className="py-12 text-center text-zinc-600 text-xs italic">No tasks in queue</div>
+              ) : (
+                filtered.map((t, index) => {
+                  const status = computedStatus(t);
+                  const depNames = (t.dependencies || [])
+                    .map((id) => tasks.find((x) => x.id === id))
+                    .filter(Boolean) as Task[];
+                  const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-2 rounded-md bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 flex items-center justify-between gap-3 transition shadow-sm"
+                    >
+                      {/* Left: Reorder up/down + index */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            disabled={index === 0}
+                            onClick={() => moveTask(index, 'up')}
+                            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
+                            title="Move Up (Increase Priority)"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            disabled={index === tasks.length - 1}
+                            onClick={() => moveTask(index, 'down')}
+                            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
+                            title="Move Down (Lower Priority)"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="w-5 text-center font-mono text-[11px] text-zinc-500 font-bold">
+                          #{index + 1}
+                        </span>
+                      </div>
+
+                      {/* Middle: Title, Worker, Status badge */}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
+                              status === 'ready'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : status === 'blocked'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                : status === 'progress'
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-zinc-800 text-zinc-400'
+                            }`}
+                          >
+                            {status}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                              t.owner === 'Me'
+                                ? 'bg-blue-500/10 text-blue-400'
+                                : t.owner === 'AI'
+                                ? 'bg-purple-500/10 text-purple-400'
+                                : 'bg-zinc-800 text-zinc-400'
+                            }`}
+                          >
+                            {t.owner}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                              t.priority === 'High'
+                                ? 'text-rose-400 bg-rose-500/10'
+                                : t.priority === 'Medium'
+                                ? 'text-amber-400 bg-amber-500/10'
+                                : 'text-zinc-400'
+                            }`}
+                          >
+                            {t.priority}
+                          </span>
+                          {t.estimate && (
+                            <span className="text-[10px] text-zinc-500 font-mono">
+                              • {t.estimate}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs font-semibold text-zinc-100 truncate">{t.name}</div>
+
+                        {waiting.length > 0 && (
+                          <div className="text-[10px] text-rose-400/90 truncate">
+                            Waiting for: {waiting.join(', ')}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Actions */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {status === 'ready' && (
+                          <button
+                            onClick={() => startTask(t.id)}
+                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold"
+                          >
+                            Start
+                          </button>
+                        )}
+                        {status === 'progress' && (
+                          <button
+                            onClick={() => finishTask(t.id)}
+                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold"
+                          >
+                            Done
+                          </button>
+                        )}
+                        {status === 'done' && (
+                          <button
+                            onClick={() => reopenTask(t.id)}
+                            className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                          >
+                            Reopen
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openTaskModal(t.id)}
+                          className="p-1 text-zinc-500 hover:text-zinc-300"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteTask(t.id)}
+                          className="p-1 text-zinc-500 hover:text-rose-400"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         ) : (
+          /* DAG View */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             <div className="relative min-w-max pb-6" ref={stageRef}>
               <svg
