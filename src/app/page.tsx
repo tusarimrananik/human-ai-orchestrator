@@ -19,6 +19,8 @@ import {
   ArrowUp,
   ArrowDown,
   GripVertical,
+  Timer,
+  Check,
 } from 'lucide-react';
 
 interface Task {
@@ -33,6 +35,9 @@ interface Task {
   dependencies: string[];
   manualStatus: 'todo' | 'progress' | 'done';
   createdAt: number;
+  startedAt?: number | null;
+  completedAt?: number | null;
+  totalTimeSpentSeconds?: number;
 }
 
 const STORAGE_KEY = 'smart_task_manager_v1';
@@ -45,6 +50,16 @@ function priorityScore(p: string) {
   return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
 }
 
+function formatElapsed(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0s';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -52,6 +67,16 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+
+  // Live timer tick for active in-progress tasks
+  const [now, setNow] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Drag-and-drop state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -86,6 +111,7 @@ export default function Page() {
           parsed.map((t: any) => ({
             ...t,
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
+            totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
           }))
         );
       } else {
@@ -105,12 +131,10 @@ export default function Page() {
     setMounted(true);
   }, []);
 
-  // Cascade priority to both prerequisites AND downstream dependents
   const cascadePriority = (taskList: Task[], taskId: string, newPriority: 'High' | 'Medium' | 'Low'): Task[] => {
     const updated = [...taskList];
     const targetScore = priorityScore(newPriority);
 
-    // 1. Cascade UP to prerequisites
     const visitedUp = new Set<string>();
     const queueUp: string[] = [taskId];
     while (queueUp.length > 0) {
@@ -130,7 +154,6 @@ export default function Page() {
       });
     }
 
-    // 2. Cascade DOWN to downstream blocked tasks so entire pipeline aligns
     const visitedDown = new Set<string>();
     const queueDown: string[] = [taskId];
     while (queueDown.length > 0) {
@@ -166,7 +189,6 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  // Reorder Tasks within a column/group
   const moveTaskWithinGroup = (taskId: string, groupList: Task[], direction: 'up' | 'down') => {
     const groupIdx = groupList.findIndex((t) => t.id === taskId);
     if (groupIdx === -1) return;
@@ -250,7 +272,7 @@ export default function Page() {
 
   const focus = getFocusTask();
 
-  // Straight / smooth horizontal dependency lines calculation
+  // Straight horizontal dependency lines calculation
   useLayoutEffect(() => {
     if (view !== 'dependency' || !stageRef.current || !tasks.length) return;
 
@@ -277,7 +299,6 @@ export default function Page() {
           const x2 = b.left - stageRect.left;
           const y2 = b.top - stageRect.top + b.height / 2;
 
-          // If vertically aligned on almost same row, draw a perfectly straight line
           const isNearlyStraight = Math.abs(y1 - y2) < 4;
           let d = '';
           if (isNearlyStraight) {
@@ -296,16 +317,57 @@ export default function Page() {
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
 
+  // Start task & begin live timer
   const startInProgress = (id: string) => {
-    saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'progress' } : t)));
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            manualStatus: 'progress',
+            startedAt: Date.now(),
+            completedAt: null,
+          };
+        }
+        return t;
+      })
+    );
   };
 
+  // Finish task & record total duration
   const finishTask = (id: string) => {
-    saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'done' } : t)));
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === id) {
+          const sessionSeconds = t.startedAt ? Math.floor((Date.now() - t.startedAt) / 1000) : 0;
+          const total = (t.totalTimeSpentSeconds || 0) + sessionSeconds;
+          return {
+            ...t,
+            manualStatus: 'done',
+            startedAt: null,
+            completedAt: Date.now(),
+            totalTimeSpentSeconds: total,
+          };
+        }
+        return t;
+      })
+    );
   };
 
+  // Reopen task
   const reopenTask = (id: string) => {
-    saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'todo' } : t)));
+    saveTasks(
+      tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              manualStatus: 'todo',
+              startedAt: null,
+              completedAt: null,
+            }
+          : t
+      )
+    );
   };
 
   const deleteTask = (id: string) => {
@@ -372,9 +434,7 @@ export default function Page() {
     let updatedTasks: Task[];
 
     if (editId) {
-      updatedTasks = tasks.map((t) =>
-        t.id === editId ? { ...t, ...data } : t
-      );
+      updatedTasks = tasks.map((t) => (t.id === editId ? { ...t, ...data } : t));
       updatedTasks = cascadePriority(updatedTasks, editId, taskPriority);
     } else {
       const newId = uid();
@@ -382,6 +442,7 @@ export default function Page() {
         id: newId,
         manualStatus: 'todo',
         createdAt: Date.now(),
+        totalTimeSpentSeconds: 0,
         ...data,
       };
       updatedTasks = [...tasks, newTask];
@@ -390,6 +451,16 @@ export default function Page() {
 
     saveTasks(updatedTasks);
     setIsModalOpen(false);
+  };
+
+  // Helper to compute live elapsed time string for a task
+  const getTaskDurationDisplay = (t: Task): string | null => {
+    let totalSec = t.totalTimeSpentSeconds || 0;
+    if (t.manualStatus === 'progress' && t.startedAt) {
+      totalSec += Math.floor((now - t.startedAt) / 1000);
+    }
+    if (totalSec <= 0) return null;
+    return formatElapsed(totalSec);
   };
 
   // Topological DAG calculation with parallel line alignment
@@ -417,20 +488,14 @@ export default function Page() {
       (levels[l] ||= []).push(t);
     });
 
-    // Sort nodes in each stage based on the index/position of their predecessor
-    // so lines go straight horizontally across parallel branches
     const orderedLevelKeys = Object.keys(levels).map(Number).sort((a, b) => a - b);
-
-    // Track assigned lane/row position for each task
     const laneMap = new Map<string, number>();
 
     orderedLevelKeys.forEach((lvl) => {
       const list = levels[lvl];
       if (lvl === 0) {
-        // Root stage: use current array/user prioritized order
         list.forEach((t, i) => laneMap.set(t.id, i));
       } else {
-        // Successive stages: sort by predecessor's lane so tasks stay straight on the same horizontal row!
         list.sort((a, b) => {
           const predA = (a.dependencies || [])[0];
           const predB = (b.dependencies || [])[0];
@@ -621,6 +686,7 @@ export default function Page() {
                           .map((id) => tasks.find((x) => x.id === id))
                           .filter(Boolean) as Task[];
                         const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+                        const durationDisplay = getTaskDurationDisplay(t);
 
                         return (
                           <div
@@ -716,11 +782,31 @@ export default function Page() {
                               </div>
                             )}
 
-                            {t.estimate && (
-                              <div className="text-[10px] text-zinc-500 flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                              </div>
-                            )}
+                            {/* Time Tracking Info & Estimate */}
+                            <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-0.5">
+                              {durationDisplay ? (
+                                <div
+                                  className={`flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    colKey === 'progress'
+                                      ? 'bg-blue-500/20 text-blue-300 animate-pulse border border-blue-500/30'
+                                      : 'bg-zinc-900 text-emerald-400'
+                                  }`}
+                                >
+                                  <Timer className="w-2.5 h-2.5" />
+                                  <span>{durationDisplay}</span>
+                                </div>
+                              ) : t.estimate ? (
+                                <div className="text-zinc-500 flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                                </div>
+                              ) : (
+                                <span />
+                              )}
+
+                              {t.estimate && durationDisplay && (
+                                <span className="text-[9px] text-zinc-500 font-mono">est: {t.estimate}</span>
+                              )}
+                            </div>
 
                             <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
                               {colKey === 'ready' && (
@@ -772,7 +858,7 @@ export default function Page() {
             })}
           </div>
         ) : (
-          /* DAG View (Aligned straight lanes across stages) */
+          /* DAG View */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             <div className="relative min-w-max pb-6" ref={stageRef}>
               <svg
@@ -814,6 +900,7 @@ export default function Page() {
                     </div>
                     {levels[level].map((t) => {
                       const status = computedStatus(t);
+                      const durationDisplay = getTaskDurationDisplay(t);
                       const badgeClass =
                         status === 'ready'
                           ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
@@ -834,7 +921,14 @@ export default function Page() {
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1.5 pt-1 border-t border-zinc-800/80">
                             <span>{t.owner}</span>
-                            <span className="font-semibold uppercase text-[9px]">{status}</span>
+                            <div className="flex items-center gap-1">
+                              {durationDisplay && (
+                                <span className="font-mono text-emerald-400 font-bold">
+                                  {durationDisplay}
+                                </span>
+                              )}
+                              <span className="font-semibold uppercase text-[9px]">{status}</span>
+                            </div>
                           </div>
                         </div>
                       );
