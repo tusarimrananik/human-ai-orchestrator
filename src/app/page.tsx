@@ -5,22 +5,13 @@ import {
   Sparkles,
   LayoutGrid,
   GitFork,
-  CheckCircle2,
-  Clock,
   Bot,
-  User,
   Plus,
   Search,
-  Filter,
   RefreshCw,
-  Folder,
-  Layers,
   ChevronDown,
-  Users,
-  Shield,
-  Activity,
 } from 'lucide-react';
-import { TaskStatus, Priority, WorkerType } from '@prisma/client';
+import { TaskStatus, WorkerType } from '@prisma/client';
 import WhatShouldIDoNow from '@/components/WhatShouldIDoNow';
 import KanbanBoard from '@/components/KanbanBoard';
 import DependencyGraph from '@/components/DependencyGraph';
@@ -119,7 +110,6 @@ export default function Home() {
     }
   };
 
-  // Filter tasks based on quick filters
   const filteredTasks = tasks.filter((t) => {
     if (!quickFilter) return true;
     if (quickFilter === 'ready_me') return t.status === TaskStatus.READY && (!t.worker || t.worker.type === WorkerType.ME);
@@ -131,113 +121,112 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="h-screen w-screen bg-zinc-950 text-zinc-100 flex flex-col antialiased overflow-hidden select-none">
       {/* Top Navbar */}
-      <header className="border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-xl sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <header className="border-b border-zinc-800/80 bg-zinc-900/80 backdrop-blur-md h-12 flex-shrink-0 z-30">
+        <div className="max-w-7xl mx-auto px-3 h-full flex items-center justify-between gap-3">
           {/* Logo & Project Switcher */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/30">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center font-bold text-xs text-white shadow-md">
                 ⚡
               </div>
-              <span className="font-extrabold text-sm tracking-tight text-white hidden sm:inline">
-                Human<span className="text-indigo-400">+</span>AI Work
+              <span className="font-bold text-xs tracking-tight text-white hidden sm:inline">
+                Human<span className="text-indigo-400">+</span>AI
               </span>
             </div>
 
-            <div className="h-5 w-[1px] bg-zinc-800 hidden sm:block" />
+            <div className="h-4 w-[1px] bg-zinc-800 hidden sm:block" />
 
             {/* Project Selector */}
             <div className="relative">
               <select
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-xs font-medium rounded-lg pl-3 pr-8 py-1.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none appearance-none cursor-pointer"
+                className="bg-zinc-900 border border-zinc-700/80 text-zinc-200 text-xs rounded-md pl-2 pr-6 py-1 focus:ring-1 focus:ring-indigo-500 focus:outline-none appearance-none cursor-pointer"
               >
-                <option value="all">🌐 All Projects (Multi-Project View)</option>
+                <option value="all">🌐 All Projects</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     📁 {p.name}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-2.5 pointer-events-none" />
+              <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-1.5 top-2 pointer-events-none" />
             </div>
 
             <button
               onClick={() => setIsProjectManagerOpen(true)}
-              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition"
+              className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
               title="Add New Project"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3" />
             </button>
           </div>
 
-          {/* Center Tabs: Dashboard / Board / Graph */}
-          <nav className="flex items-center bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl">
+          {/* Center Tabs */}
+          <nav className="flex items-center bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                 activeTab === 'dashboard'
-                  ? 'bg-indigo-600 text-white shadow-md'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" /> What To Do
+              <Sparkles className="w-3 h-3" /> What To Do
             </button>
             <button
               onClick={() => setActiveTab('board')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                 activeTab === 'board'
-                  ? 'bg-indigo-600 text-white shadow-md'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" /> Board
+              <LayoutGrid className="w-3 h-3" /> Board
             </button>
             <button
               onClick={() => setActiveTab('graph')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                 activeTab === 'graph'
-                  ? 'bg-indigo-600 text-white shadow-md'
+                  ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <GitFork className="w-3.5 h-3.5" /> Dependencies
+              <GitFork className="w-3 h-3" /> DAG Graph
             </button>
           </nav>
 
           {/* Right Action buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setIsWorkerManagerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 transition"
+              className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 transition"
               title="Manage Workers & WIP Limits"
             >
-              <Bot className="w-3.5 h-3.5 text-purple-400" />
+              <Bot className="w-3 h-3 text-purple-400" />
               <span className="hidden md:inline">Workers</span>
             </button>
 
             <button
               onClick={() => setIsCreateTaskOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow-lg shadow-indigo-600/30"
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition shadow"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3 h-3" />
               <span>New Task</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Sub-bar: Search, Quick Filter Pills, and Refresh */}
-      <div className="border-b border-zinc-800/60 bg-zinc-950/80 px-4 sm:px-6 lg:px-8 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Quick Filters */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 text-xs">
+      {/* Sub-bar: Search & Quick Filter Pills */}
+      <div className="border-b border-zinc-800/60 bg-zinc-950/80 px-3 py-1.5 flex-shrink-0 z-20">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 overflow-x-auto text-[11px]">
             <button
               onClick={() => setQuickFilter(null)}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
+              className={`px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
                 quickFilter === null
                   ? 'bg-zinc-200 text-zinc-900 border-zinc-200 font-semibold'
                   : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
@@ -247,7 +236,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setQuickFilter(quickFilter === 'ready_me' ? null : 'ready_me')}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
+              className={`px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
                 quickFilter === 'ready_me'
                   ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-semibold'
                   : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-emerald-400'
@@ -257,7 +246,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setQuickFilter(quickFilter === 'ai' ? null : 'ai')}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
+              className={`px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
                 quickFilter === 'ai'
                   ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 font-semibold'
                   : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-purple-400'
@@ -267,7 +256,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setQuickFilter(quickFilter === 'waiting' ? null : 'waiting')}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
+              className={`px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
                 quickFilter === 'waiting'
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-semibold'
                   : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-amber-400'
@@ -277,7 +266,7 @@ export default function Home() {
             </button>
             <button
               onClick={() => setQuickFilter(quickFilter === 'blocked' ? null : 'blocked')}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
+              className={`px-2 py-0.5 rounded-full border transition whitespace-nowrap ${
                 quickFilter === 'blocked'
                   ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 font-semibold'
                   : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-rose-400'
@@ -285,44 +274,32 @@ export default function Home() {
             >
               🔒 Blocked
             </button>
-            <button
-              onClick={() => setQuickFilter(quickFilter === 'due_soon' ? null : 'due_soon')}
-              className={`px-2.5 py-1 rounded-full border transition whitespace-nowrap ${
-                quickFilter === 'due_soon'
-                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 font-semibold'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-blue-400'
-              }`}
-            >
-              🎯 Due Soon
-            </button>
           </div>
 
-          {/* Search Box & Refresh & Demo Seed */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 md:w-64">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="relative w-40 sm:w-48">
+              <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
               <input
                 type="text"
-                placeholder="Search tasks..."
+                placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md pl-6 pr-2 py-0.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
 
             <button
               onClick={() => fetchAllData()}
               disabled={refreshing}
-              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-              title="Refresh all data"
+              className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
+              title="Refresh"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
 
             <button
               onClick={handleResetDemoData}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-              title="Reset Demo Data"
+              className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition hidden sm:inline"
             >
               Reset Demo
             </button>
@@ -330,14 +307,14 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content View (Strict Viewport Height without Body Scrollbar) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 overflow-hidden min-h-0 flex flex-col">
         {loading && !dashboardData ? (
-          <div className="p-16 text-center text-zinc-500 text-sm">
-            Initializing Human + AI Work Engine...
+          <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">
+            Loading Human + AI Orchestrator...
           </div>
         ) : (
-          <div>
+          <div className="flex-1 min-h-0 flex flex-col">
             {activeTab === 'dashboard' && dashboardData && (
               <WhatShouldIDoNow
                 primaryRecommendation={dashboardData.primaryRecommendation}
@@ -361,28 +338,16 @@ export default function Home() {
             )}
 
             {activeTab === 'graph' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-200">
-                      Dependency Visualization (DAG View)
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Left-to-right topological order. Click any task to inspect details or manage dependencies.
-                    </p>
-                  </div>
-                </div>
-                <DependencyGraph
-                  graphData={graphData}
-                  onOpenTask={(id) => setActiveTaskId(id)}
-                />
-              </div>
+              <DependencyGraph
+                graphData={graphData}
+                onOpenTask={(id) => setActiveTaskId(id)}
+              />
             )}
           </div>
         )}
       </main>
 
-      {/* Task Details Modal */}
+      {/* Modals */}
       <TaskModal
         taskId={activeTaskId}
         onClose={() => setActiveTaskId(null)}
@@ -391,7 +356,6 @@ export default function Home() {
         workers={workers}
       />
 
-      {/* Create Task Modal */}
       <CreateTaskModal
         isOpen={isCreateTaskOpen}
         onClose={() => setIsCreateTaskOpen(false)}
@@ -402,7 +366,6 @@ export default function Home() {
         allTasks={tasks}
       />
 
-      {/* Worker Manager Modal */}
       <WorkerManagerModal
         isOpen={isWorkerManagerOpen}
         onClose={() => setIsWorkerManagerOpen(false)}
@@ -410,7 +373,6 @@ export default function Home() {
         onWorkersUpdated={fetchAllData}
       />
 
-      {/* Project Manager Modal */}
       <ProjectManagerModal
         isOpen={isProjectManagerOpen}
         onClose={() => setIsProjectManagerOpen(false)}

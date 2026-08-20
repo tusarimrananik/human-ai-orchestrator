@@ -4,15 +4,10 @@ import React from 'react';
 import {
   Clock,
   CheckCircle2,
-  AlertCircle,
-  Play,
   Bot,
   User,
-  Layers,
   Lock,
   Hourglass,
-  Sparkles,
-  AlertTriangle,
 } from 'lucide-react';
 import { TaskStatus, Priority, WorkerType } from '@prisma/client';
 
@@ -23,20 +18,19 @@ interface KanbanBoardProps {
   workers: any[];
 }
 
-const COLUMNS: Array<{ id: TaskStatus; label: string; color: string; bg: string }> = [
-  { id: TaskStatus.BACKLOG, label: 'Backlog', color: 'text-zinc-400', bg: 'border-zinc-800' },
-  { id: TaskStatus.BLOCKED, label: 'Blocked', color: 'text-rose-400', bg: 'border-rose-500/20' },
-  { id: TaskStatus.READY, label: 'Ready', color: 'text-emerald-400', bg: 'border-emerald-500/20' },
-  { id: TaskStatus.IN_PROGRESS, label: 'In Progress', color: 'text-blue-400', bg: 'border-blue-500/20' },
-  { id: TaskStatus.WAITING, label: 'Waiting', color: 'text-amber-400', bg: 'border-amber-500/20' },
-  { id: TaskStatus.REVIEW, label: 'Review', color: 'text-purple-400', bg: 'border-purple-500/20' },
-  { id: TaskStatus.DONE, label: 'Done', color: 'text-green-400', bg: 'border-green-500/20' },
+const COLUMNS: Array<{ id: TaskStatus; label: string; color: string }> = [
+  { id: TaskStatus.BACKLOG, label: 'Backlog', color: 'text-zinc-400' },
+  { id: TaskStatus.BLOCKED, label: 'Blocked', color: 'text-rose-400' },
+  { id: TaskStatus.READY, label: 'Ready', color: 'text-emerald-400' },
+  { id: TaskStatus.IN_PROGRESS, label: 'In Progress', color: 'text-blue-400' },
+  { id: TaskStatus.WAITING, label: 'Waiting', color: 'text-amber-400' },
+  { id: TaskStatus.REVIEW, label: 'Review', color: 'text-purple-400' },
+  { id: TaskStatus.DONE, label: 'Done', color: 'text-green-400' },
 ];
 
 export default function KanbanBoard({
   tasks,
   onOpenTask,
-  onStatusChange,
   workers,
 }: KanbanBoardProps) {
   const getTasksByStatus = (status: TaskStatus) => {
@@ -57,32 +51,30 @@ export default function KanbanBoard({
   };
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-6 pt-2 select-none min-h-[70vh]">
+    <div className="h-full flex gap-2 overflow-x-auto select-none min-h-0 pb-1">
       {COLUMNS.map((col) => {
         const columnTasks = getTasksByStatus(col.id);
 
         return (
           <div
             key={col.id}
-            className="flex-shrink-0 w-80 bg-zinc-900/50 rounded-xl border border-zinc-800 flex flex-col max-h-[80vh]"
+            className="flex-1 min-w-[170px] bg-zinc-900/40 rounded-lg border border-zinc-800/80 flex flex-col min-h-0"
           >
             {/* Column Header */}
-            <div className={`px-4 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40 rounded-t-xl`}>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold uppercase tracking-wider ${col.color}`}>
-                  {col.label}
-                </span>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
-                  {columnTasks.length}
-                </span>
-              </div>
+            <div className="px-2.5 py-1.5 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/60 rounded-t-lg flex-shrink-0">
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${col.color}`}>
+                {col.label}
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300">
+                {columnTasks.length}
+              </span>
             </div>
 
             {/* Column Tasks List */}
-            <div className="p-3 space-y-3 overflow-y-auto flex-1">
+            <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
               {columnTasks.length === 0 ? (
-                <div className="py-8 text-center text-xs text-zinc-600 italic">
-                  No {col.label.toLowerCase()} tasks
+                <div className="py-6 text-center text-[10px] text-zinc-600 italic">
+                  Empty
                 </div>
               ) : (
                 columnTasks.map((t) => {
@@ -94,41 +86,28 @@ export default function KanbanBoard({
                     <div
                       key={t.id}
                       onClick={() => onOpenTask(t.id)}
-                      className="group p-3.5 rounded-xl bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition cursor-pointer shadow-sm space-y-2.5"
+                      className="group p-2 rounded-lg bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800/90 hover:border-zinc-700 transition cursor-pointer shadow-sm space-y-1"
                     >
-                      {/* Top row: project & priority */}
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 truncate max-w-[120px]">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-mono text-zinc-400 truncate max-w-[80px]">
                           {t.project?.name || t.projectName}
                         </span>
-                        <div className="flex items-center gap-1.5">
-                          {t.isWorkerAtCapacity && col.id === TaskStatus.READY && (
-                            <span
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                              title="Worker capacity is currently full (waiting for WIP capacity)"
-                            >
-                              Capacity Full
-                            </span>
-                          )}
-                          <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${getPriorityBadgeClass(
-                              t.priority
-                            )}`}
-                          >
-                            {t.priority}
-                          </span>
-                        </div>
+                        <span
+                          className={`text-[9px] font-bold px-1 py-0.2 rounded border ${getPriorityBadgeClass(
+                            t.priority
+                          )}`}
+                        >
+                          {t.priority}
+                        </span>
                       </div>
 
-                      {/* Title */}
-                      <h4 className="text-sm font-semibold text-zinc-200 group-hover:text-white transition leading-snug">
+                      <h4 className="text-xs font-semibold text-zinc-200 group-hover:text-white transition leading-tight line-clamp-2">
                         {t.title}
                       </h4>
 
-                      {/* Blocked reason hint if in BLOCKED column */}
                       {col.id === TaskStatus.BLOCKED && hasUnfinishedPrereqs && (
-                        <div className="text-[11px] text-rose-400/90 flex items-center gap-1 bg-rose-500/10 p-1.5 rounded border border-rose-500/20">
-                          <Lock className="w-3 h-3 flex-shrink-0" />
+                        <div className="text-[9px] text-rose-400/90 flex items-center gap-1 bg-rose-500/10 p-1 rounded border border-rose-500/20 truncate">
+                          <Lock className="w-2.5 h-2.5 flex-shrink-0" />
                           <span className="truncate">
                             Blocked by:{' '}
                             {t.dependencies
@@ -139,38 +118,34 @@ export default function KanbanBoard({
                         </div>
                       )}
 
-                      {/* Waiting reason if in WAITING column */}
                       {col.id === TaskStatus.WAITING && t.waitingReason && (
-                        <div className="text-[11px] text-amber-400/90 flex items-center gap-1 bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
-                          <Hourglass className="w-3 h-3 flex-shrink-0" />
+                        <div className="text-[9px] text-amber-400/90 flex items-center gap-1 bg-amber-500/10 p-1 rounded border border-amber-500/20 truncate">
+                          <Hourglass className="w-2.5 h-2.5 flex-shrink-0" />
                           <span className="truncate">{t.waitingReason}</span>
                         </div>
                       )}
 
-                      {/* Footer: Worker & Duration */}
-                      <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1.5 border-t border-zinc-900">
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-zinc-900/80">
+                        <span className="flex items-center gap-1 text-zinc-400 truncate">
                           {t.worker ? (
-                            <span className="flex items-center gap-1 text-zinc-300 font-medium">
+                            <>
                               {t.worker.type === WorkerType.AI_AGENT ? (
-                                <Bot className="w-3 h-3 text-purple-400" />
+                                <Bot className="w-2.5 h-2.5 text-purple-400" />
                               ) : (
-                                <User className="w-3 h-3 text-zinc-400" />
+                                <User className="w-2.5 h-2.5 text-zinc-400" />
                               )}
-                              {t.worker.name}
-                            </span>
+                              <span className="truncate max-w-[65px]">{t.worker.name}</span>
+                            </>
                           ) : (
-                            <span className="text-zinc-600 italic">Unassigned</span>
+                            <span className="text-zinc-600 italic">None</span>
                           )}
-                        </div>
+                        </span>
 
-                        <div className="flex items-center gap-2 font-mono">
-                          {t.estimatedDuration && (
-                            <span className="flex items-center gap-0.5">
-                              <Clock className="w-3 h-3" /> {t.estimatedDuration}m
-                            </span>
-                          )}
-                        </div>
+                        {t.estimatedDuration ? (
+                          <span className="flex items-center gap-0.5 font-mono text-[9px]">
+                            <Clock className="w-2.5 h-2.5" /> {t.estimatedDuration}m
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   );
