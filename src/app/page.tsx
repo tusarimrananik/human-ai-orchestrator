@@ -254,9 +254,6 @@ export default function Page() {
   };
 
   const deleteTask = (id: string) => {
-    const t = tasks.find((x) => x.id === id);
-    if (!t) return;
-    if (!confirm(`Delete "${t.name}"?`)) return;
     saveTasks(
       tasks
         .filter((x) => x.id !== id)
