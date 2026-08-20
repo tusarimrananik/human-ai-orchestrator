@@ -1,6 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import {
+  Play,
+  CheckCircle2,
+  RotateCcw,
+  Pencil,
+  Trash2,
+  Plus,
+  Search,
+  LayoutGrid,
+  GitFork,
+  Download,
+  Upload,
+  Sparkles,
+  Bot,
+  User,
+  Clock,
+  Lock,
+  X,
+} from 'lucide-react';
 
 interface Task {
   id: string;
@@ -26,7 +45,7 @@ function priorityScore(p: string) {
   return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
 }
 
-export default function SmartTaskManagerPage() {
+export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
@@ -54,31 +73,28 @@ export default function SmartTaskManagerPage() {
     paths: [],
   });
 
-  // Load initial tasks from LocalStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         setTasks(JSON.parse(stored));
       } else {
-        // Default initial sample
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30 min', doneRule: 'One idea is chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1 hour', doneRule: 'Competitor list is ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Design homepage', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2 hours', doneRule: 'Homepage design is ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Build homepage', owner: 'Me', priority: 'High', deadline: '', estimate: '3 hours', doneRule: 'Homepage works in browser', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Idea chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+          { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1h', doneRule: 'Report ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
+          { id: c, name: 'Design UI layout', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2h', doneRule: 'Figma ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+          { id: d, name: 'Build MVP', owner: 'Me', priority: 'High', deadline: '', estimate: '3h', doneRule: 'Deployed', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
       }
     } catch (e) {
-      console.warn('LocalStorage access error:', e);
+      console.warn(e);
     }
     setMounted(true);
   }, []);
 
-  // Save to LocalStorage whenever tasks update
   const saveTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
     if (typeof window !== 'undefined') {
@@ -106,7 +122,6 @@ export default function SmartTaskManagerPage() {
     return ready[0];
   };
 
-  // Filter tasks
   const q = search.toLowerCase();
   const filtered = tasks.filter(
     (t) =>
@@ -131,7 +146,6 @@ export default function SmartTaskManagerPage() {
 
   const focus = getFocusTask();
 
-  // Draw Dependency SVG curved lines
   useLayoutEffect(() => {
     if (view !== 'dependency' || !stageRef.current || !tasks.length) return;
 
@@ -157,9 +171,9 @@ export default function SmartTaskManagerPage() {
           const y1 = a.top - stageRect.top + a.height / 2;
           const x2 = b.left - stageRect.left;
           const y2 = b.top - stageRect.top + b.height / 2;
-          const bend = Math.max(32, (x2 - x1) * 0.45);
+          const bend = Math.max(28, (x2 - x1) * 0.45);
 
-          const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 8} ${y2}`;
+          const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 6} ${y2}`;
           paths.push(d);
         });
       });
@@ -170,7 +184,6 @@ export default function SmartTaskManagerPage() {
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
 
-  // Actions
   const startTask = (id: string) => {
     saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'progress' } : t)));
   };
@@ -198,13 +211,12 @@ export default function SmartTaskManagerPage() {
   };
 
   const addSample = () => {
-    if (tasks.length && !confirm('Add sample tasks to your current board?')) return;
     const a = uid(), b = uid(), c = uid(), d = uid();
     const newSamples: Task[] = [
-      { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30 min', doneRule: 'One idea is chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-      { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1 hour', doneRule: 'Competitor list is ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
-      { id: c, name: 'Design homepage', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2 hours', doneRule: 'Homepage design is ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-      { id: d, name: 'Build homepage', owner: 'Me', priority: 'High', deadline: '', estimate: '3 hours', doneRule: 'Homepage works in browser', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: a, name: 'Product Spec', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Approved', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+      { id: b, name: 'Competitor Analysis', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
+      { id: c, name: 'Wireframe Design', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1h', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+      { id: d, name: 'Engine Implementation', owner: 'Me', priority: 'High', deadline: '', estimate: '2h', doneRule: 'Tests pass', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -213,29 +225,9 @@ export default function SmartTaskManagerPage() {
     const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'smart-task-manager-backup.json';
+    a.download = 'tasks-backup.json';
     a.click();
     URL.revokeObjectURL(a.href);
-  };
-
-  const importData = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const r = new FileReader();
-    r.onload = () => {
-      try {
-        const data = JSON.parse(r.result as string);
-        if (!Array.isArray(data)) throw new Error();
-        saveTasks(data);
-      } catch {
-        alert('That backup file is not valid.');
-      }
-    };
-    r.readAsText(file);
   };
 
   const openTaskModal = (id: string | null = null) => {
@@ -252,16 +244,9 @@ export default function SmartTaskManagerPage() {
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
-
   const saveTask = () => {
     const name = taskName.trim();
-    if (!name) {
-      alert('Please enter a task name.');
-      return;
-    }
+    if (!name) return;
     const data = {
       name,
       owner: taskOwner,
@@ -278,17 +263,16 @@ export default function SmartTaskManagerPage() {
     } else {
       saveTasks([...tasks, { id: uid(), manualStatus: 'todo', createdAt: Date.now(), ...data }]);
     }
-    closeModal();
+    setIsModalOpen(false);
   };
 
-  // Topological calculation for dependency stages
   const getLevels = () => {
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const memo = new Map<string, number>();
 
     function levelOf(task: Task, stack = new Set<string>()): number {
       if (memo.has(task.id)) return memo.get(task.id)!;
-      if (stack.has(task.id)) return 0; // protects against circular loops
+      if (stack.has(task.id)) return 0;
 
       stack.add(task.id);
       const validDeps = (task.dependencies || []).map((id) => byId.get(id)).filter(Boolean) as Task[];
@@ -314,824 +298,479 @@ export default function SmartTaskManagerPage() {
     .map(Number)
     .sort((a, b) => a - b);
 
-  if (!mounted) {
-    return <div className="app" style={{ padding: 24 }}>Loading Smart Task Manager...</div>;
-  }
+  if (!mounted) return null;
 
   return (
-    <>
-      <style jsx global>{`
-        :root {
-          --bg: #f6f7fb;
-          --panel: #ffffff;
-          --text: #111827;
-          --muted: #6b7280;
-          --line: #e5e7eb;
-          --accent: #2563eb;
-          --danger: #dc2626;
-          --shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
-        }
-        * {
-          box-sizing: border-box;
-          scrollbar-width: none !important;
-          -ms-overflow-style: none !important;
-        }
-        *::-webkit-scrollbar {
-          display: none !important;
-          width: 0 !important;
-          height: 0 !important;
-        }
-        body {
-          margin: 0;
-          font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-          background: var(--bg);
-          color: var(--text);
-          user-select: none;
-        }
-        button,
-        input,
-        select,
-        textarea {
-          font: inherit;
-        }
-        .app {
-          max-width: 1500px;
-          margin: auto;
-          padding: 24px;
-        }
-        .topbar {
-          display: flex;
-          justify-content: space-between;
-          gap: 16px;
-          align-items: center;
-          margin-bottom: 18px;
-          flex-wrap: wrap;
-        }
-        h1 {
-          font-size: 26px;
-          margin: 0;
-        }
-        .sub {
-          color: var(--muted);
-          font-size: 14px;
-          margin-top: 4px;
-        }
-        .actions {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        button {
-          border: 0;
-          border-radius: 10px;
-          padding: 10px 14px;
-          cursor: pointer;
-          background: #eef2ff;
-          color: #1f2937;
-          font-weight: 650;
-          transition: all 0.15s ease;
-        }
-        button:hover {
-          opacity: 0.9;
-        }
-        button.primary {
-          background: var(--accent);
-          color: white;
-        }
-        button.danger {
-          background: #fee2e2;
-          color: #991b1b;
-        }
-        button.ghost {
-          background: white;
-          border: 1px solid var(--line);
-        }
-        button.small {
-          padding: 7px 10px;
-          border-radius: 8px;
-          font-size: 13px;
-        }
-        .summary {
-          display: grid;
-          grid-template-columns: 2fr repeat(4, 1fr);
-          gap: 12px;
-          margin-bottom: 18px;
-        }
-        .summary .box {
-          background: var(--panel);
-          border: 1px solid var(--line);
-          border-radius: 14px;
-          padding: 14px;
-          box-shadow: var(--shadow);
-        }
-        .focus {
-          border-left: 4px solid var(--accent) !important;
-        }
-        .k {
-          font-size: 12px;
-          color: var(--muted);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-        }
-        .v {
-          font-size: 22px;
-          font-weight: 800;
-          margin-top: 6px;
-        }
-        .focus .v {
-          font-size: 17px;
-          line-height: 1.3;
-        }
-        .toolbar {
-          background: var(--panel);
-          border: 1px solid var(--line);
-          border-radius: 14px;
-          padding: 12px;
-          display: flex;
-          gap: 10px;
-          align-items: center;
-          flex-wrap: wrap;
-          margin-bottom: 18px;
-        }
-        .toolbar input,
-        .toolbar select {
-          border: 1px solid var(--line);
-          border-radius: 9px;
-          padding: 9px 10px;
-          background: white;
-        }
-        .toolbar input {
-          min-width: 240px;
-          flex: 1;
-        }
-        .board {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(240px, 1fr));
-          gap: 14px;
-          align-items: start;
-        }
-        .column {
-          background: #eef0f5;
-          border-radius: 16px;
-          padding: 12px;
-          min-height: 380px;
-        }
-        .column h2 {
-          font-size: 15px;
-          margin: 2px 4px 10px;
-          display: flex;
-          justify-content: space-between;
-        }
-        .count {
-          color: var(--muted);
-          font-weight: 500;
-        }
-        .card {
-          background: white;
-          border: 1px solid var(--line);
-          border-radius: 13px;
-          padding: 12px;
-          margin-bottom: 10px;
-          box-shadow: 0 3px 10px rgba(17, 24, 39, 0.05);
-        }
-        .card-title {
-          font-weight: 800;
-          font-size: 15px;
-          line-height: 1.35;
-        }
-        .chips {
-          display: flex;
-          gap: 6px;
-          flex-wrap: wrap;
-          margin: 9px 0;
-        }
-        .chip {
-          font-size: 11px;
-          padding: 4px 7px;
-          border-radius: 999px;
-          background: #f3f4f6;
-          color: #374151;
-        }
-        .chip.me {
-          background: #dbeafe;
-          color: #1d4ed8;
-        }
-        .chip.ai {
-          background: #ede9fe;
-          color: #6d28d9;
-        }
-        .chip.high {
-          background: #fee2e2;
-          color: #991b1b;
-        }
-        .chip.med {
-          background: #fef3c7;
-          color: #92400e;
-        }
-        .chip.low {
-          background: #dcfce7;
-          color: #166534;
-        }
-        .meta {
-          font-size: 12px;
-          color: var(--muted);
-          line-height: 1.45;
-          margin: 6px 0;
-        }
-        .blocked-reason {
-          font-size: 12px;
-          background: #fff7ed;
-          color: #9a3412;
-          border-radius: 8px;
-          padding: 7px;
-          margin: 7px 0;
-        }
-        .card-actions {
-          display: flex;
-          gap: 6px;
-          flex-wrap: wrap;
-          margin-top: 10px;
-        }
-        .empty {
-          color: #9ca3af;
-          text-align: center;
-          padding: 30px 10px;
-          font-size: 13px;
-        }
-        .modal-wrap {
-          position: fixed;
-          inset: 0;
-          background: rgba(17, 24, 39, 0.42);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          z-index: 20;
-          backdrop-blur: 2px;
-        }
-        .modal {
-          background: white;
-          width: min(680px, 100%);
-          max-height: 92vh;
-          overflow: auto;
-          border-radius: 18px;
-          padding: 20px;
-          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.25);
-        }
-        .modal h3 {
-          margin: 0 0 16px;
-        }
-        .grid2 {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-        label {
-          font-size: 13px;
-          font-weight: 700;
-          display: block;
-          margin-bottom: 6px;
-        }
-        .field {
-          margin-bottom: 13px;
-        }
-        .field input,
-        .field select,
-        .field textarea {
-          width: 100%;
-          border: 1px solid var(--line);
-          border-radius: 10px;
-          padding: 10px;
-          background: white;
-        }
-        textarea {
-          min-height: 80px;
-          resize: vertical;
-        }
-        .deps {
-          border: 1px solid var(--line);
-          border-radius: 10px;
-          padding: 8px;
-          max-height: 150px;
-          overflow: auto;
-        }
-        .dep-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px;
-          font-size: 13px;
-          cursor: pointer;
-        }
-        .dep-row input {
-          width: auto;
-        }
-        .modal-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-          margin-top: 16px;
-        }
-        .note {
-          font-size: 12px;
-          color: var(--muted);
-          margin-top: 5px;
-        }
-        .view-switch {
-          display: flex;
-          gap: 6px;
-          margin-left: auto;
-        }
-        .view-switch button.active {
-          background: var(--accent);
-          color: white;
-        }
-        .dependency-view {
-          background: var(--panel);
-          border: 1px solid var(--line);
-          border-radius: 16px;
-          box-shadow: var(--shadow);
-          overflow: hidden;
-        }
-        .dependency-head {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          align-items: center;
-          padding: 14px 16px;
-          border-bottom: 1px solid var(--line);
-        }
-        .dependency-head strong {
-          font-size: 15px;
-        }
-        .dependency-head span {
-          font-size: 12px;
-          color: var(--muted);
-        }
-        .dependency-scroll {
-          overflow: auto;
-          padding: 0;
-        }
-        .dependency-stage {
-          position: relative;
-          display: grid;
-          grid-auto-flow: column;
-          grid-auto-columns: 240px;
-          gap: 76px;
-          align-items: start;
-          padding: 18px 24px 34px;
-          min-width: max-content;
-        }
-        .dep-level {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          flex-direction: column;
-          gap: 18px;
-        }
-        .dep-level-title {
-          font-size: 11px;
-          color: var(--muted);
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          margin: 0 2px 2px;
-        }
-        .dep-node {
-          background: white;
-          border: 2px solid var(--line);
-          border-radius: 12px;
-          padding: 11px 12px;
-          min-height: 84px;
-        }
-        .dep-node.ready {
-          border-color: #60a5fa;
-        }
-        .dep-node.progress {
-          border-color: #a78bfa;
-        }
-        .dep-node.done {
-          border-color: #4ade80;
-        }
-        .dep-node.blocked {
-          border-color: #fb923c;
-        }
-        .dep-node-name {
-          font-weight: 800;
-          font-size: 14px;
-          line-height: 1.3;
-        }
-        .dep-node-meta {
-          font-size: 11px;
-          color: var(--muted);
-          margin-top: 7px;
-          display: flex;
-          gap: 6px;
-          flex-wrap: wrap;
-        }
-        .dep-status {
-          font-weight: 700;
-        }
-        .dependency-lines {
-          position: absolute;
-          left: 0;
-          top: 0;
-          z-index: 1;
-          pointer-events: none;
-          overflow: visible;
-        }
-        .dep-empty {
-          padding: 44px 20px;
-          text-align: center;
-          color: var(--muted);
-        }
-        @media (max-width: 1050px) {
-          .board {
-            grid-template-columns: 1fr 1fr;
-          }
-          .summary {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-        @media (max-width: 650px) {
-          .board,
-          .summary,
-          .grid2 {
-            grid-template-columns: 1fr;
-          }
-          .app {
-            padding: 14px;
-          }
-        }
-      `}</style>
-
-      <div className="app">
-        <div className="topbar">
-          <div>
-            <h1>Smart Task Manager</h1>
-            <div className="sub">Dependencies decide what is ready. You do not need to guess start dates.</div>
+    <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
+      {/* Top Header */}
+      <header className="h-11 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between gap-2 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[11px]">
+            ⚡
           </div>
-          <div className="actions">
-            <button className="ghost" onClick={addSample}>
-              Add sample
+          <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-md">
+            <button
+              onClick={() => setView('board')}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                view === 'board' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <LayoutGrid className="w-3 h-3" /> Board
             </button>
-            <button className="ghost" onClick={exportData}>
-              Export
-            </button>
-            <button className="ghost" onClick={importData}>
-              Import
-            </button>
-            <button className="primary" onClick={() => openTaskModal()}>
-              + Add task
+            <button
+              onClick={() => setView('dependency')}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <GitFork className="w-3 h-3" /> DAG
             </button>
           </div>
         </div>
 
-        <div className="summary">
-          <div className="box focus">
-            <div className="k">What should I do now?</div>
-            <div className="v">{focus ? focus.name : 'No ready task for you.'}</div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={addSample}
+            className="px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
+          >
+            + Sample
+          </button>
+          <button
+            onClick={exportData}
+            className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            title="Export"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            title="Import"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => openTaskModal()}
+            className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition shadow"
+          >
+            + Task
+          </button>
+        </div>
+      </header>
+
+      {/* Stats & Focus Summary Bar */}
+      <div className="px-3 py-2 border-b border-zinc-800/60 bg-zinc-950/60 grid grid-cols-5 gap-2 flex-shrink-0 z-10">
+        <div className="col-span-2 bg-indigo-950/20 border border-indigo-500/30 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 overflow-hidden">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5" /> DO NOW
+            </div>
+            <div className="text-xs font-bold text-white truncate">
+              {focus ? focus.name : 'No ready task for you'}
+            </div>
           </div>
-          <div className="box">
-            <div className="k">Blocked</div>
-            <div className="v">{allGroups.blocked}</div>
-          </div>
-          <div className="box">
-            <div className="k">Ready</div>
-            <div className="v">{allGroups.ready}</div>
-          </div>
-          <div className="box">
-            <div className="k">Working</div>
-            <div className="v">{allGroups.progress}</div>
-          </div>
-          <div className="box">
-            <div className="k">Done</div>
-            <div className="v">{allGroups.done}</div>
-          </div>
+          {focus && (
+            <button
+              onClick={() => startTask(focus.id)}
+              className="flex-shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
+            >
+              Start
+            </button>
+          )}
         </div>
 
-        <div className="toolbar">
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
+          <span className="text-[10px] text-rose-400 font-bold uppercase">Blocked</span>
+          <span className="text-sm font-black text-rose-400">{allGroups.blocked}</span>
+        </div>
+
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
+          <span className="text-[10px] text-emerald-400 font-bold uppercase">Ready</span>
+          <span className="text-sm font-black text-emerald-400">{allGroups.ready}</span>
+        </div>
+
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
+          <span className="text-[10px] text-blue-400 font-bold uppercase">Working</span>
+          <span className="text-sm font-black text-blue-400">{allGroups.progress}</span>
+        </div>
+      </div>
+
+      {/* Filter Row */}
+      <div className="px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 flex items-center justify-between gap-2 flex-shrink-0">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            id="search"
             placeholder="Search tasks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
           />
-          <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
-            <option value="">All workers</option>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <select
+            value={ownerFilter}
+            onChange={(e) => setOwnerFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none"
+          >
+            <option value="">All Assignees</option>
             <option value="Me">Me</option>
             <option value="AI">AI</option>
-            <option value="Other">Other person</option>
+            <option value="Other">Other</option>
           </select>
-          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
-            <option value="">All priorities</option>
+
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none"
+          >
+            <option value="">All Priorities</option>
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
-          <div className="view-switch">
-            <button
-              className={`small ${view === 'board' ? 'active' : 'ghost'}`}
-              onClick={() => setView('board')}
-            >
-              Board
-            </button>
-            <button
-              className={`small ${view === 'dependency' ? 'active' : 'ghost'}`}
-              onClick={() => setView('dependency')}
-            >
-              Dependency View
-            </button>
-          </div>
-        </div>
-
-        {/* Board View */}
-        <div className="board" style={{ display: view === 'board' ? 'grid' : 'none' }}>
-          {(['blocked', 'ready', 'progress', 'done'] as const).map((colKey) => {
-            const list = groups[colKey];
-            const titleMap = {
-              blocked: 'Blocked',
-              ready: 'Ready',
-              progress: 'In Progress',
-              done: 'Done',
-            };
-
-            return (
-              <div key={colKey} className="column">
-                <h2>
-                  {titleMap[colKey]} <span className="count">{list.length}</span>
-                </h2>
-                <div>
-                  {!list.length ? (
-                    <div className="empty">Nothing here</div>
-                  ) : (
-                    list.map((t) => {
-                      const depNames = (t.dependencies || [])
-                        .map((id) => tasks.find((x) => x.id === id))
-                        .filter(Boolean) as Task[];
-                      const waiting = depNames
-                        .filter((d) => d.manualStatus !== 'done')
-                        .map((d) => d.name);
-
-                      return (
-                        <div key={t.id} className="card">
-                          <div className="card-title">{t.name}</div>
-                          <div className="chips">
-                            <span
-                              className={`chip ${
-                                t.owner === 'Me' ? 'me' : t.owner === 'AI' ? 'ai' : ''
-                              }`}
-                            >
-                              {t.owner}
-                            </span>
-                            <span
-                              className={`chip ${
-                                t.priority === 'High'
-                                  ? 'high'
-                                  : t.priority === 'Medium'
-                                  ? 'med'
-                                  : 'low'
-                              }`}
-                            >
-                              {t.priority}
-                            </span>
-                          </div>
-                          {t.deadline && <div className="meta">Deadline: {t.deadline}</div>}
-                          {t.estimate && <div className="meta">Estimate: {t.estimate}</div>}
-                          {waiting.length > 0 && (
-                            <div className="blocked-reason">Waiting for: {waiting.join(', ')}</div>
-                          )}
-                          {t.doneRule && <div className="meta">Done when: {t.doneRule}</div>}
-                          <div className="card-actions">
-                            {colKey === 'ready' && (
-                              <button className="small primary" onClick={() => startTask(t.id)}>
-                                Start
-                              </button>
-                            )}
-                            {colKey === 'progress' && (
-                              <button className="small primary" onClick={() => finishTask(t.id)}>
-                                Mark done
-                              </button>
-                            )}
-                            {colKey === 'done' && (
-                              <button className="small ghost" onClick={() => reopenTask(t.id)}>
-                                Reopen
-                              </button>
-                            )}
-                            <button className="small ghost" onClick={() => openTaskModal(t.id)}>
-                              Edit
-                            </button>
-                            <button className="small danger" onClick={() => deleteTask(t.id)}>
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Dependency View */}
-        <div className="dependency-view" style={{ display: view === 'dependency' ? 'block' : 'none' }}>
-          <div className="dependency-head">
-            <div>
-              <strong>Dependency View</strong>
-              <div>
-                <span>Arrows mean: this task must finish before the next one can start.</span>
-              </div>
-            </div>
-          </div>
-          <div className="dependency-scroll">
-            <div className="dependency-stage" ref={stageRef}>
-              {!tasks.length ? (
-                <div className="dep-empty">
-                  Add some tasks first. Their dependency arrows will appear here.
-                </div>
-              ) : (
-                <>
-                  <svg
-                    className="dependency-lines"
-                    width={svgContent.width}
-                    height={svgContent.height}
-                    viewBox={`0 0 ${svgContent.width} ${svgContent.height}`}
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <marker
-                        id="arrowHead"
-                        markerWidth="8"
-                        markerHeight="8"
-                        refX="7"
-                        refY="4"
-                        orient="auto"
-                        markerUnits="strokeWidth"
-                      >
-                        <path d="M0,0 L8,4 L0,8 z" fill="#9ca3af" />
-                      </marker>
-                    </defs>
-                    {svgContent.paths.map((d, i) => (
-                      <path
-                        key={i}
-                        d={d}
-                        fill="none"
-                        stroke="#9ca3af"
-                        strokeWidth="2"
-                        markerEnd="url(#arrowHead)"
-                      />
-                    ))}
-                  </svg>
-
-                  {orderedLevels.map((level, index) => (
-                    <div key={level} className="dep-level">
-                      <div className="dep-level-title">
-                        {index === 0 ? 'Can start first' : 'Stage ' + (index + 1)}
-                      </div>
-                      {levels[level].map((t) => {
-                        const status = computedStatus(t);
-                        const niceStatus =
-                          status === 'progress'
-                            ? 'In progress'
-                            : status[0].toUpperCase() + status.slice(1);
-
-                        return (
-                          <div key={t.id} className={`dep-node ${status}`} data-node-id={t.id}>
-                            <div className="dep-node-name">{t.name}</div>
-                            <div className="dep-node-meta">
-                              <span>{t.owner}</span>
-                              <span>•</span>
-                              <span className="dep-status">{niceStatus}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Main Content Area */}
+      <main className="flex-1 p-2.5 overflow-hidden min-h-0">
+        {view === 'board' ? (
+          <div className="h-full grid grid-cols-4 gap-2 min-h-0">
+            {(['blocked', 'ready', 'progress', 'done'] as const).map((colKey) => {
+              const list = groups[colKey];
+              const headerMeta = {
+                blocked: { title: 'Blocked', color: 'text-rose-400', countBg: 'bg-rose-500/10 text-rose-400' },
+                ready: { title: 'Ready', color: 'text-emerald-400', countBg: 'bg-emerald-500/10 text-emerald-400' },
+                progress: { title: 'In Progress', color: 'text-blue-400', countBg: 'bg-blue-500/10 text-blue-400' },
+                done: { title: 'Done', color: 'text-zinc-400', countBg: 'bg-zinc-800 text-zinc-400' },
+              }[colKey];
+
+              return (
+                <div
+                  key={colKey}
+                  className="bg-zinc-900/40 border border-zinc-800/80 rounded-lg flex flex-col min-h-0 overflow-hidden"
+                >
+                  <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between flex-shrink-0">
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${headerMeta.color}`}>
+                      {headerMeta.title}
+                    </span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${headerMeta.countBg}`}>
+                      {list.length}
+                    </span>
+                  </div>
+
+                  <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
+                    {list.length === 0 ? (
+                      <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
+                    ) : (
+                      list.map((t) => {
+                        const depNames = (t.dependencies || [])
+                          .map((id) => tasks.find((x) => x.id === id))
+                          .filter(Boolean) as Task[];
+                        const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+
+                        return (
+                          <div
+                            key={t.id}
+                            className="group p-2 rounded-md bg-zinc-950 border border-zinc-800/90 hover:border-zinc-700 transition shadow-sm space-y-1"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span
+                                className={`text-[9px] px-1 rounded font-semibold ${
+                                  t.owner === 'Me'
+                                    ? 'bg-blue-500/10 text-blue-400'
+                                    : t.owner === 'AI'
+                                    ? 'bg-purple-500/10 text-purple-400'
+                                    : 'bg-zinc-800 text-zinc-400'
+                                }`}
+                              >
+                                {t.owner}
+                              </span>
+                              <span
+                                className={`text-[9px] px-1 rounded font-semibold ${
+                                  t.priority === 'High'
+                                    ? 'text-rose-400 bg-rose-500/10'
+                                    : t.priority === 'Medium'
+                                    ? 'text-amber-400 bg-amber-500/10'
+                                    : 'text-zinc-400'
+                                }`}
+                              >
+                                {t.priority}
+                              </span>
+                            </div>
+
+                            <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
+                              {t.name}
+                            </div>
+
+                            {waiting.length > 0 && (
+                              <div className="text-[10px] text-rose-400/90 bg-rose-500/10 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
+                              </div>
+                            )}
+
+                            {t.estimate && (
+                              <div className="text-[10px] text-zinc-500 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
+                              {colKey === 'ready' && (
+                                <button
+                                  onClick={() => startTask(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium"
+                                >
+                                  Start
+                                </button>
+                              )}
+                              {colKey === 'progress' && (
+                                <button
+                                  onClick={() => finishTask(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium"
+                                >
+                                  Done
+                                </button>
+                              )}
+                              {colKey === 'done' && (
+                                <button
+                                  onClick={() => reopenTask(t.id)}
+                                  className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                                >
+                                  Reopen
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openTaskModal(t.id)}
+                                className="p-0.5 text-zinc-500 hover:text-zinc-300"
+                                title="Edit"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => deleteTask(t.id)}
+                                className="p-0.5 text-zinc-500 hover:text-rose-400"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
+            <div className="relative min-w-max pb-6" ref={stageRef}>
+              <svg
+                className="absolute inset-0 pointer-events-none z-10"
+                width={svgContent.width}
+                height={svgContent.height}
+                viewBox={`0 0 ${svgContent.width} ${svgContent.height}`}
+              >
+                <defs>
+                  <marker
+                    id="arrowHead"
+                    markerWidth="6"
+                    markerHeight="6"
+                    refX="5"
+                    refY="3"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L6,3 L0,6 z" fill="#6366f1" />
+                  </marker>
+                </defs>
+                {svgContent.paths.map((d, i) => (
+                  <path
+                    key={i}
+                    d={d}
+                    fill="none"
+                    stroke="#6366f1"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                    markerEnd="url(#arrowHead)"
+                  />
+                ))}
+              </svg>
+
+              <div className="grid grid-flow-col auto-cols-[200px] gap-14 items-start relative z-20">
+                {orderedLevels.map((level, index) => (
+                  <div key={level} className="flex flex-col gap-3">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+                      {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
+                    </div>
+                    {levels[level].map((t) => {
+                      const status = computedStatus(t);
+                      const badgeClass =
+                        status === 'ready'
+                          ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
+                          : status === 'blocked'
+                          ? 'border-rose-500/80 bg-rose-950/30 text-rose-300'
+                          : status === 'progress'
+                          ? 'border-blue-500/80 bg-blue-950/30 text-blue-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-400';
+
+                      return (
+                        <div
+                          key={t.id}
+                          data-node-id={t.id}
+                          className={`p-2.5 rounded-lg border-2 shadow transition ${badgeClass}`}
+                        >
+                          <div className="text-xs font-bold text-zinc-100 truncate">{t.name}</div>
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
+                            <span>{t.owner}</span>
+                            <span className="font-semibold uppercase">{status}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Task Edit/Create Modal */}
       {isModalOpen && (
         <div
-          className="modal-wrap"
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
           onClick={(e) => {
-            if (e.target === e.currentTarget) closeModal();
+            if (e.target === e.currentTarget) setIsModalOpen(false);
           }}
         >
-          <div className="modal">
-            <h3>{editId ? 'Edit task' : 'Add task'}</h3>
-            <div className="field">
-              <label>Task name</label>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <span className="font-bold text-xs text-zinc-100">
+                {editId ? 'Edit Task' : 'New Task'}
+              </span>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                Task Name
+              </label>
               <input
-                placeholder="Example: Build login page"
                 value={taskName}
                 onChange={(e) => setTaskName(e.target.value)}
+                placeholder="e.g. Build API authentication"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
-            <div className="grid2">
-              <div className="field">
-                <label>Who will do it?</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Assignee
+                </label>
                 <select
                   value={taskOwner}
-                  onChange={(e) => setTaskOwner(e.target.value as 'Me' | 'AI' | 'Other')}
+                  onChange={(e) => setTaskOwner(e.target.value as any)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
                 >
-                  <option value="Me">Me</option>
-                  <option value="AI">AI</option>
-                  <option value="Other">Other</option>
+                  <option value="Me">Me (Human)</option>
+                  <option value="AI">AI Agent</option>
+                  <option value="Other">Other Person</option>
                 </select>
               </div>
-              <div className="field">
-                <label>Priority</label>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Priority
+                </label>
                 <select
                   value={taskPriority}
-                  onChange={(e) => setTaskPriority(e.target.value as 'High' | 'Medium' | 'Low')}
+                  onChange={(e) => setTaskPriority(e.target.value as any)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
                 >
                   <option value="High">High</option>
                   <option value="Medium">Medium</option>
                   <option value="Low">Low</option>
                 </select>
               </div>
-              <div className="field">
-                <label>Deadline (optional)</label>
-                <input
-                  type="date"
-                  value={taskDeadline}
-                  onChange={(e) => setTaskDeadline(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>Estimated time (optional)</label>
-                <input
-                  placeholder="Example: 2 hours"
-                  value={taskEstimate}
-                  onChange={(e) => setTaskEstimate(e.target.value)}
-                />
-              </div>
             </div>
 
-            <div className="field">
-              <label>What must finish before this task?</label>
-              <div className="deps">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-indigo-400 mb-1">
+                Dependencies (Prerequisites)
+              </label>
+              <div className="max-h-28 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
-                  <div className="note">No other tasks yet.</div>
+                  <div className="text-[10px] text-zinc-600 italic">No other tasks available</div>
                 ) : (
                   tasks
                     .filter((t) => t.id !== editId)
                     .map((t) => {
                       const checked = selectedDeps.includes(t.id);
                       return (
-                        <label key={t.id} className="dep-row">
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-2 text-[11px] text-zinc-300 cursor-pointer hover:bg-zinc-900 p-1 rounded"
+                        >
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedDeps([...selectedDeps, t.id]);
-                              } else {
-                                setSelectedDeps(selectedDeps.filter((id) => id !== t.id));
-                              }
+                              if (e.target.checked) setSelectedDeps([...selectedDeps, t.id]);
+                              else setSelectedDeps(selectedDeps.filter((id) => id !== t.id));
                             }}
-                          />{' '}
-                          {t.name}
+                            className="rounded border-zinc-700"
+                          />
+                          <span className="truncate">{t.name}</span>
                         </label>
                       );
                     })
                 )}
               </div>
-              <div className="note">Choose nothing if this task can start immediately.</div>
             </div>
 
-            <div className="field">
-              <label>Done means... (optional)</label>
-              <input
-                placeholder="Example: page works and is deployed"
-                value={taskDoneRule}
-                onChange={(e) => setTaskDoneRule(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Estimate
+                </label>
+                <input
+                  value={taskEstimate}
+                  onChange={(e) => setTaskEstimate(e.target.value)}
+                  placeholder="e.g. 45m"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Deadline
+                </label>
+                <input
+                  type="date"
+                  value={taskDeadline}
+                  onChange={(e) => setTaskDeadline(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+              </div>
             </div>
 
-            <div className="field">
-              <label>Notes (optional)</label>
-              <textarea
-                placeholder="Anything useful..."
-                value={taskNotes}
-                onChange={(e) => setTaskNotes(e.target.value)}
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="ghost" onClick={closeModal}>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
                 Cancel
               </button>
-              <button className="primary" onClick={saveTask}>
-                Save task
+              <button
+                onClick={saveTask}
+                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
+              >
+                Save
               </button>
             </div>
           </div>
@@ -1143,8 +782,22 @@ export default function SmartTaskManagerPage() {
         ref={fileInputRef}
         accept=".json"
         style={{ display: 'none' }}
-        onChange={handleFileChange}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const data = JSON.parse(r.result as string);
+              if (!Array.isArray(data)) throw new Error();
+              saveTasks(data);
+            } catch {
+              alert('Invalid JSON file');
+            }
+          };
+          r.readAsText(file);
+        }}
       />
-    </>
+    </div>
   );
 }
