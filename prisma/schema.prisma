@@ -1,0 +1,231 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum WorkerType {
+  ME
+  AI_AGENT
+  TEAM_MEMBER
+  EXTERNAL_PARTY
+  UNASSIGNED
+}
+
+enum TaskStatus {
+  BACKLOG
+  BLOCKED
+  READY
+  IN_PROGRESS
+  WAITING
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum WaitingType {
+  AI
+  PERSON
+  EXTERNAL_SERVICE
+  APPROVAL
+  DEPLOYMENT
+  REVIEW
+  OTHER
+}
+
+enum DependencyType {
+  FINISH_TO_START
+  START_TO_START
+  FINISH_TO_FINISH
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String
+  image     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  projects  Project[]
+  workers   Worker[]
+  tasks     Task[]
+  activities Activity[]
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  status      String      @default("ACTIVE") // ACTIVE, ARCHIVED, COMPLETED
+  deadline    DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones  Milestone[]
+  tasks       Task[]
+
+  @@index([userId])
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  targetDate  DateTime?
+  orderIndex  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@index([projectId])
+}
+
+model Worker {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  type        WorkerType  @default(ME)
+  avatar      String?
+  description String?
+  isActive    Boolean     @default(true)
+  wipLimit    Int         @default(2) // Max active tasks (IN_PROGRESS)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@index([userId])
+}
+
+model Task {
+  id                  String          @id @default(cuid())
+  projectId           String
+  userId              String
+  milestoneId         String?
+  workerId            String?
+  parentId            String?         // For subtasks
+
+  title               String
+  description         String?
+  completionCriteria  String?         // "Done when: ..."
+  priority            Priority        @default(MEDIUM)
+  status              TaskStatus      @default(READY)
+  
+  // Duration in minutes
+  estimatedDuration   Int?            
+  deadline            DateTime?
+  
+  actualStartedAt     DateTime?
+  completedAt         DateTime?
+  
+  // Waiting metadata
+  waitingReason       String?
+  waitingType         WaitingType?
+  waitingSince        DateTime?
+  
+  // Review metadata
+  reviewRequired      Boolean         @default(false)
+  
+  // AI execution prompt & context metadata (for AI agent tasks)
+  aiInstructions      String?
+  aiExpectedOutput    String?
+  
+  notes               String?
+  sortOrder           Int             @default(0)
+  
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  project             Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestone           Milestone?      @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  worker              Worker?         @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  
+  parent              Task?           @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks            Task[]          @relation("SubTasks")
+
+  // Dependencies where this task is dependent on another (This task depends on prerequisite)
+  dependencies        TaskDependency[] @relation("DependentTasks")
+  
+  // Dependencies where this task blocks other tasks (Prerequisite for others)
+  dependents          TaskDependency[] @relation("PrerequisiteTasks")
+
+  tags                TaskTag[]
+  activities          Activity[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([workerId])
+  @@index([status])
+  @@index([parentId])
+}
+
+model TaskDependency {
+  id              String          @id @default(cuid())
+  taskId          String          // The task that is waiting/blocked
+  dependsOnTaskId String          // The prerequisite task that must finish first
+  type            DependencyType  @default(FINISH_TO_START)
+  createdAt       DateTime        @default(now())
+
+  task            Task            @relation("DependentTasks", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask   Task            @relation("PrerequisiteTasks", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([taskId])
+  @@index([dependsOnTaskId])
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String?   @default("#6366F1")
+  createdAt DateTime  @default(now())
+
+  tasks     TaskTag[]
+}
+
+model TaskTag {
+  taskId    String
+  tagId     String
+
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@index([taskId])
+  @@index([tagId])
+}
+
+model Activity {
+  id          String    @id @default(cuid())
+  userId      String
+  taskId      String?
+  type        String    // TASK_CREATED, TASK_STARTED, TASK_COMPLETED, STATUS_CHANGED, DEPENDENCY_ADDED, etc.
+  message     String
+  metadata    String?   // JSON string
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([createdAt])
+}
