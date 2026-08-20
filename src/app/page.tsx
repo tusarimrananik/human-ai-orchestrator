@@ -42,6 +42,10 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function priorityScore(p: string) {
+  return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
+}
+
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -98,6 +102,39 @@ export default function Page() {
     setMounted(true);
   }, []);
 
+  // Propagates priority up the dependency chain so prerequisite tasks match high downstream priority
+  const cascadePriorityToPrerequisites = (taskList: Task[], taskId: string, newPriority: 'High' | 'Medium' | 'Low'): Task[] => {
+    const updated = [...taskList];
+    const targetScore = priorityScore(newPriority);
+
+    const visited = new Set<string>();
+    const queue: string[] = [taskId];
+
+    while (queue.length > 0) {
+      const currId = queue.shift()!;
+      if (visited.has(currId)) continue;
+      visited.add(currId);
+
+      const current = updated.find((t) => t.id === currId);
+      if (!current) continue;
+
+      // For every prerequisite task that this task depends on:
+      (current.dependencies || []).forEach((depId) => {
+        const depIdx = updated.findIndex((t) => t.id === depId);
+        if (depIdx !== -1) {
+          const depTask = updated[depIdx];
+          // If prerequisite has lower priority score, bump it to match downstream urgency
+          if (priorityScore(depTask.priority) < targetScore) {
+            updated[depIdx] = { ...depTask, priority: newPriority };
+          }
+          queue.push(depId);
+        }
+      });
+    }
+
+    return updated;
+  };
+
   const saveTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
     if (typeof window !== 'undefined') {
@@ -125,6 +162,8 @@ export default function Page() {
     const newTasks = [...tasks];
     const [movedItem] = newTasks.splice(currentIndex, 1);
     newTasks.splice(targetIndex, 0, movedItem);
+
+    // If moved up, also elevate upstream dependencies to the top of queue
     saveTasks(newTasks);
   };
 
@@ -145,6 +184,13 @@ export default function Page() {
     newTasks[idxA] = newTasks[idxB];
     newTasks[idxB] = temp;
     saveTasks(newTasks);
+  };
+
+  // Change priority directly with dependency cascading
+  const handlePriorityChange = (taskId: string, newPriority: 'High' | 'Medium' | 'Low') => {
+    let updated = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
+    updated = cascadePriorityToPrerequisites(updated, taskId, newPriority);
+    saveTasks(updated);
   };
 
   // Drag and Drop handlers
@@ -326,25 +372,29 @@ export default function Page() {
       dependencies: selectedDeps,
     };
 
+    let updatedTasks: Task[];
+
     if (editId) {
-      saveTasks(
-        tasks.map((t) =>
-          t.id === editId
-            ? { ...t, ...data, manualStatus: initialInTriage ? 'triage' : t.manualStatus === 'triage' ? 'todo' : t.manualStatus }
-            : t
-        )
+      updatedTasks = tasks.map((t) =>
+        t.id === editId
+          ? { ...t, ...data, manualStatus: initialInTriage ? 'triage' : t.manualStatus === 'triage' ? 'todo' : t.manualStatus }
+          : t
       );
+      // Cascade priority changes to prerequisite dependencies
+      updatedTasks = cascadePriorityToPrerequisites(updatedTasks, editId, taskPriority);
     } else {
-      saveTasks([
-        ...tasks,
-        {
-          id: uid(),
-          manualStatus: initialInTriage ? 'triage' : 'todo',
-          createdAt: Date.now(),
-          ...data,
-        },
-      ]);
+      const newId = uid();
+      const newTask: Task = {
+        id: newId,
+        manualStatus: initialInTriage ? 'triage' : 'todo',
+        createdAt: Date.now(),
+        ...data,
+      };
+      updatedTasks = [...tasks, newTask];
+      updatedTasks = cascadePriorityToPrerequisites(updatedTasks, newId, taskPriority);
     }
+
+    saveTasks(updatedTasks);
     setIsModalOpen(false);
   };
 
@@ -622,17 +672,31 @@ export default function Page() {
                                     </button>
                                   </div>
                                 )}
-                                <span
-                                  className={`text-[9px] px-1 rounded font-semibold ${
+
+                                {/* Priority Pill Selector */}
+                                <select
+                                  value={t.priority}
+                                  onChange={(e) =>
+                                    handlePriorityChange(t.id, e.target.value as 'High' | 'Medium' | 'Low')
+                                  }
+                                  className={`text-[9px] px-1 rounded font-semibold border-0 cursor-pointer focus:outline-none ${
                                     t.priority === 'High'
                                       ? 'text-rose-400 bg-rose-500/10'
                                       : t.priority === 'Medium'
                                       ? 'text-amber-400 bg-amber-500/10'
-                                      : 'text-zinc-400'
+                                      : 'text-zinc-400 bg-zinc-800'
                                   }`}
                                 >
-                                  {t.priority}
-                                </span>
+                                  <option value="High" className="bg-zinc-900 text-rose-400">
+                                    High
+                                  </option>
+                                  <option value="Medium" className="bg-zinc-900 text-amber-400">
+                                    Medium
+                                  </option>
+                                  <option value="Low" className="bg-zinc-900 text-zinc-300">
+                                    Low
+                                  </option>
+                                </select>
                               </div>
                             </div>
 
@@ -718,7 +782,7 @@ export default function Page() {
                   <ListOrdered className="w-3.5 h-3.5" /> Triage Queue
                 </span>
                 <span className="text-[10px] text-zinc-500">
-                  Drag tasks up and down or use arrows to prioritize
+                  Drag tasks or use priority dropdowns (cascades to prerequisites)
                 </span>
               </div>
             </div>
@@ -808,17 +872,31 @@ export default function Page() {
                           >
                             {t.owner}
                           </span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+
+                          <select
+                            value={t.priority}
+                            onChange={(e) =>
+                              handlePriorityChange(t.id, e.target.value as 'High' | 'Medium' | 'Low')
+                            }
+                            className={`text-[9px] px-1 rounded font-semibold border-0 cursor-pointer focus:outline-none ${
                               t.priority === 'High'
                                 ? 'text-rose-400 bg-rose-500/10'
                                 : t.priority === 'Medium'
                                 ? 'text-amber-400 bg-amber-500/10'
-                                : 'text-zinc-400'
+                                : 'text-zinc-400 bg-zinc-800'
                             }`}
                           >
-                            {t.priority}
-                          </span>
+                            <option value="High" className="bg-zinc-900 text-rose-400">
+                              High
+                            </option>
+                            <option value="Medium" className="bg-zinc-900 text-amber-400">
+                              Medium
+                            </option>
+                            <option value="Low" className="bg-zinc-900 text-zinc-300">
+                              Low
+                            </option>
+                          </select>
+
                           {t.estimate && (
                             <span className="text-[10px] text-zinc-500 font-mono">
                               • {t.estimate}
