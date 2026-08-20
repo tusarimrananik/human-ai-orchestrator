@@ -19,6 +19,7 @@ import {
   ListOrdered,
   ArrowUp,
   ArrowDown,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Task {
@@ -31,7 +32,7 @@ interface Task {
   doneRule: string;
   notes: string;
   dependencies: string[];
-  manualStatus: 'todo' | 'progress' | 'done';
+  manualStatus: 'triage' | 'todo' | 'progress' | 'done';
   createdAt: number;
 }
 
@@ -64,6 +65,7 @@ export default function Page() {
   const [taskDoneRule, setTaskDoneRule] = useState('');
   const [taskNotes, setTaskNotes] = useState('');
   const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
+  const [initialInTriage, setInitialInTriage] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -80,18 +82,19 @@ export default function Page() {
       if (stored) {
         setTasks(JSON.parse(stored));
       } else {
-        const a = uid(), b = uid(), c = uid(), d = uid();
+        const a = uid(), b = uid(), c = uid(), d = uid(), e = uid();
         const initialTasks: Task[] = [
           { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Idea chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
           { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Report ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
           { id: c, name: 'Design UI layout', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2h', doneRule: 'Figma ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
           { id: d, name: 'Build MVP', owner: 'Me', priority: 'High', deadline: '', estimate: '3h', doneRule: 'Deployed', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: e, name: 'Collect User Feedback', owner: 'Me', priority: 'Medium', deadline: '', estimate: '1h', doneRule: '5 interviews done', notes: '', dependencies: [d], manualStatus: 'triage', createdAt: Date.now() + 4 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
       }
-    } catch (e) {
-      console.warn('LocalStorage access error:', e);
+    } catch (err) {
+      console.warn('LocalStorage access error:', err);
     }
     setMounted(true);
   }, []);
@@ -103,7 +106,8 @@ export default function Page() {
     }
   };
 
-  const computedStatus = (t: Task): 'done' | 'progress' | 'blocked' | 'ready' => {
+  const computedStatus = (t: Task): 'triage' | 'done' | 'progress' | 'blocked' | 'ready' => {
+    if (t.manualStatus === 'triage') return 'triage';
     if (t.manualStatus === 'done') return 'done';
     if (t.manualStatus === 'progress') return 'progress';
     const deps = (t.dependencies || []).map((id) => tasks.find((x) => x.id === id)).filter(Boolean) as Task[];
@@ -123,7 +127,7 @@ export default function Page() {
   };
 
   const getFocusTask = () => {
-    // Pick the first READY task for Me in user's prioritized order
+    // Pick first READY task for Me in user's prioritized order
     const ready = tasks.filter((t) => computedStatus(t) === 'ready' && t.owner === 'Me');
     return ready[0] || null;
   };
@@ -142,10 +146,20 @@ export default function Page() {
     progress: [],
     done: [],
   };
-  filtered.forEach((t) => groups[computedStatus(t)].push(t));
 
-  const allGroups = { blocked: 0, ready: 0, progress: 0, done: 0 };
-  tasks.forEach((t) => allGroups[computedStatus(t)]++);
+  // Tasks in board are those that are committed (not in triage)
+  filtered
+    .filter((t) => t.manualStatus !== 'triage')
+    .forEach((t) => {
+      const st = computedStatus(t);
+      if (st !== 'triage') groups[st].push(t);
+    });
+
+  const allGroups = { blocked: 0, ready: 0, progress: 0, done: 0, triage: 0 };
+  tasks.forEach((t) => {
+    const st = computedStatus(t);
+    allGroups[st]++;
+  });
 
   const focus = getFocusTask();
 
@@ -187,7 +201,13 @@ export default function Page() {
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
 
-  const startTask = (id: string) => {
+  // When clicking "Start" in Triage, send to Board (todo), where dependency logic automatically places it in Blocked or Ready!
+  const startFromTriageToBoard = (id: string) => {
+    saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'todo' } : t)));
+  };
+
+  // Start execution directly on board
+  const startInProgress = (id: string) => {
     saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'progress' } : t)));
   };
 
@@ -197,6 +217,10 @@ export default function Page() {
 
   const reopenTask = (id: string) => {
     saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'todo' } : t)));
+  };
+
+  const sendBackToTriage = (id: string) => {
+    saveTasks(tasks.map((t) => (t.id === id ? { ...t, manualStatus: 'triage' } : t)));
   };
 
   const deleteTask = (id: string) => {
@@ -211,12 +235,13 @@ export default function Page() {
   };
 
   const addSample = () => {
-    const a = uid(), b = uid(), c = uid(), d = uid();
+    const a = uid(), b = uid(), c = uid(), d = uid(), e = uid();
     const newSamples: Task[] = [
       { id: a, name: 'Product Spec', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Approved', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
       { id: b, name: 'Competitor Analysis', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
       { id: c, name: 'Wireframe Design', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1h', doneRule: 'Done', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
       { id: d, name: 'Engine Implementation', owner: 'Me', priority: 'High', deadline: '', estimate: '2h', doneRule: 'Tests pass', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: e, name: 'Draft Announcement', owner: 'Me', priority: 'Low', deadline: '', estimate: '20m', doneRule: 'Ready', notes: '', dependencies: [d], manualStatus: 'triage', createdAt: Date.now() + 4 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -230,7 +255,7 @@ export default function Page() {
     URL.revokeObjectURL(a.href);
   };
 
-  const openTaskModal = (id: string | null = null) => {
+  const openTaskModal = (id: string | null = null, defaultTriage = false) => {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
@@ -241,6 +266,7 @@ export default function Page() {
     setTaskDoneRule(current?.doneRule || '');
     setTaskNotes(current?.notes || '');
     setSelectedDeps(current?.dependencies || []);
+    setInitialInTriage(current ? current.manualStatus === 'triage' : defaultTriage || view === 'triage');
     setIsModalOpen(true);
   };
 
@@ -259,9 +285,23 @@ export default function Page() {
     };
 
     if (editId) {
-      saveTasks(tasks.map((t) => (t.id === editId ? { ...t, ...data } : t)));
+      saveTasks(
+        tasks.map((t) =>
+          t.id === editId
+            ? { ...t, ...data, manualStatus: initialInTriage ? 'triage' : t.manualStatus === 'triage' ? 'todo' : t.manualStatus }
+            : t
+        )
+      );
     } else {
-      saveTasks([...tasks, { id: uid(), manualStatus: 'todo', createdAt: Date.now(), ...data }]);
+      saveTasks([
+        ...tasks,
+        {
+          id: uid(),
+          manualStatus: initialInTriage ? 'triage' : 'todo',
+          createdAt: Date.now(),
+          ...data,
+        },
+      ]);
     }
     setIsModalOpen(false);
   };
@@ -319,11 +359,16 @@ export default function Page() {
             </button>
             <button
               onClick={() => setView('triage')}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1.5 ${
                 view === 'triage' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
               <ListOrdered className="w-3 h-3" /> Triage
+              {allGroups.triage > 0 && (
+                <span className="bg-indigo-600 text-white text-[9px] px-1 rounded-full font-mono">
+                  {allGroups.triage}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setView('dependency')}
@@ -358,7 +403,7 @@ export default function Page() {
             <Upload className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => openTaskModal()}
+            onClick={() => openTaskModal(null, view === 'triage')}
             className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition shadow"
           >
             + Task
@@ -379,7 +424,7 @@ export default function Page() {
           </div>
           {focus && (
             <button
-              onClick={() => startTask(focus.id)}
+              onClick={() => startInProgress(focus.id)}
               className="flex-shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
             >
               Start
@@ -527,7 +572,7 @@ export default function Page() {
                             <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
                               {colKey === 'ready' && (
                                 <button
-                                  onClick={() => startTask(t.id)}
+                                  onClick={() => startInProgress(t.id)}
                                   className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium"
                                 >
                                   Start
@@ -549,6 +594,13 @@ export default function Page() {
                                   Reopen
                                 </button>
                               )}
+                              <button
+                                onClick={() => sendBackToTriage(t.id)}
+                                className="p-0.5 text-zinc-500 hover:text-indigo-400"
+                                title="Send to Triage"
+                              >
+                                <ListOrdered className="w-3 h-3" />
+                              </button>
                               <button
                                 onClick={() => openTaskModal(t.id)}
                                 className="p-0.5 text-zinc-500 hover:text-zinc-300"
@@ -577,10 +629,14 @@ export default function Page() {
           /* Triage View with Up/Down Priority Ordering */
           <div className="h-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg flex flex-col min-h-0 overflow-hidden">
             <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between flex-shrink-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                <ListOrdered className="w-3.5 h-3.5" /> Triage Queue (Prioritize Tasks)
-              </span>
-              <span className="text-[10px] text-zinc-500">Top items are picked first for DO NOW</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                  <ListOrdered className="w-3.5 h-3.5" /> Triage Queue
+                </span>
+                <span className="text-[10px] text-zinc-500">
+                  Click &apos;Start&apos; on a triage task to send it to the board (automatically placed in Blocked or Ready based on dependencies)
+                </span>
+              </div>
             </div>
 
             <div className="p-2 space-y-1.5 overflow-y-auto flex-1">
@@ -606,7 +662,7 @@ export default function Page() {
                             disabled={index === 0}
                             onClick={() => moveTask(index, 'up')}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
-                            title="Move Up (Increase Priority)"
+                            title="Move Up"
                           >
                             <ArrowUp className="w-3 h-3" />
                           </button>
@@ -614,7 +670,7 @@ export default function Page() {
                             disabled={index === tasks.length - 1}
                             onClick={() => moveTask(index, 'down')}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
-                            title="Move Down (Lower Priority)"
+                            title="Move Down"
                           >
                             <ArrowDown className="w-3 h-3" />
                           </button>
@@ -629,7 +685,9 @@ export default function Page() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
                             className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
-                              status === 'ready'
+                              status === 'triage'
+                                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                                : status === 'ready'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                 : status === 'blocked'
                                 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
@@ -680,30 +738,39 @@ export default function Page() {
 
                       {/* Right Actions */}
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {status === 'ready' && (
+                        {status === 'triage' ? (
                           <button
-                            onClick={() => startTask(t.id)}
-                            className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold"
+                            onClick={() => startFromTriageToBoard(t.id)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold shadow"
+                            title="Commit task to Board (will be placed in Blocked or Ready automatically)"
                           >
-                            Start
+                            <Play className="w-3 h-3 fill-white" /> Start (to Board)
                           </button>
-                        )}
-                        {status === 'progress' && (
+                        ) : status === 'ready' ? (
+                          <button
+                            onClick={() => startInProgress(t.id)}
+                            className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold"
+                          >
+                            In Progress
+                          </button>
+                        ) : status === 'progress' ? (
                           <button
                             onClick={() => finishTask(t.id)}
                             className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold"
                           >
                             Done
                           </button>
-                        )}
-                        {status === 'done' && (
+                        ) : status === 'done' ? (
                           <button
                             onClick={() => reopenTask(t.id)}
                             className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
                           >
                             Reopen
                           </button>
+                        ) : (
+                          <span className="text-[10px] text-zinc-500 italic pr-1">On Board</span>
                         )}
+
                         <button
                           onClick={() => openTaskModal(t.id)}
                           className="p-1 text-zinc-500 hover:text-zinc-300"
@@ -920,19 +987,31 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveTask}
-                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
-              >
-                Save
-              </button>
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+              <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={initialInTriage}
+                  onChange={(e) => setInitialInTriage(e.target.checked)}
+                  className="rounded border-zinc-700"
+                />
+                <span>Place in Triage queue</span>
+              </label>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveTask}
+                  className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         </div>
