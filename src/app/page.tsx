@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import {
   Play,
   CheckCircle2,
@@ -19,6 +19,9 @@ import {
   Clock,
   Lock,
   X,
+  CloudCheck,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Task {
@@ -52,6 +55,7 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,39 +71,92 @@ export default function Page() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [svgContent, setSvgContent] = useState<{ width: number; height: number; paths: string[] }>({
     width: 0,
     height: 0,
     paths: [],
   });
 
+  // Background sync helper: push tasks to Neon DB silently
+  const pushToDatabaseBackground = useCallback((currentTasks: Task[]) => {
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(async () => {
+      setSyncStatus('syncing');
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tasks: currentTasks }),
+        });
+        if (res.ok) {
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('error');
+        }
+      } catch {
+        setSyncStatus('error');
+      }
+    }, 600); // Debounced 600ms
+  }, []);
+
+  // 1. Initial Load: Read instantly from LocalStorage in 0ms, then fetch from DB in background
   useEffect(() => {
+    let initialList: Task[] = [];
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setTasks(JSON.parse(stored));
-      } else {
-        const a = uid(), b = uid(), c = uid(), d = uid();
-        const initialTasks: Task[] = [
-          { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Idea chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '1h', doneRule: 'Report ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Design UI layout', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2h', doneRule: 'Figma ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Build MVP', owner: 'Me', priority: 'High', deadline: '', estimate: '3h', doneRule: 'Deployed', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
-        ];
-        setTasks(initialTasks);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
+        initialList = JSON.parse(stored);
+        setTasks(initialList);
       }
     } catch (e) {
       console.warn(e);
     }
+
     setMounted(true);
-  }, []);
+
+    // Fetch latest tasks from Neon DB in background without blocking UI
+    (async () => {
+      try {
+        setSyncStatus('syncing');
+        const res = await fetch('/api/sync');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+            setTasks(data.tasks);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data.tasks));
+            setSyncStatus('synced');
+          } else if (initialList.length > 0) {
+            // First time seeding DB from local
+            pushToDatabaseBackground(initialList);
+          } else {
+            // Empty DB & Local: default sample
+            const a = uid(), b = uid(), c = uid(), d = uid();
+            const samples: Task[] = [
+              { id: a, name: 'Decide product idea', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Idea chosen', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+              { id: b, name: 'Research competitors', owner: 'AI', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Report ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 1 },
+              { id: c, name: 'Design UI layout', owner: 'AI', priority: 'Medium', deadline: '', estimate: '2h', doneRule: 'Figma ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+              { id: d, name: 'Build MVP', owner: 'Me', priority: 'High', deadline: '', estimate: '3h', doneRule: 'Deployed', notes: '', dependencies: [b, c], manualStatus: 'todo', createdAt: Date.now() + 3 },
+            ];
+            setTasks(samples);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(samples));
+            pushToDatabaseBackground(samples);
+          }
+        }
+      } catch {
+        setSyncStatus('idle');
+      }
+    })();
+  }, [pushToDatabaseBackground]);
 
   const saveTasks = (newTasks: Task[]) => {
+    // 1. Instant local update
     setTasks(newTasks);
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newTasks));
     }
+    // 2. Background database sync
+    pushToDatabaseBackground(newTasks);
   };
 
   const computedStatus = (t: Task): 'done' | 'progress' | 'blocked' | 'ready' => {
@@ -329,6 +386,23 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Silent DB Sync Indicator */}
+          <div
+            className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-800"
+            title="Neon Postgres background sync status"
+          >
+            <div
+              className={`w-1.5 h-1.5 rounded-full ${
+                syncStatus === 'syncing'
+                  ? 'bg-amber-400 animate-ping'
+                  : syncStatus === 'synced'
+                  ? 'bg-emerald-400'
+                  : 'bg-zinc-600'
+              }`}
+            />
+            <span className="hidden sm:inline">DB Synced</span>
+          </div>
+
           <button
             onClick={addSample}
             className="px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
