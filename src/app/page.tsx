@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sparkles,
   LayoutGrid,
@@ -10,6 +10,8 @@ import {
   Search,
   RefreshCw,
   ChevronDown,
+  CloudCheck,
+  CloudOff,
 } from 'lucide-react';
 import { TaskStatus, WorkerType } from '@prisma/client';
 import WhatShouldIDoNow from '@/components/WhatShouldIDoNow';
@@ -19,6 +21,7 @@ import TaskModal from '@/components/TaskModal';
 import CreateTaskModal from '@/components/CreateTaskModal';
 import WorkerManagerModal from '@/components/WorkerManagerModal';
 import ProjectManagerModal from '@/components/ProjectManagerModal';
+import { localStore } from '@/lib/localStore';
 
 type ActiveTab = 'dashboard' | 'board' | 'graph';
 
@@ -30,14 +33,15 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [quickFilter, setQuickFilter] = useState<string | null>(null);
 
-  // Data states
+  // Data states with local cache initialization
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [graphData, setGraphData] = useState<any>({ nodes: [], edges: [], project: null });
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   // Modals
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -45,9 +49,27 @@ export default function Home() {
   const [isWorkerManagerOpen, setIsWorkerManagerOpen] = useState(false);
   const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
 
-  const fetchAllData = useCallback(async () => {
+  const queryKey = `${selectedProjectId}_${selectedWorkerId}_${selectedPriority}_${searchQuery}`;
+
+  // 1. Initial Load: Read immediately from browser LocalStorage in 0ms
+  useEffect(() => {
+    const cachedProjects = localStore.getProjects();
+    const cachedWorkers = localStore.getWorkers();
+    const cachedDashboard = localStore.getDashboard(selectedProjectId);
+    const cachedTasks = localStore.getTasks(queryKey);
+    const cachedGraph = localStore.getGraph(selectedProjectId);
+
+    if (cachedProjects) setProjects(cachedProjects);
+    if (cachedWorkers) setWorkers(cachedWorkers);
+    if (cachedDashboard) setDashboardData(cachedDashboard);
+    if (cachedTasks) setTasks(cachedTasks);
+    if (cachedGraph) setGraphData(cachedGraph);
+  }, [selectedProjectId, queryKey]);
+
+  // 2. Background Sync with Server
+  const syncWithBackend = useCallback(async (isManual = false) => {
+    setIsSyncing(true);
     try {
-      setRefreshing(true);
       const [dashRes, tasksRes, projRes, workersRes, graphRes] = await Promise.all([
         fetch(`/api/dashboard?projectId=${selectedProjectId}`),
         fetch(
@@ -68,24 +90,47 @@ export default function Home() {
         graphRes.json(),
       ]);
 
-      setDashboardData(dash);
-      setTasks(tks.tasks || []);
-      setProjects(projs.projects || []);
-      setWorkers(wrks.workers || []);
-      setGraphData(grph);
+      // Update State
+      if (dash && !dash.error) {
+        setDashboardData(dash);
+        localStore.setDashboard(selectedProjectId, dash);
+      }
+      if (tks?.tasks) {
+        setTasks(tks.tasks);
+        localStore.setTasks(queryKey, tks.tasks);
+      }
+      if (projs?.projects) {
+        setProjects(projs.projects);
+        localStore.setProjects(projs.projects);
+      }
+      if (wrks?.workers) {
+        setWorkers(wrks.workers);
+        localStore.setWorkers(wrks.workers);
+      }
+      if (grph && !grph.error) {
+        setGraphData(grph);
+        localStore.setGraph(selectedProjectId, grph);
+      }
+
+      setLastSyncedAt(new Date());
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.warn('Background sync warning (using cached data):', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setIsSyncing(false);
     }
-  }, [selectedProjectId, selectedWorkerId, selectedPriority, searchQuery]);
+  }, [selectedProjectId, selectedWorkerId, selectedPriority, searchQuery, queryKey]);
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    syncWithBackend();
+  }, [syncWithBackend]);
 
+  // 3. Optimistic Status Changes (Instant UI Feedback + Background Save)
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    // Optimistically update local task list & cache
+    const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t));
+    setTasks(updatedTasks);
+    localStore.setTasks(queryKey, updatedTasks);
+
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -93,20 +138,22 @@ export default function Home() {
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
-        fetchAllData();
+        syncWithBackend();
       } else {
         const data = await res.json();
         alert(data.error || 'Failed to update status');
+        syncWithBackend();
       }
     } catch (err) {
       console.error(err);
+      syncWithBackend();
     }
   };
 
   const handleResetDemoData = async () => {
     if (confirm('Reset and re-seed the Launch SaaS MVP & Routine Tracker demo projects?')) {
       await fetch('/api/seed', { method: 'POST' });
-      fetchAllData();
+      syncWithBackend(true);
     }
   };
 
@@ -198,8 +245,21 @@ export default function Home() {
             </button>
           </nav>
 
-          {/* Right Action buttons */}
+          {/* Right Action buttons & Sync Status */}
           <div className="flex items-center gap-1.5">
+            {/* Background Sync Indicator */}
+            <div
+              className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800"
+              title={isSyncing ? 'Syncing with Neon DB...' : 'Local cache synced in background'}
+            >
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'
+                }`}
+              />
+              <span className="hidden md:inline">{isSyncing ? 'Syncing' : 'Instant Sync'}</span>
+            </div>
+
             <button
               onClick={() => setIsWorkerManagerOpen(true)}
               className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 transition"
@@ -289,12 +349,12 @@ export default function Home() {
             </div>
 
             <button
-              onClick={() => fetchAllData()}
-              disabled={refreshing}
+              onClick={() => syncWithBackend(true)}
+              disabled={isSyncing}
               className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
-              title="Refresh"
+              title="Sync now"
             >
-              <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
 
             <button
@@ -307,15 +367,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main Content View (Strict Viewport Height without Body Scrollbar) */}
+      {/* Main Content View */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 overflow-hidden min-h-0 flex flex-col">
-        {loading && !dashboardData ? (
-          <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">
-            Loading Human + AI Orchestrator...
-          </div>
-        ) : (
+        {dashboardData ? (
           <div className="flex-1 min-h-0 flex flex-col">
-            {activeTab === 'dashboard' && dashboardData && (
+            {activeTab === 'dashboard' && (
               <WhatShouldIDoNow
                 primaryRecommendation={dashboardData.primaryRecommendation}
                 otherReadyTasks={dashboardData.otherReadyTasks || []}
@@ -344,6 +400,10 @@ export default function Home() {
               />
             )}
           </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-zinc-500 text-xs">
+            Loading...
+          </div>
         )}
       </main>
 
@@ -351,7 +411,7 @@ export default function Home() {
       <TaskModal
         taskId={activeTaskId}
         onClose={() => setActiveTaskId(null)}
-        onTaskUpdated={fetchAllData}
+        onTaskUpdated={() => syncWithBackend(true)}
         allTasks={tasks}
         workers={workers}
       />
@@ -359,7 +419,7 @@ export default function Home() {
       <CreateTaskModal
         isOpen={isCreateTaskOpen}
         onClose={() => setIsCreateTaskOpen(false)}
-        onTaskCreated={fetchAllData}
+        onTaskCreated={() => syncWithBackend(true)}
         projects={projects}
         currentProjectId={selectedProjectId}
         workers={workers}
@@ -370,7 +430,7 @@ export default function Home() {
         isOpen={isWorkerManagerOpen}
         onClose={() => setIsWorkerManagerOpen(false)}
         workers={workers}
-        onWorkersUpdated={fetchAllData}
+        onWorkersUpdated={() => syncWithBackend(true)}
       />
 
       <ProjectManagerModal
@@ -378,7 +438,7 @@ export default function Home() {
         onClose={() => setIsProjectManagerOpen(false)}
         onProjectCreated={(newId) => {
           setSelectedProjectId(newId);
-          fetchAllData();
+          syncWithBackend(true);
         }}
       />
     </div>
