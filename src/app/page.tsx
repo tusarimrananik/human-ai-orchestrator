@@ -19,6 +19,7 @@ import {
   ListOrdered,
   ArrowUp,
   ArrowDown,
+  GripVertical,
 } from 'lucide-react';
 
 interface Task {
@@ -41,10 +42,6 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function priorityScore(p: string) {
-  return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
-}
-
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -52,6 +49,9 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+
+  // Drag-and-drop state
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -114,7 +114,7 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  // Reorder Tasks within Ready state or anywhere in global task array
+  // Reorder Tasks using buttons
   const moveTask = (taskId: string, direction: 'up' | 'down') => {
     const currentIndex = tasks.findIndex((t) => t.id === taskId);
     if (currentIndex === -1) return;
@@ -128,7 +128,6 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
-  // Move a task within a filtered subgroup (like Ready list)
   const moveTaskWithinGroup = (taskId: string, groupList: Task[], direction: 'up' | 'down') => {
     const groupIdx = groupList.findIndex((t) => t.id === taskId);
     if (groupIdx === -1) return;
@@ -137,7 +136,6 @@ export default function Page() {
     if (targetGroupIdx < 0 || targetGroupIdx >= groupList.length) return;
 
     const targetTask = groupList[targetGroupIdx];
-
     const idxA = tasks.findIndex((t) => t.id === taskId);
     const idxB = tasks.findIndex((t) => t.id === targetTask.id);
     if (idxA === -1 || idxB === -1) return;
@@ -149,8 +147,32 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    setDraggedTaskId(taskId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDropOnTask = (targetTaskId: string) => {
+    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
+
+    const idxA = tasks.findIndex((t) => t.id === draggedTaskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTaskId);
+    if (idxA === -1 || idxB === -1) return;
+
+    const newTasks = [...tasks];
+    const [moved] = newTasks.splice(idxA, 1);
+    newTasks.splice(idxB, 0, moved);
+
+    saveTasks(newTasks);
+    setDraggedTaskId(null);
+  };
+
   const getFocusTask = () => {
-    // Pick first READY task for Me in user's prioritized order
     const ready = tasks.filter((t) => computedStatus(t) === 'ready' && t.owner === 'Me');
     return ready[0] || null;
   };
@@ -545,37 +567,56 @@ export default function Page() {
                         return (
                           <div
                             key={t.id}
-                            className="group p-2 rounded-md bg-zinc-950 border border-zinc-800/90 hover:border-zinc-700 transition shadow-sm space-y-1"
+                            draggable={colKey === 'ready'}
+                            onDragStart={(e) => handleDragStart(e, t.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDropOnTask(t.id)}
+                            className={`group p-2 rounded-md bg-zinc-950 border transition shadow-sm space-y-1 ${
+                              draggedTaskId === t.id
+                                ? 'border-indigo-500 opacity-60'
+                                : 'border-zinc-800/90 hover:border-zinc-700'
+                            } ${colKey === 'ready' ? 'cursor-grab active:cursor-grabbing' : ''}`}
                           >
                             <div className="flex items-center justify-between gap-1">
-                              <span
-                                className={`text-[9px] px-1 rounded font-semibold ${
-                                  t.owner === 'Me'
-                                    ? 'bg-blue-500/10 text-blue-400'
-                                    : t.owner === 'AI'
-                                    ? 'bg-purple-500/10 text-purple-400'
-                                    : 'bg-zinc-800 text-zinc-400'
-                                }`}
-                              >
-                                {t.owner}
-                              </span>
+                              <div className="flex items-center gap-1">
+                                {colKey === 'ready' && (
+                                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
+                                )}
+                                <span
+                                  className={`text-[9px] px-1 rounded font-semibold ${
+                                    t.owner === 'Me'
+                                      ? 'bg-blue-500/10 text-blue-400'
+                                      : t.owner === 'AI'
+                                      ? 'bg-purple-500/10 text-purple-400'
+                                      : 'bg-zinc-800 text-zinc-400'
+                                  }`}
+                                >
+                                  {t.owner}
+                                </span>
+                              </div>
 
                               <div className="flex items-center gap-1">
                                 {colKey === 'ready' && (
                                   <div className="flex items-center gap-0.5 mr-1">
                                     <button
                                       disabled={idx === 0}
-                                      onClick={() => moveTaskWithinGroup(t.id, list, 'up')}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        moveTaskWithinGroup(t.id, list, 'up');
+                                      }}
                                       className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
-                                      title="Move Up in Ready Priority"
+                                      title="Move Up"
                                     >
                                       <ArrowUp className="w-2.5 h-2.5" />
                                     </button>
                                     <button
                                       disabled={idx === list.length - 1}
-                                      onClick={() => moveTaskWithinGroup(t.id, list, 'down')}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        moveTaskWithinGroup(t.id, list, 'down');
+                                      }}
                                       className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
-                                      title="Move Down in Ready Priority"
+                                      title="Move Down"
                                     >
                                       <ArrowDown className="w-2.5 h-2.5" />
                                     </button>
@@ -669,7 +710,7 @@ export default function Page() {
             })}
           </div>
         ) : view === 'triage' ? (
-          /* Triage View with Up/Down Priority Ordering */
+          /* Triage View with Drag & Drop + Up/Down Priority Ordering */
           <div className="h-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg flex flex-col min-h-0 overflow-hidden">
             <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -677,7 +718,7 @@ export default function Page() {
                   <ListOrdered className="w-3.5 h-3.5" /> Triage Queue
                 </span>
                 <span className="text-[10px] text-zinc-500">
-                  Click &apos;Start&apos; on a triage task to send it to the board (automatically placed in Blocked or Ready based on dependencies)
+                  Drag tasks up and down or use arrows to prioritize
                 </span>
               </div>
             </div>
@@ -696,14 +737,26 @@ export default function Page() {
                   return (
                     <div
                       key={t.id}
-                      className="p-2 rounded-md bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 flex items-center justify-between gap-3 transition shadow-sm"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, t.id)}
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDropOnTask(t.id)}
+                      className={`p-2 rounded-md bg-zinc-950 border flex items-center justify-between gap-3 transition shadow-sm cursor-grab active:cursor-grabbing ${
+                        draggedTaskId === t.id
+                          ? 'border-indigo-500 opacity-60'
+                          : 'border-zinc-800/80 hover:border-zinc-700'
+                      }`}
                     >
-                      {/* Left: Reorder up/down + index */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {/* Left: Drag grip, Reorder up/down + index */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <GripVertical className="w-3.5 h-3.5 text-zinc-600" />
                         <div className="flex flex-col gap-0.5">
                           <button
                             disabled={index === 0}
-                            onClick={() => moveTask(t.id, 'up')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveTask(t.id, 'up');
+                            }}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
                             title="Move Up"
                           >
@@ -711,7 +764,10 @@ export default function Page() {
                           </button>
                           <button
                             disabled={index === tasks.length - 1}
-                            onClick={() => moveTask(t.id, 'down')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveTask(t.id, 'down');
+                            }}
                             className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 disabled:opacity-20 text-zinc-400 hover:text-white transition"
                             title="Move Down"
                           >
