@@ -34,6 +34,8 @@ import {
   CheckSquare,
   Square,
   ListTodo,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -87,6 +89,7 @@ interface Task {
 const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
 const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
+const ACTIVE_TURN_KEY = 'smart_task_active_turn_v1';
 
 const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
   { id: 'pgrp_dev', name: 'Development', slotLimit: 3 },
@@ -264,6 +267,7 @@ export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
+  const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Development');
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
@@ -353,6 +357,9 @@ export default function Page() {
       const storedGroups = localStorage.getItem(PARALLEL_GROUPS_KEY);
       if (storedGroups) setParallelGroups(JSON.parse(storedGroups));
 
+      const storedTurn = localStorage.getItem(ACTIVE_TURN_KEY);
+      if (storedTurn) setActiveTurnGroupName(storedTurn);
+
       const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
       if (storedOrder) {
         const parsed = JSON.parse(storedOrder);
@@ -437,6 +444,13 @@ export default function Page() {
     }
   };
 
+  const switchActiveTurn = (groupName: string) => {
+    setActiveTurnGroupName(groupName);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ACTIVE_TURN_KEY, groupName);
+    }
+  };
+
   const shiftBatchPriority = (batch: BatchTag, direction: 'left' | 'right') => {
     const idx = batchPriorityOrder.indexOf(batch);
     if (idx === -1) return;
@@ -461,6 +475,34 @@ export default function Page() {
     const deps = (t.dependencies || []).map((id) => tasks.find((x) => x.id === id)).filter(Boolean) as Task[];
     const blocked = deps.some((d) => d.manualStatus !== 'done');
     return blocked ? 'blocked' : 'ready';
+  };
+
+  // Master Action: "Start Parallel Work" - Automatically activates top N tasks for each parallel group
+  const handleStartParallelWork = () => {
+    let updated = [...tasks];
+
+    parallelGroups.forEach((grp) => {
+      // Find all ready/unblocked tasks belonging to this group
+      const grpCandidates = updated.filter(
+        (t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) === 'ready'
+      );
+      // Take up to slotLimit
+      const toStart = grpCandidates.slice(0, grp.slotLimit);
+      const toStartIds = toStart.map((t) => t.id);
+
+      updated = updated.map((t) => {
+        if (toStartIds.includes(t.id)) {
+          return {
+            ...t,
+            manualStatus: 'progress' as const,
+            startedAt: Date.now(),
+          };
+        }
+        return t;
+      });
+    });
+
+    saveTasks(updated);
   };
 
   // Reorder task positions strictly WITHIN the same batch and column
@@ -650,23 +692,36 @@ export default function Page() {
     );
   };
 
+  // Complete a task in progress and auto-rotate turns iteratively
   const finishTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          const sessionSeconds = t.startedAt ? Math.floor((Date.now() - t.startedAt) / 1000) : 0;
-          const total = (t.totalTimeSpentSeconds || 0) + sessionSeconds;
-          return {
-            ...t,
-            manualStatus: 'done',
-            startedAt: null,
-            completedAt: Date.now(),
-            totalTimeSpentSeconds: total,
-          };
-        }
-        return t;
-      })
-    );
+    const target = tasks.find((t) => t.id === id);
+    const sessionSeconds = target?.startedAt ? Math.floor((Date.now() - target.startedAt) / 1000) : 0;
+    const total = (target?.totalTimeSpentSeconds || 0) + sessionSeconds;
+
+    const updated = tasks.map((t) => {
+      if (t.id === id) {
+        return {
+          ...t,
+          manualStatus: 'done' as const,
+          startedAt: null,
+          completedAt: Date.now(),
+          totalTimeSpentSeconds: total,
+        };
+      }
+      return t;
+    });
+
+    // If the completed task belongs to a parallel group, auto-rotate focus turn to the other group
+    if (target?.isParallel && target?.parallelGroup) {
+      const allGroupNames = parallelGroups.map((g) => g.name);
+      const currentIdx = allGroupNames.indexOf(target.parallelGroup);
+      if (currentIdx !== -1) {
+        const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
+        switchActiveTurn(nextGroupName);
+      }
+    }
+
+    saveTasks(updated);
   };
 
   const reopenTask = (id: string) => {
@@ -1015,7 +1070,7 @@ export default function Page() {
 
   const { levels, orderedLevels } = getAlignedLevels();
 
-  // Helper to partition In Progress items into parallel group queues and active slots
+  // Helper to partition In Progress items into parallel group queues and active slots with iterative rotation
   const renderInProgressColumn = () => {
     const inProgressList = groups.progress;
     if (inProgressList.length === 0) {
@@ -1033,10 +1088,39 @@ export default function Page() {
       }
     });
 
-    const activeGroupNames = Object.keys(groupedMap);
+    // Order parallel groups so the active turn group appears at the top!
+    const activeGroupNames = Object.keys(groupedMap).sort((a, b) => {
+      if (a === activeTurnGroupName) return -1;
+      if (b === activeTurnGroupName) return 1;
+      return 0;
+    });
 
     return (
       <div className="space-y-2">
+        {/* Active Focus Switcher Ribbon */}
+        {activeGroupNames.length > 1 && (
+          <div className="p-1.5 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex items-center justify-between">
+            <span className="text-[9px] font-bold uppercase text-indigo-300 flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-400" /> Focus: {activeTurnGroupName}
+            </span>
+            <div className="flex items-center gap-1">
+              {activeGroupNames.map((gn) => (
+                <button
+                  key={gn}
+                  onClick={() => switchActiveTurn(gn)}
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-semibold transition ${
+                    gn === activeTurnGroupName
+                      ? 'bg-indigo-600 text-white shadow'
+                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  {gn}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Render Each Parallel Group Queue & Active Slots inside In Progress */}
         {activeGroupNames.map((grpName) => {
           const cfg = parallelGroups.find((g) => g.name === grpName) || {
@@ -1047,16 +1131,26 @@ export default function Page() {
           const allGrpTasks = groupedMap[grpName];
           const activeSlots = allGrpTasks.slice(0, cfg.slotLimit);
           const queuedTasks = allGrpTasks.slice(cfg.slotLimit);
+          const isTopFocus = grpName === activeTurnGroupName;
 
           return (
             <div
               key={grpName}
-              className="p-1.5 rounded-lg border border-indigo-500/40 bg-indigo-950/20 space-y-1.5"
+              className={`p-1.5 rounded-lg border transition space-y-1.5 ${
+                isTopFocus
+                  ? 'border-indigo-500 bg-indigo-950/30 ring-1 ring-indigo-500/40 shadow-md'
+                  : 'border-zinc-800/80 bg-zinc-900/40 opacity-85'
+              }`}
             >
               <div className="flex items-center justify-between px-1 text-[10px] font-bold text-indigo-300">
                 <span className="flex items-center gap-1">
                   <FolderKanban className="w-3 h-3 text-indigo-400" />
                   {grpName} [Slots: {activeSlots.length}/{cfg.slotLimit}]
+                  {isTopFocus && (
+                    <span className="ml-1 px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[8px]">
+                      ACTIVE FOCUS
+                    </span>
+                  )}
                 </span>
                 {queuedTasks.length > 0 && (
                   <span className="text-[9px] text-zinc-400 font-mono">
@@ -1387,6 +1481,15 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Master 1-Click Action: Start Parallel Work */}
+          <button
+            onClick={handleStartParallelWork}
+            className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition"
+            title="Auto-start top 3 Development and 1 Study tasks in Parallel"
+          >
+            <Play className="w-3 h-3 fill-current" /> Start Parallel Work
+          </button>
+
           <button
             onClick={() => setIsGroupConfigOpen(true)}
             className="p-1 rounded bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 text-[10px] px-2 font-semibold"
@@ -1503,7 +1606,7 @@ export default function Page() {
 
                   <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
                     {colKey === 'progress' ? (
-                      /* Special Parallel Queue & Slot Engine inside In-Progress */
+                      /* Special Parallel Queue & Slot Engine inside In-Progress with Iterative Turn Rotation */
                       renderInProgressColumn()
                     ) : list.length === 0 ? (
                       <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
@@ -1861,8 +1964,8 @@ export default function Page() {
                       className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
                     >
                       <option value="Other">Other</option>
-                      <option value="Me">Me</option>
                       <option value="AI">AI</option>
+                      <option value="Me">Me</option>
                     </select>
                   </div>
                   <div className="flex items-center justify-between pt-1">
