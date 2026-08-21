@@ -95,6 +95,7 @@ const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
 const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
 const ACTIVE_TURN_KEY = 'smart_task_active_turn_v1';
+const PARALLEL_MODE_KEY = 'smart_task_parallel_mode_v1';
 
 const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
   { id: 'pgrp_dev', name: 'Development', slotLimit: 3 },
@@ -272,6 +273,7 @@ export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
+  const [isParallelModeActive, setIsParallelModeActive] = useState<boolean>(false);
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
@@ -371,6 +373,9 @@ export default function Page() {
     try {
       const storedGroups = localStorage.getItem(PARALLEL_GROUPS_KEY);
       if (storedGroups) setParallelGroups(JSON.parse(storedGroups));
+
+      const storedMode = localStorage.getItem(PARALLEL_MODE_KEY);
+      if (storedMode) setIsParallelModeActive(storedMode === 'true');
 
       const storedTurn = localStorage.getItem(ACTIVE_TURN_KEY);
       if (storedTurn) setActiveTurnGroupName(storedTurn);
@@ -506,8 +511,13 @@ export default function Page() {
     });
   };
 
-  // Master Action: "Start Parallel Work" - Automatically activates top N tasks from Ready state in exact board order
+  // Master Action: "Start Parallel Work" - Activates parallel mode & automatically fills slots from Ready state
   const handleStartParallelWork = () => {
+    setIsParallelModeActive(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PARALLEL_MODE_KEY, 'true');
+    }
+
     let updated = [...tasks];
 
     parallelGroups.forEach((grp) => {
@@ -535,6 +545,14 @@ export default function Page() {
     });
 
     saveTasks(updated);
+  };
+
+  // Master Action: "Stop Parallel Work" - Deactivates parallel mode and treats all tasks as a single in-progress list
+  const handleStopParallelWork = () => {
+    setIsParallelModeActive(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PARALLEL_MODE_KEY, 'false');
+    }
   };
 
   // Reorder task positions strictly WITHIN the same batch and column
@@ -1351,11 +1369,20 @@ export default function Page() {
 
   const { levels, orderedLevels } = getAlignedLevels();
 
-  // Helper to partition In Progress items into parallel group queues and active slots with iterative rotation
+  // Helper to partition In Progress items: Single unified list when parallel mode is OFF, or parallel group slots when ON
   const renderInProgressColumn = () => {
     const inProgressList = groups.progress;
     if (inProgressList.length === 0) {
       return <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>;
+    }
+
+    // When Parallel Work is Stopped -> Render all active tasks as a single unified in-progress list
+    if (!isParallelModeActive) {
+      return (
+        <div className="space-y-1.5">
+          {inProgressList.map((t) => renderTaskCard(t, 'progress'))}
+        </div>
+      );
     }
 
     const groupedMap: Record<string, Task[]> = {};
@@ -1793,14 +1820,24 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Master 1-Click Action: Start Parallel Work */}
-          <button
-            onClick={handleStartParallelWork}
-            className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition"
-            title="Auto-start top tasks for each parallel group in exact board order"
-          >
-            <Play className="w-3 h-3 fill-current" /> Start Parallel Work
-          </button>
+          {/* Master Action: Start / Stop Parallel Work Toggle */}
+          {isParallelModeActive ? (
+            <button
+              onClick={handleStopParallelWork}
+              className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition"
+              title="Stop Parallel Work and view all active tasks as a single in-progress list"
+            >
+              <X className="w-3 h-3" /> Stop Parallel Work
+            </button>
+          ) : (
+            <button
+              onClick={handleStartParallelWork}
+              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition"
+              title="Start Parallel Work (Groups, slots & turns)"
+            >
+              <Play className="w-3 h-3 fill-current" /> Start Parallel Work
+            </button>
+          )}
 
           <button
             onClick={() => setIsGroupConfigOpen(true)}
