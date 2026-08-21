@@ -2186,19 +2186,35 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveTask}
-                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs shadow"
-              >
-                Save Task
-              </button>
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+              {editId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteTask(editId);
+                    setIsModalOpen(false);
+                  }}
+                  className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded border border-rose-800/60 flex items-center gap-1 font-semibold"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Task
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveTask}
+                  className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs shadow"
+                >
+                  Save Task
+                </button>
+              </div>
             </div>
           </div>
         </div>
