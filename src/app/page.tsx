@@ -677,8 +677,15 @@ export default function Page() {
     groups[st].push(t);
   });
 
-  // Group by Batch Priority First, then preserve manual user order within that batch
-  (['blocked', 'ready', 'progress', 'done'] as const).forEach((key) => {
+  // In Progress column is sorted strictly by Order (so existing active tasks stay on top, newly promoted tasks stay at the bottom)
+  groups.progress.sort((a, b) => {
+    const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+    const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+    return ordA - ordB;
+  });
+
+  // Ready, Blocked, Done columns sort by Batch Rank first, then Order within that batch
+  (['blocked', 'ready', 'done'] as const).forEach((key) => {
     groups[key].sort((a, b) => {
       const bwA = getBatchWeight(a.batch);
       const bwB = getBatchWeight(b.batch);
@@ -735,6 +742,12 @@ export default function Page() {
   }, [view, filtered, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder]);
 
   const startInProgress = (id: string) => {
+    const maxOrder = Math.max(
+      ...tasks
+        .filter((t) => t.manualStatus === 'progress')
+        .map((t) => (typeof t.order === 'number' ? t.order : t.createdAt)),
+      Date.now()
+    );
     saveTasks(
       tasks.map((t) => {
         if (t.id === id) {
@@ -743,6 +756,7 @@ export default function Page() {
             manualStatus: 'progress',
             startedAt: Date.now(),
             completedAt: null,
+            order: maxOrder + 1,
           };
         }
         return t;
