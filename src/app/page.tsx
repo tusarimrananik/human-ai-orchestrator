@@ -267,7 +267,7 @@ export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
-  const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Development');
+  const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
@@ -534,20 +534,62 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
+  // Reorder tasks within a parallel group in the Groups & Queues modal
+  const moveTaskWithinGroup = (groupName: string, taskId: string, direction: 'up' | 'down') => {
+    const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === groupName && computedStatus(t) !== 'done');
+    const idx = grpTasks.findIndex((t) => t.id === taskId);
+    if (idx === -1) return;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= grpTasks.length) return;
+
+    const targetTask = grpTasks[targetIdx];
+    const idxA = tasks.findIndex((t) => t.id === taskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTask.id);
+    if (idxA === -1 || idxB === -1) return;
+
+    const newTasks = [...tasks];
+    const temp = newTasks[idxA];
+    newTasks[idxA] = newTasks[idxB];
+    newTasks[idxB] = temp;
+
+    newTasks.forEach((t, i) => {
+      t.order = i;
+    });
+
+    saveTasks(newTasks);
+  };
+
   const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
   };
 
-  // Toggle sub-task checkbox on a task card
+  // Toggle sub-task checkbox on a task card with iterative auto-turn rotation
   const toggleSubTask = (taskId: string, subId: string) => {
+    const parentTask = tasks.find((t) => t.id === taskId);
+    let justCompleted = false;
+
     const updated = tasks.map((t) => {
       if (t.id === taskId && t.subTasks) {
-        const nextSubs = t.subTasks.map((s) => (s.id === subId ? { ...s, status: s.status === 'done' ? ('todo' as const) : ('done' as const) } : s));
+        const nextSubs = t.subTasks.map((s) => {
+          if (s.id === subId) {
+            const nextStatus = s.status === 'done' ? ('todo' as const) : ('done' as const);
+            if (nextStatus === 'done') justCompleted = true;
+            return { ...s, status: nextStatus };
+          }
+          return s;
+        });
         return { ...t, subTasks: nextSubs };
       }
       return t;
     });
+
+    // If a subtask in Study was completed, auto-rotate next focus to Development!
+    if (justCompleted && parentTask?.parallelGroup === 'Study') {
+      switchActiveTurn('Development');
+    }
+
     saveTasks(updated);
   };
 
@@ -692,13 +734,13 @@ export default function Page() {
     );
   };
 
-  // Complete a task in progress and auto-rotate turns iteratively
+  // Complete a task in progress, auto-refill open slots from queue, and auto-rotate turns
   const finishTask = (id: string) => {
     const target = tasks.find((t) => t.id === id);
     const sessionSeconds = target?.startedAt ? Math.floor((Date.now() - target.startedAt) / 1000) : 0;
     const total = (target?.totalTimeSpentSeconds || 0) + sessionSeconds;
 
-    const updated = tasks.map((t) => {
+    let updated = tasks.map((t) => {
       if (t.id === id) {
         return {
           ...t,
@@ -711,8 +753,28 @@ export default function Page() {
       return t;
     });
 
-    // If the completed task belongs to a parallel group, auto-rotate focus turn to the other group
+    // Auto-Refill next task from this group's queue into active running slot
     if (target?.isParallel && target?.parallelGroup) {
+      const grp = parallelGroups.find((g) => g.name === target.parallelGroup);
+      const slotCap = grp?.slotLimit || 3;
+
+      const currentRunningCount = updated.filter(
+        (t) => t.isParallel && t.parallelGroup === target.parallelGroup && t.manualStatus === 'progress' && t.id !== id
+      ).length;
+
+      if (currentRunningCount < slotCap) {
+        // Find next queued/ready task to promote into active running slot
+        const nextInLine = updated.find(
+          (t) => t.isParallel && t.parallelGroup === target.parallelGroup && computedStatus(t) === 'ready'
+        );
+        if (nextInLine) {
+          updated = updated.map((t) =>
+            t.id === nextInLine.id ? { ...t, manualStatus: 'progress' as const, startedAt: Date.now() } : t
+          );
+        }
+      }
+
+      // Auto-Turn Iterative Rotation: If Development finishes, rotate to Study; if Study finishes, rotate to Development
       const allGroupNames = parallelGroups.map((g) => g.name);
       const currentIdx = allGroupNames.indexOf(target.parallelGroup);
       if (currentIdx !== -1) {
@@ -2239,7 +2301,7 @@ export default function Page() {
               </button>
             </div>
 
-            {/* Groups List with Multi-Select Existing Tasks & New Task Queuers */}
+            {/* Groups List with Multi-Select Existing Tasks & Reordering Controls */}
             <div className="space-y-4">
               {parallelGroups.map((grp) => {
                 const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) !== 'done');
@@ -2285,14 +2347,14 @@ export default function Page() {
                       </div>
                     </div>
 
-                    {/* Current Tasks inside this group */}
+                    {/* Current Tasks inside this group with Sort/Reorder Controls */}
                     {grpTasks.length > 0 && (
                       <div className="space-y-1 bg-zinc-900/40 p-2 rounded border border-zinc-800/80">
                         <div className="text-[9px] uppercase font-bold text-zinc-400 mb-1 flex items-center justify-between">
-                          <span>Current Tasks in {grp.name} ({grpTasks.length})</span>
-                          <span className="text-[8px] text-zinc-500">First {grp.slotLimit} run in active slots</span>
+                          <span>Sort & Reorder Tasks in {grp.name} ({grpTasks.length})</span>
+                          <span className="text-[8px] text-zinc-500">First {grp.slotLimit} tasks run in active slots</span>
                         </div>
-                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                        <div className="space-y-1 max-h-36 overflow-y-auto">
                           {grpTasks.map((t, idx) => (
                             <div
                               key={t.id}
@@ -2301,15 +2363,36 @@ export default function Page() {
                               }`}
                             >
                               <div className="flex items-center gap-1.5 truncate flex-1">
-                                <span className="font-mono text-[9px] text-zinc-500">
+                                <div className="flex items-center gap-0.5 flex-shrink-0">
+                                  <button
+                                    disabled={idx === 0}
+                                    onClick={() => moveTaskWithinGroup(grp.name, t.id, 'up')}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Up in Queue"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    disabled={idx === grpTasks.length - 1}
+                                    onClick={() => moveTaskWithinGroup(grp.name, t.id, 'down')}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Down in Queue"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <span className="font-mono text-[9px] text-indigo-400 font-bold flex-shrink-0">
                                   {idx < grp.slotLimit ? `[Slot ${idx + 1}]` : `[Queue #${idx + 1 - grp.slotLimit}]`}
                                 </span>
                                 <span className="truncate">{t.name}</span>
                               </div>
 
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
                                 <span className="text-[9px] px-1 rounded bg-zinc-900 text-zinc-400 font-mono">
                                   {t.owner}
+                                </span>
+                                <span className="text-[9px] px-1 rounded bg-zinc-900 text-zinc-400">
+                                  {t.batch}
                                 </span>
                                 <button
                                   type="button"
