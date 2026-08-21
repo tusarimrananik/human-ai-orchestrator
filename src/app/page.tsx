@@ -12,7 +12,6 @@ import {
   GitFork,
   Download,
   Upload,
-  Sparkles,
   Clock,
   Lock,
   X,
@@ -60,43 +59,62 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-export function getBatchStyle(batch: BatchTag = 'None') {
+// Full element background, border, text & badge styling with high contrast readability
+export function getBatchTheme(batch: BatchTag = 'None') {
   switch (batch) {
     case 'Batch 1':
       return {
-        badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/40',
-        cardBorder: 'border-l-4 border-l-sky-500',
-        dagBorder: 'border-sky-500 bg-sky-950/30 text-sky-200',
+        cardBg: 'bg-sky-950/40 border-sky-600/70 text-sky-100',
+        cardTitle: 'text-sky-100',
+        descBg: 'bg-sky-950/60 border-sky-800/60 text-sky-200/90',
+        badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
+        dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
+        dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
       };
     case 'Batch 2':
       return {
-        badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/40',
-        cardBorder: 'border-l-4 border-l-purple-500',
-        dagBorder: 'border-purple-500 bg-purple-950/30 text-purple-200',
+        cardBg: 'bg-purple-950/40 border-purple-600/70 text-purple-100',
+        cardTitle: 'text-purple-100',
+        descBg: 'bg-purple-950/60 border-purple-800/60 text-purple-200/90',
+        badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
+        dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
+        dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
       };
     case 'Batch 3':
       return {
-        badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
-        cardBorder: 'border-l-4 border-l-amber-500',
-        dagBorder: 'border-amber-500 bg-amber-950/30 text-amber-200',
+        cardBg: 'bg-amber-950/40 border-amber-600/70 text-amber-100',
+        cardTitle: 'text-amber-100',
+        descBg: 'bg-amber-950/60 border-amber-800/60 text-amber-200/90',
+        badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
+        dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
+        dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
       };
     case 'Batch 4':
       return {
-        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
-        cardBorder: 'border-l-4 border-l-emerald-500',
-        dagBorder: 'border-emerald-500 bg-emerald-950/30 text-emerald-200',
+        cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
+        cardTitle: 'text-emerald-100',
+        descBg: 'bg-emerald-950/60 border-emerald-800/60 text-emerald-200/90',
+        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
+        dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
+        dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
       };
     case 'Batch 5':
       return {
-        badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/40',
-        cardBorder: 'border-l-4 border-l-rose-500',
-        dagBorder: 'border-rose-500 bg-rose-950/30 text-rose-200',
+        cardBg: 'bg-rose-950/40 border-rose-600/70 text-rose-100',
+        cardTitle: 'text-rose-100',
+        descBg: 'bg-rose-950/60 border-rose-800/60 text-rose-200/90',
+        badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
+        dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
+        dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
       };
     default:
       return {
+        cardBg: 'bg-zinc-950 border-zinc-800 text-zinc-200',
+        cardTitle: 'text-zinc-100',
+        descBg: 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400',
         badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
-        cardBorder: '',
-        dagBorder: 'border-zinc-800 bg-zinc-900 text-zinc-400',
+        dropdown: 'bg-zinc-900 text-zinc-400 border-zinc-700',
+        dagNode: 'bg-zinc-900 border-zinc-700 text-zinc-200',
       };
   }
 }
@@ -156,16 +174,6 @@ export default function Page() {
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
           }))
         );
-      } else {
-        const a = uid(), b = uid(), c = uid(), d = uid();
-        const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
-        ];
-        setTasks(initialTasks);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
       }
     } catch (err) {
       console.warn('LocalStorage access error:', err);
@@ -237,11 +245,6 @@ export default function Page() {
     setDraggedTaskId(null);
   };
 
-  const getFocusTask = () => {
-    const ready = tasks.filter((t) => computedStatus(t) === 'ready' && t.owner === 'Me');
-    return ready[0] || null;
-  };
-
   const q = search.toLowerCase();
   const filtered = tasks.filter(
     (t) =>
@@ -261,14 +264,6 @@ export default function Page() {
     const st = computedStatus(t);
     groups[st].push(t);
   });
-
-  const allGroups = { blocked: 0, ready: 0, progress: 0, done: 0 };
-  tasks.forEach((t) => {
-    const st = computedStatus(t);
-    allGroups[st]++;
-  });
-
-  const focus = getFocusTask();
 
   // Straight horizontal dependency lines calculation
   useLayoutEffect(() => {
@@ -350,6 +345,7 @@ export default function Page() {
     );
   };
 
+  // Reopen task resets timer completely to ZERO
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -359,6 +355,7 @@ export default function Page() {
               manualStatus: 'todo',
               startedAt: null,
               completedAt: null,
+              totalTimeSpentSeconds: 0,
             }
           : t
       )
@@ -374,19 +371,6 @@ export default function Page() {
           dependencies: (x.dependencies || []).filter((d) => d !== id),
         }))
     );
-  };
-
-  const addSample = () => {
-    const a = uid(), b = uid(), c = uid(), d = uid(), e = uid(), f = uid();
-    const newSamples: Task[] = [
-      { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-      { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor specs and instructions', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-      { id: c, name: 'Write algorithm report prompt', description: 'Structure code block prompts for report generator', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-      { id: d, name: 'Write micro report prompt', description: 'Prepare assembly inputs and expected outputs', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
-      { id: e, name: 'AI: Generate algorithm report', description: 'Execute report generation script', owner: 'AI', batch: 'Batch 3', deadline: '', estimate: '1h', notes: '', dependencies: [c], manualStatus: 'todo', createdAt: Date.now() + 4 },
-      { id: f, name: 'AI: Generate micro report', description: 'Execute assembly simulation and diagrams', owner: 'AI', batch: 'Batch 3', deadline: '', estimate: '1h', notes: '', dependencies: [d], manualStatus: 'todo', createdAt: Date.now() + 5 },
-    ];
-    saveTasks([...tasks, ...newSamples]);
   };
 
   const exportData = () => {
@@ -537,7 +521,7 @@ export default function Page() {
             <button
               onClick={() => setView('board')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'board' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                view === 'board' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
               }`}
             >
               <LayoutGrid className="w-3 h-3" /> Board
@@ -545,7 +529,7 @@ export default function Page() {
             <button
               onClick={() => setView('dependency')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
               }`}
             >
               <GitFork className="w-3 h-3" /> DAG Graph
@@ -555,77 +539,34 @@ export default function Page() {
 
         <div className="flex items-center gap-1.5">
           <button
-            onClick={addSample}
-            className="px-2 py-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 text-[11px] transition"
-          >
-            + Sample
-          </button>
-          <button
             onClick={exportData}
-            className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            className="p-1 rounded bg-zinc-800/80 text-zinc-400 transition"
             title="Export"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            className="p-1 rounded bg-zinc-800/80 text-zinc-400 transition"
             title="Import"
           >
             <Upload className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => openTaskModal()}
-            className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[11px] transition shadow"
+            className="px-2.5 py-1 rounded bg-indigo-600 font-semibold text-white text-[11px] shadow"
           >
             + Task
           </button>
         </div>
       </header>
 
-      {/* Stats & Focus Summary Bar */}
-      <div className="px-3 py-2 border-b border-zinc-800/60 bg-zinc-950/60 grid grid-cols-5 gap-2 flex-shrink-0 z-10">
-        <div className="col-span-2 bg-indigo-950/20 border border-indigo-500/30 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 overflow-hidden">
-          <div className="min-w-0">
-            <div className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider flex items-center gap-1">
-              <Sparkles className="w-2.5 h-2.5" /> DO NOW
-            </div>
-            <div className="text-xs font-bold text-white truncate">
-              {focus ? focus.name : 'No ready task for you'}
-            </div>
-          </div>
-          {focus && (
-            <button
-              onClick={() => startInProgress(focus.id)}
-              className="flex-shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
-            >
-              Start
-            </button>
-          )}
-        </div>
-
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
-          <span className="text-[10px] text-rose-400 font-bold uppercase">Blocked</span>
-          <span className="text-sm font-black text-rose-400">{allGroups.blocked}</span>
-        </div>
-
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
-          <span className="text-[10px] text-emerald-400 font-bold uppercase">Ready</span>
-          <span className="text-sm font-black text-emerald-400">{allGroups.ready}</span>
-        </div>
-
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg px-2 py-1 flex items-center justify-between">
-          <span className="text-[10px] text-blue-400 font-bold uppercase">Working</span>
-          <span className="text-sm font-black text-blue-400">{allGroups.progress}</span>
-        </div>
-      </div>
-
       {/* Filter Row */}
       <div className="px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 flex items-center justify-between gap-2 flex-shrink-0">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            placeholder="Search tasks or descriptions..."
+            placeholder="Search tasks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
@@ -644,7 +585,6 @@ export default function Page() {
             <option value="Other">Other</option>
           </select>
 
-          {/* Batch Filter */}
           <select
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
@@ -698,7 +638,7 @@ export default function Page() {
                           .filter(Boolean) as Task[];
                         const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
                         const durationDisplay = getTaskDurationDisplay(t);
-                        const batchStyle = getBatchStyle(t.batch);
+                        const batchTheme = getBatchTheme(t.batch);
 
                         return (
                           <div
@@ -707,26 +647,14 @@ export default function Page() {
                             onDragStart={(e) => handleDragStart(e, t.id)}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
-                            className={`group p-2 rounded-md bg-zinc-950 border transition shadow-sm space-y-1 cursor-grab active:cursor-grabbing ${
-                              batchStyle.cardBorder
-                            } ${
-                              draggedTaskId === t.id
-                                ? 'border-indigo-500 opacity-60'
-                                : 'border-zinc-800/90 hover:border-zinc-700'
+                            className={`p-2 rounded-md border shadow-sm space-y-1 ${batchTheme.cardBg} ${
+                              draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1">
-                                <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
-                                <span
-                                  className={`text-[9px] px-1 rounded font-semibold ${
-                                    t.owner === 'Me'
-                                      ? 'bg-blue-500/10 text-blue-400'
-                                      : t.owner === 'AI'
-                                      ? 'bg-purple-500/10 text-purple-400'
-                                      : 'bg-zinc-800 text-zinc-400'
-                                  }`}
-                                >
+                                <GripVertical className="w-3 h-3 text-zinc-400/60" />
+                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
                                   {t.owner}
                                 </span>
                               </div>
@@ -739,7 +667,7 @@ export default function Page() {
                                       e.stopPropagation();
                                       moveTaskWithinGroup(t.id, list, 'up');
                                     }}
-                                    className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
                                     title="Move Up"
                                   >
                                     <ArrowUp className="w-2.5 h-2.5" />
@@ -750,20 +678,19 @@ export default function Page() {
                                       e.stopPropagation();
                                       moveTaskWithinGroup(t.id, list, 'down');
                                     }}
-                                    className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 transition"
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
                                     title="Move Down"
                                   >
                                     <ArrowDown className="w-2.5 h-2.5" />
                                   </button>
                                 </div>
 
-                                {/* Batch Dropdown Selector */}
                                 <select
                                   value={t.batch || 'None'}
                                   onChange={(e) =>
                                     handleBatchChange(t.id, e.target.value as BatchTag)
                                   }
-                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none transition ${batchStyle.badge}`}
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
                                 >
                                   <option value="None" className="bg-zinc-900 text-zinc-400">
                                     No Batch
@@ -787,38 +714,37 @@ export default function Page() {
                               </div>
                             </div>
 
-                            <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
+                            <div className={`text-xs font-bold leading-snug line-clamp-2 ${batchTheme.cardTitle}`}>
                               {t.name}
                             </div>
 
                             {t.description && (
-                              <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed bg-zinc-900/60 p-1 rounded border border-zinc-800/60">
+                              <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
                                 {t.description}
                               </p>
                             )}
 
                             {waiting.length > 0 && (
-                              <div className="text-[10px] text-rose-400/90 bg-rose-500/10 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5 flex-shrink-0" />
+                              <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
                                 <span className="truncate">Waiting: {waiting.join(', ')}</span>
                               </div>
                             )}
 
-                            {/* Time Tracking Info & Estimate */}
-                            <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-0.5">
+                            <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
                               {durationDisplay ? (
                                 <div
                                   className={`flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                     colKey === 'progress'
-                                      ? 'bg-blue-500/20 text-blue-300 animate-pulse border border-blue-500/30'
-                                      : 'bg-zinc-900 text-emerald-400'
+                                      ? 'bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50'
+                                      : 'bg-black/40 text-emerald-300 border border-emerald-500/30'
                                   }`}
                                 >
                                   <Timer className="w-2.5 h-2.5" />
                                   <span>{durationDisplay}</span>
                                 </div>
                               ) : t.estimate ? (
-                                <div className="text-zinc-500 flex items-center gap-1">
+                                <div className="text-zinc-400 flex items-center gap-1">
                                   <Clock className="w-2.5 h-2.5" /> {t.estimate}
                                 </div>
                               ) : (
@@ -826,15 +752,15 @@ export default function Page() {
                               )}
 
                               {t.estimate && durationDisplay && (
-                                <span className="text-[9px] text-zinc-500 font-mono">est: {t.estimate}</span>
+                                <span className="text-[9px] text-zinc-400 font-mono">est: {t.estimate}</span>
                               )}
                             </div>
 
-                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-zinc-900">
+                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
                               {colKey === 'ready' && (
                                 <button
                                   onClick={() => startInProgress(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium"
+                                  className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold shadow"
                                 >
                                   Start
                                 </button>
@@ -842,7 +768,7 @@ export default function Page() {
                               {colKey === 'progress' && (
                                 <button
                                   onClick={() => finishTask(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium"
+                                  className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
                                 >
                                   Done
                                 </button>
@@ -850,21 +776,21 @@ export default function Page() {
                               {colKey === 'done' && (
                                 <button
                                   onClick={() => reopenTask(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px]"
+                                  className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
                                 >
                                   Reopen
                                 </button>
                               )}
                               <button
                                 onClick={() => openTaskModal(t.id)}
-                                className="p-0.5 text-zinc-500 hover:text-zinc-300"
+                                className="p-0.5 text-zinc-400 hover:text-white"
                                 title="Edit"
                               >
                                 <Pencil className="w-3 h-3" />
                               </button>
                               <button
                                 onClick={() => deleteTask(t.id)}
-                                className="p-0.5 text-zinc-500 hover:text-rose-400"
+                                className="p-0.5 text-zinc-400 hover:text-rose-400"
                                 title="Delete"
                               >
                                 <Trash2 className="w-3 h-3" />
@@ -923,39 +849,30 @@ export default function Page() {
                     {levels[level].map((t) => {
                       const status = computedStatus(t);
                       const durationDisplay = getTaskDurationDisplay(t);
-                      const batchStyle = getBatchStyle(t.batch);
-
-                      const badgeClass =
-                        status === 'ready'
-                          ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
-                          : status === 'blocked'
-                          ? 'border-rose-500/80 bg-rose-950/30 text-rose-300'
-                          : status === 'progress'
-                          ? 'border-blue-500/80 bg-blue-950/30 text-blue-300'
-                          : 'border-zinc-700 bg-zinc-900 text-zinc-400';
+                      const batchTheme = getBatchTheme(t.batch);
 
                       return (
                         <div
                           key={t.id}
                           data-node-id={t.id}
-                          className={`p-2.5 rounded-lg border-2 shadow transition space-y-1 ${batchStyle.cardBorder} ${badgeClass}`}
+                          className={`p-2.5 rounded-lg border-2 shadow space-y-1 ${batchTheme.dagNode}`}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <div className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight flex-1">
+                            <div className="text-xs font-bold line-clamp-2 leading-tight flex-1">
                               {t.name}
                             </div>
                             {t.batch && t.batch !== 'None' && (
-                              <span className={`text-[8px] font-bold px-1 rounded ${batchStyle.badge}`}>
+                              <span className={`text-[8px] font-bold px-1 rounded ${batchTheme.badge}`}>
                                 {t.batch}
                               </span>
                             )}
                           </div>
                           {t.description && (
-                            <p className="text-[10px] text-zinc-400 line-clamp-2 leading-snug">
+                            <p className="text-[10px] line-clamp-2 leading-snug opacity-80">
                               {t.description}
                             </p>
                           )}
-                          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1 pt-1 border-t border-zinc-800/80">
+                          <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-white/10">
                             <span>{t.owner}</span>
                             <div className="flex items-center gap-1">
                               {durationDisplay && (
@@ -977,7 +894,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal with Enhanced Dependency & Sub-dependency chaining */}
+      {/* Task Edit/Create Modal */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -989,7 +906,7 @@ export default function Page() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Link2 className="w-3.5 h-3.5 text-indigo-400" />
-                {editId ? 'Edit Task' : 'New Task & Dependencies'}
+                {editId ? 'Edit Task' : 'New Task'}
               </span>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
@@ -1056,10 +973,9 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Direct Dependencies & Sub-Dependency Chaining Selector */}
             <div className="space-y-1">
               <label className="block text-[10px] uppercase font-bold text-indigo-400 flex items-center justify-between">
-                <span>Direct Dependencies (Prerequisites that must finish first)</span>
+                <span>Dependencies (Prerequisites)</span>
                 <span className="text-[9px] text-zinc-500 normal-case">Sub-chains auto-linked</span>
               </label>
 
@@ -1074,14 +990,15 @@ export default function Page() {
                     .map((candidate) => {
                       const isDirectChecked = selectedDeps.includes(candidate.id);
                       const upstreamSubDeps = getUpstreamChain(candidate.id);
+                      const candidateTheme = getBatchTheme(candidate.batch);
 
                       return (
                         <div
                           key={candidate.id}
-                          className={`p-1.5 rounded border transition ${
+                          className={`p-1.5 rounded border ${
                             isDirectChecked
-                              ? 'bg-indigo-950/40 border-indigo-500/60 text-white'
-                              : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:border-zinc-700'
+                              ? 'bg-indigo-950/40 border-indigo-500 text-white'
+                              : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
                           }`}
                         >
                           <label className="flex items-center justify-between gap-2 cursor-pointer">
@@ -1101,18 +1018,17 @@ export default function Page() {
                             <div className="flex items-center gap-1 text-[9px] font-mono text-zinc-400 flex-shrink-0">
                               <span className="px-1 py-0.2 rounded bg-zinc-800">{candidate.owner}</span>
                               {candidate.batch && candidate.batch !== 'None' && (
-                                <span className={`px-1 py-0.2 rounded font-bold ${getBatchStyle(candidate.batch).badge}`}>
+                                <span className={`px-1 py-0.2 rounded font-bold ${candidateTheme.badge}`}>
                                   {candidate.batch}
                                 </span>
                               )}
                             </div>
                           </label>
 
-                          {/* Render Sub-dependencies chain preview if selected */}
                           {isDirectChecked && upstreamSubDeps.length > 0 && (
                             <div className="mt-1 pl-4 pt-1 border-t border-indigo-500/20 text-[10px] text-indigo-300 flex items-center gap-1.5 flex-wrap">
                               <CornerDownRight className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                              <span className="font-mono text-zinc-400">Chained Prereqs:</span>
+                              <span className="font-mono text-zinc-400">Chained:</span>
                               {upstreamSubDeps.map((sub, sIdx) => (
                                 <span
                                   key={sub.id + sIdx}
