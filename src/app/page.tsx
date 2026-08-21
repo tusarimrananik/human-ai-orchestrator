@@ -28,17 +28,12 @@ import {
   ArrowRightCircle,
   FolderKanban,
   Sliders,
-  Target,
-  Bot,
-  User,
   Check,
   ListPlus,
   Split,
   CheckSquare,
   Square,
   ListTodo,
-  RotateCcw,
-  Ban,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -75,8 +70,6 @@ interface Task {
   batch: BatchTag;
   isParallel?: boolean; // true = Parallel stream work, false/undefined = Standard sequential
   parallelGroup?: string; // e.g. "Development", "Study", etc.
-  isGoal?: boolean; // true = Goal-oriented task, false/undefined = Normal task
-  goalTarget?: string; // target outcome criteria (e.g. "Pass Jest tests", "Derive formula")
   subTasks?: SubTask[]; // Sub-tasks breakdown (e.g. solve question 1, 2, 3)
   deadline: string;
   estimate: string;
@@ -300,20 +293,11 @@ export default function Page() {
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
   const [taskIsParallel, setTaskIsParallel] = useState(false);
   const [taskParallelGroup, setTaskParallelGroup] = useState<string>('Development');
-  const [taskIsGoal, setTaskIsGoal] = useState(false);
-  const [taskGoalTarget, setTaskGoalTarget] = useState('');
   const [taskSubTasks, setTaskSubTasks] = useState<SubTask[]>([]);
   const [newSubTaskInput, setNewSubTaskInput] = useState('');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
-
-  // Quick Blocker Modal State (Triggered when marking a task as Blocked)
-  const [quickBlockTaskId, setQuickBlockTaskId] = useState<string | null>(null);
-  const [quickBlockParentId, setQuickBlockParentId] = useState<string>('');
-  const [quickBlockParentStatus, setQuickBlockParentStatus] = useState<'progress' | 'ready'>('progress');
-  const [quickBlockNewParentName, setQuickBlockNewParentName] = useState<string>('');
-  const [quickBlockNewParentOwner, setQuickBlockNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
 
   // Parallel Group Config Modal & Multi-Select Queue State
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
@@ -328,7 +312,7 @@ export default function Page() {
   const [queueTaskInputs, setQueueTaskInputs] = useState<
     Record<
       string,
-      { name: string; isGoal: boolean; goalTarget: string; owner: 'Me' | 'AI' | 'Other' }
+      { name: string; owner: 'Me' | 'AI' | 'Other' }
     >
   >({});
 
@@ -392,17 +376,15 @@ export default function Page() {
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
             isParallel: typeof t.isParallel === 'boolean' ? t.isParallel : !!t.parallelGroup,
             parallelGroup: t.parallelGroup || '',
-            isGoal: !!t.isGoal,
-            goalTarget: t.goalTarget || '',
             subTasks: t.subTasks || [],
           }))
         );
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'Complete structure with working math derivations', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
-          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'All pinout charts verified', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', isGoal: false, deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
           {
             id: d,
             name: 'Study Numerical Methods',
@@ -411,8 +393,6 @@ export default function Page() {
             batch: 'Batch 2',
             isParallel: true,
             parallelGroup: 'Study',
-            isGoal: true,
-            goalTarget: '100% correct score on Question 1-3',
             subTasks: [
               { id: 'sub_1', name: 'Solve Question 1 (Newton-Raphson)', status: 'done' },
               { id: 'sub_2', name: 'Solve Question 2 (Runge-Kutta 4th)', status: 'todo' },
@@ -571,7 +551,7 @@ export default function Page() {
   const filtered = tasks.filter((t) => {
     const subText = (t.subTasks || []).map((s) => s.name).join(' ');
     const matchesSearch =
-      !q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + subText + ' ' + (t.notes || '')).toLowerCase().includes(q);
+      !q || (t.name + ' ' + (t.description || '') + ' ' + subText + ' ' + (t.notes || '')).toLowerCase().includes(q);
     const matchesOwner = !ownerFilter || t.owner === ownerFilter;
     const matchesBatch = !batchFilter || t.batch === batchFilter;
     const matchesParallelGroup =
@@ -670,8 +650,7 @@ export default function Page() {
     );
   };
 
-  // Goal Task: Option 1 - Goal Reached (Done)
-  const finishGoalReached = (id: string) => {
+  const finishTask = (id: string) => {
     saveTasks(
       tasks.map((t) => {
         if (t.id === id) {
@@ -688,90 +667,6 @@ export default function Page() {
         return t;
       })
     );
-  };
-
-  // Goal Task: Option 2 - Retry (Try Again)
-  const retryGoalTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            manualStatus: 'progress',
-            startedAt: Date.now(), // reset active iteration timer
-          };
-        }
-        return t;
-      })
-    );
-  };
-
-  // Goal Task: Option 3 - Mark Blocked & assign parent blocker with custom parent status
-  const openQuickBlockModal = (taskId: string) => {
-    setQuickBlockTaskId(taskId);
-    setQuickBlockParentId('');
-    setQuickBlockParentStatus('progress');
-    setQuickBlockNewParentName('');
-    setQuickBlockNewParentOwner('Other');
-  };
-
-  const handleConfirmQuickBlock = () => {
-    if (!quickBlockTaskId) return;
-
-    let finalParentId = quickBlockParentId;
-    let updatedTasks = [...tasks];
-
-    // If user typed a new blocker parent name, create it on the fly with the selected status
-    if (!finalParentId && quickBlockNewParentName.trim()) {
-      finalParentId = uid();
-      const currentBlocked = tasks.find((t) => t.id === quickBlockTaskId);
-      const newParent: Task = {
-        id: finalParentId,
-        name: quickBlockNewParentName.trim(),
-        owner: quickBlockNewParentOwner,
-        batch: currentBlocked?.batch || 'Batch 1',
-        isGoal: false,
-        deadline: '',
-        estimate: '',
-        description: `Prerequisite blocker for ${currentBlocked?.name || 'task'}`,
-        dependencies: [],
-        manualStatus: quickBlockParentStatus === 'progress' ? 'progress' : 'todo',
-        startedAt: quickBlockParentStatus === 'progress' ? Date.now() : null,
-        createdAt: Date.now() - 100,
-        order: 0,
-        totalTimeSpentSeconds: 0,
-      };
-      updatedTasks = [newParent, ...updatedTasks];
-    } else if (finalParentId) {
-      // If an existing parent was selected, update its status according to user choice
-      updatedTasks = updatedTasks.map((t) => {
-        if (t.id === finalParentId) {
-          return {
-            ...t,
-            manualStatus: quickBlockParentStatus === 'progress' ? ('progress' as const) : ('todo' as const),
-            startedAt: quickBlockParentStatus === 'progress' && !t.startedAt ? Date.now() : t.startedAt,
-          };
-        }
-        return t;
-      });
-    }
-
-    // Attach parent blocker to the target task and set its status to todo (which automatically evaluates to blocked)
-    updatedTasks = updatedTasks.map((t) => {
-      if (t.id === quickBlockTaskId) {
-        const nextDeps = finalParentId ? Array.from(new Set([...(t.dependencies || []), finalParentId])) : t.dependencies;
-        return {
-          ...t,
-          manualStatus: 'todo' as const,
-          dependencies: nextDeps,
-          startedAt: null,
-        };
-      }
-      return t;
-    });
-
-    saveTasks(updatedTasks);
-    setQuickBlockTaskId(null);
   };
 
   const reopenTask = (id: string) => {
@@ -819,8 +714,6 @@ export default function Page() {
     setTaskBatch(current?.batch || 'None');
     setTaskIsParallel(typeof current?.isParallel === 'boolean' ? current.isParallel : !!current?.parallelGroup);
     setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
-    setTaskIsGoal(!!current?.isGoal);
-    setTaskGoalTarget(current?.goalTarget || '');
     setTaskSubTasks(current?.subTasks || []);
     setNewSubTaskInput('');
     setTaskDeadline(current?.deadline || '');
@@ -856,7 +749,6 @@ export default function Page() {
       batch: taskBatch,
       isParallel: taskIsParallel,
       parallelGroup: taskIsParallel ? taskParallelGroup : '',
-      isGoal: false,
       deadline: '',
       estimate: '',
       description: 'Blocking prerequisite parent task',
@@ -884,7 +776,6 @@ export default function Page() {
       batch: taskBatch,
       isParallel: taskIsParallel,
       parallelGroup: taskIsParallel ? taskParallelGroup : '',
-      isGoal: false,
       deadline: '',
       estimate: '',
       description: 'Downstream child task',
@@ -924,11 +815,9 @@ export default function Page() {
       batch: 'Batch 1',
       isParallel: true,
       parallelGroup: groupName,
-      isGoal: input.isGoal,
-      goalTarget: input.isGoal ? input.goalTarget.trim() : '',
       deadline: '',
       estimate: '',
-      description: input.isGoal ? `Target: ${input.goalTarget}` : '',
+      description: '',
       dependencies: [],
       manualStatus: 'progress',
       createdAt: Date.now(),
@@ -939,7 +828,7 @@ export default function Page() {
     saveTasks([...tasks, newTask]);
     setQueueTaskInputs((prev) => ({
       ...prev,
-      [groupName]: { name: '', isGoal: false, goalTarget: '', owner: 'AI' },
+      [groupName]: { name: '', owner: 'AI' },
     }));
   };
 
@@ -999,8 +888,6 @@ export default function Page() {
       batch: taskBatch,
       isParallel: taskIsParallel,
       parallelGroup: taskIsParallel ? taskParallelGroup : '',
-      isGoal: taskIsGoal,
-      goalTarget: taskIsGoal ? taskGoalTarget.trim() : '',
       subTasks: taskSubTasks,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
@@ -1196,11 +1083,6 @@ export default function Page() {
                     >
                       <div className="flex items-center gap-1.5 truncate flex-1">
                         <span className="font-mono text-[9px] text-zinc-600">#{qIdx + 1}</span>
-                        {t.isGoal && (
-                          <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
-                            <Target className="w-2 h-2" /> Goal
-                          </span>
-                        )}
                         <span className="truncate text-zinc-300">{t.name}</span>
                       </div>
                       <button
@@ -1266,15 +1148,6 @@ export default function Page() {
             <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
               {t.owner}
             </span>
-            {t.isGoal ? (
-              <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
-                <Target className="w-2.5 h-2.5" /> Goal
-              </span>
-            ) : (
-              <span className="text-[8px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-400">
-                Normal
-              </span>
-            )}
             {t.isParallel && t.parallelGroup && (
               <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
                 <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
@@ -1329,17 +1202,11 @@ export default function Page() {
           {t.name}
         </div>
 
-        {/* Goal criteria or description */}
-        {t.isGoal && t.goalTarget ? (
-          <div className="p-1 rounded bg-amber-950/40 border border-amber-600/40 text-[10px] text-amber-200 flex items-start gap-1">
-            <Target className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
-            <span className="line-clamp-2"><strong>Target:</strong> {t.goalTarget}</span>
-          </div>
-        ) : t.description ? (
+        {t.description && (
           <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
             {t.description}
           </p>
-        ) : null}
+        )}
 
         {/* Sub-Tasks Checklist Breakdown */}
         {t.subTasks && t.subTasks.length > 0 && (
@@ -1399,7 +1266,7 @@ export default function Page() {
           )}
         </div>
 
-        {/* Dynamic Action Buttons */}
+        {/* Action Buttons */}
         <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
           {colKey === 'ready' && (
             <button
@@ -1410,43 +1277,14 @@ export default function Page() {
             </button>
           )}
 
-          {/* 3 Options for Goal Tasks in Progress */}
-          {colKey === 'progress' && t.isGoal ? (
-            <div className="flex items-center gap-1 w-full justify-between">
-              <button
-                onClick={() => finishGoalReached(t.id)}
-                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5"
-                title="Goal satisfied and finished"
-              >
-                <Check className="w-2.5 h-2.5" /> Goal Reached
-              </button>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => openQuickBlockModal(t.id)}
-                  className="px-1.5 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-300 text-[10px] font-semibold flex items-center gap-0.5"
-                  title="Mark blocked and assign parent prerequisite"
-                >
-                  <Ban className="w-2.5 h-2.5 text-rose-400" /> Blocked
-                </button>
-
-                <button
-                  onClick={() => retryGoalTask(t.id)}
-                  className="px-1.5 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 border border-amber-600 text-amber-300 text-[10px] font-semibold flex items-center gap-0.5"
-                  title="Try again / new prompt"
-                >
-                  <RotateCcw className="w-2.5 h-2.5 text-amber-400" /> Retry
-                </button>
-              </div>
-            </div>
-          ) : colKey === 'progress' && !t.isGoal ? (
+          {colKey === 'progress' && (
             <button
-              onClick={() => finishGoalReached(t.id)}
-              className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
+              onClick={() => finishTask(t.id)}
+              className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
             >
               Done
             </button>
-          ) : null}
+          )}
 
           {colKey === 'done' && (
             <button
@@ -1475,8 +1313,6 @@ export default function Page() {
       </div>
     );
   };
-
-  const targetBlockedTask = tasks.find((t) => t.id === quickBlockTaskId);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
@@ -1768,118 +1604,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Quick Blocker Assignment Modal (Opens when Goal Task clicks "Blocked") */}
-      {quickBlockTaskId && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setQuickBlockTaskId(null);
-          }}
-        >
-          <div className="bg-zinc-900 border border-rose-600/50 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-xs text-rose-300 flex items-center gap-1.5">
-                <Ban className="w-3.5 h-3.5 text-rose-400" />
-                Why is "{targetBlockedTask?.name}" blocked?
-              </span>
-              <button onClick={() => setQuickBlockTaskId(null)} className="text-zinc-500 hover:text-zinc-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                  1. Select existing task causing the block:
-                </label>
-                <select
-                  value={quickBlockParentId}
-                  onChange={(e) => {
-                    setQuickBlockParentId(e.target.value);
-                    if (e.target.value) setQuickBlockNewParentName('');
-                  }}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200"
-                >
-                  <option value="">-- Or create a new blocker below --</option>
-                  {tasks
-                    .filter((t) => t.id !== quickBlockTaskId && computedStatus(t) !== 'done')
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.owner}) [{t.batch}]
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="pt-2 border-t border-zinc-800 space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold text-zinc-400">
-                  2. Or type a new prerequisite blocker task:
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <input
-                    placeholder="e.g. Waiting for teacher syllabus / API key..."
-                    value={quickBlockNewParentName}
-                    onChange={(e) => {
-                      setQuickBlockNewParentName(e.target.value);
-                      if (e.target.value) setQuickBlockParentId('');
-                    }}
-                    className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-                  />
-                  <select
-                    value={quickBlockNewParentOwner}
-                    onChange={(e) => setQuickBlockNewParentOwner(e.target.value as any)}
-                    className="bg-zinc-950 border border-zinc-800 rounded px-1 text-[10px] text-zinc-300"
-                  >
-                    <option value="Other">Other</option>
-                    <option value="AI">AI</option>
-                    <option value="Me">Me</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Set Parent Task State */}
-              <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
-                <span className="text-[10px] font-bold text-zinc-300 uppercase">
-                  Set Parent Blocker State:
-                </span>
-                <select
-                  value={quickBlockParentStatus}
-                  onChange={(e) => setQuickBlockParentStatus(e.target.value as any)}
-                  className={`border rounded px-2 py-1 text-xs font-bold focus:outline-none ${
-                    quickBlockParentStatus === 'progress'
-                      ? 'bg-blue-950/80 border-blue-600 text-blue-300'
-                      : 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
-                  }`}
-                >
-                  <option value="progress" className="bg-zinc-900 text-blue-400">
-                    IN PROGRESS (Being worked on)
-                  </option>
-                  <option value="ready" className="bg-zinc-900 text-emerald-400">
-                    READY (Waiting to be picked up)
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-              <button
-                onClick={() => setQuickBlockTaskId(null)}
-                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmQuickBlock}
-                className="px-3.5 py-1 bg-rose-600 hover:bg-rose-500 font-bold text-white rounded text-xs shadow"
-              >
-                Confirm Blocker & Move to Blocked
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Task Edit/Create Modal (With Sub-Tasks Breakdown Section) */}
+      {/* Task Edit/Create Modal (Cleaned up, zero goal task clutter) */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -2049,48 +1774,6 @@ export default function Page() {
                       </option>
                     ))}
                   </select>
-                </div>
-              )}
-            </div>
-
-            {/* Task Nature Option (Normal vs Goal-Oriented) */}
-            <div className="p-2 bg-zinc-950/80 border border-zinc-800 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1">
-                  <Target className="w-3 h-3 text-amber-400" /> Task Nature
-                </span>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="taskNature"
-                      checked={!taskIsGoal}
-                      onChange={() => setTaskIsGoal(false)}
-                      className="text-indigo-600"
-                    />
-                    <span className="text-zinc-300">Normal Task</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer text-xs">
-                    <input
-                      type="radio"
-                      name="taskNature"
-                      checked={taskIsGoal}
-                      onChange={() => setTaskIsGoal(true)}
-                      className="text-amber-500"
-                    />
-                    <span className="text-amber-300 font-semibold">Goal Task (Loop until reached)</span>
-                  </label>
-                </div>
-              </div>
-
-              {taskIsGoal && (
-                <div>
-                  <input
-                    placeholder="Specific target outcome (e.g. Pass all unit tests with JWT refresh rotation)"
-                    value={taskGoalTarget}
-                    onChange={(e) => setTaskGoalTarget(e.target.value)}
-                    className="w-full bg-zinc-900 border border-amber-600/50 rounded px-2 py-1 text-xs text-amber-200 focus:outline-none"
-                  />
                 </div>
               )}
             </div>
@@ -2439,7 +2122,7 @@ export default function Page() {
             <div className="space-y-4">
               {parallelGroups.map((grp) => {
                 const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) !== 'done');
-                const formState = queueTaskInputs[grp.name] || { name: '', isGoal: false, goalTarget: '', owner: 'AI' };
+                const formState = queueTaskInputs[grp.name] || { name: '', owner: 'AI' };
                 const searchTxt = (groupQueueSearch[grp.name] || '').toLowerCase();
                 const availableTasks = tasks.filter(
                   (t) =>
@@ -2500,11 +2183,6 @@ export default function Page() {
                                 <span className="font-mono text-[9px] text-zinc-500">
                                   {idx < grp.slotLimit ? `[Slot ${idx + 1}]` : `[Queue #${idx + 1 - grp.slotLimit}]`}
                                 </span>
-                                {t.isGoal && (
-                                  <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
-                                    <Target className="w-2 h-2" /> Goal
-                                  </span>
-                                )}
                                 <span className="truncate">{t.name}</span>
                               </div>
 
@@ -2600,45 +2278,10 @@ export default function Page() {
 
                     {/* Quick Create a BRAND NEW Task into this group */}
                     <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-indigo-300">+ Or Create & Queue New Task</span>
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-1 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`nature_${grp.name}`}
-                              checked={!formState.isGoal}
-                              onChange={() =>
-                                setQueueTaskInputs((prev) => ({
-                                  ...prev,
-                                  [grp.name]: { ...formState, isGoal: false },
-                                }))
-                              }
-                            />
-                            <span className="text-zinc-400">Normal</span>
-                          </label>
-                          <label className="flex items-center gap-1 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`nature_${grp.name}`}
-                              checked={formState.isGoal}
-                              onChange={() =>
-                                setQueueTaskInputs((prev) => ({
-                                  ...prev,
-                                  [grp.name]: { ...formState, isGoal: true },
-                                }))
-                              }
-                            />
-                            <span className="text-amber-300 font-semibold flex items-center gap-0.5">
-                              <Target className="w-2.5 h-2.5" /> Goal
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-
+                      <span className="font-bold text-indigo-300 text-[10px]">+ Create & Queue New Task</span>
                       <div className="grid grid-cols-4 gap-1.5">
                         <input
-                          placeholder="Task name / goal title..."
+                          placeholder="Task name..."
                           value={formState.name}
                           onChange={(e) =>
                             setQueueTaskInputs((prev) => ({
@@ -2663,20 +2306,6 @@ export default function Page() {
                           <option value="Other">Other</option>
                         </select>
                       </div>
-
-                      {formState.isGoal && (
-                        <input
-                          placeholder="Target outcome (e.g. Pass all unit tests with JWT refresh rotation)"
-                          value={formState.goalTarget}
-                          onChange={(e) =>
-                            setQueueTaskInputs((prev) => ({
-                              ...prev,
-                              [grp.name]: { ...formState, goalTarget: e.target.value },
-                            }))
-                          }
-                          className="w-full bg-zinc-950 border border-amber-600/40 rounded px-2 py-0.5 text-xs text-amber-200"
-                        />
-                      )}
 
                       <div className="flex justify-end">
                         <button
