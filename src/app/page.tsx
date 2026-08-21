@@ -311,6 +311,7 @@ export default function Page() {
   // Quick Blocker Modal State (Triggered when marking a task as Blocked)
   const [quickBlockTaskId, setQuickBlockTaskId] = useState<string | null>(null);
   const [quickBlockParentId, setQuickBlockParentId] = useState<string>('');
+  const [quickBlockParentStatus, setQuickBlockParentStatus] = useState<'progress' | 'ready'>('progress');
   const [quickBlockNewParentName, setQuickBlockNewParentName] = useState<string>('');
   const [quickBlockNewParentOwner, setQuickBlockNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
 
@@ -705,10 +706,11 @@ export default function Page() {
     );
   };
 
-  // Goal Task: Option 3 - Mark Blocked & assign parent blocker
+  // Goal Task: Option 3 - Mark Blocked & assign parent blocker with custom parent status
   const openQuickBlockModal = (taskId: string) => {
     setQuickBlockTaskId(taskId);
     setQuickBlockParentId('');
+    setQuickBlockParentStatus('progress');
     setQuickBlockNewParentName('');
     setQuickBlockNewParentOwner('Other');
   };
@@ -719,7 +721,7 @@ export default function Page() {
     let finalParentId = quickBlockParentId;
     let updatedTasks = [...tasks];
 
-    // If user typed a new blocker parent name, create it on the fly
+    // If user typed a new blocker parent name, create it on the fly with the selected status
     if (!finalParentId && quickBlockNewParentName.trim()) {
       finalParentId = uid();
       const currentBlocked = tasks.find((t) => t.id === quickBlockTaskId);
@@ -733,12 +735,25 @@ export default function Page() {
         estimate: '',
         description: `Prerequisite blocker for ${currentBlocked?.name || 'task'}`,
         dependencies: [],
-        manualStatus: 'progress', // parent is active/in progress
+        manualStatus: quickBlockParentStatus === 'progress' ? 'progress' : 'todo',
+        startedAt: quickBlockParentStatus === 'progress' ? Date.now() : null,
         createdAt: Date.now() - 100,
         order: 0,
         totalTimeSpentSeconds: 0,
       };
       updatedTasks = [newParent, ...updatedTasks];
+    } else if (finalParentId) {
+      // If an existing parent was selected, update its status according to user choice
+      updatedTasks = updatedTasks.map((t) => {
+        if (t.id === finalParentId) {
+          return {
+            ...t,
+            manualStatus: quickBlockParentStatus === 'progress' ? ('progress' as const) : ('todo' as const),
+            startedAt: quickBlockParentStatus === 'progress' && !t.startedAt ? Date.now() : t.startedAt,
+          };
+        }
+        return t;
+      });
     }
 
     // Attach parent blocker to the target task and set its status to todo (which automatically evaluates to blocked)
@@ -1772,27 +1787,29 @@ export default function Page() {
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-[10px] uppercase font-bold text-zinc-400">
-                1. Select existing task causing the block:
-              </label>
-              <select
-                value={quickBlockParentId}
-                onChange={(e) => {
-                  setQuickBlockParentId(e.target.value);
-                  if (e.target.value) setQuickBlockNewParentName('');
-                }}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-              >
-                <option value="">-- Or create a new blocker below --</option>
-                {tasks
-                  .filter((t) => t.id !== quickBlockTaskId && computedStatus(t) !== 'done')
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.owner}) [{t.batch}]
-                    </option>
-                  ))}
-              </select>
+            <div className="space-y-2.5">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  1. Select existing task causing the block:
+                </label>
+                <select
+                  value={quickBlockParentId}
+                  onChange={(e) => {
+                    setQuickBlockParentId(e.target.value);
+                    if (e.target.value) setQuickBlockNewParentName('');
+                  }}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200"
+                >
+                  <option value="">-- Or create a new blocker below --</option>
+                  {tasks
+                    .filter((t) => t.id !== quickBlockTaskId && computedStatus(t) !== 'done')
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.owner}) [{t.batch}]
+                      </option>
+                    ))}
+                </select>
+              </div>
 
               <div className="pt-2 border-t border-zinc-800 space-y-1.5">
                 <label className="block text-[10px] uppercase font-bold text-zinc-400">
@@ -1818,6 +1835,29 @@ export default function Page() {
                     <option value="Me">Me</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Set Parent Task State */}
+              <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
+                <span className="text-[10px] font-bold text-zinc-300 uppercase">
+                  Set Parent Blocker State:
+                </span>
+                <select
+                  value={quickBlockParentStatus}
+                  onChange={(e) => setQuickBlockParentStatus(e.target.value as any)}
+                  className={`border rounded px-2 py-1 text-xs font-bold focus:outline-none ${
+                    quickBlockParentStatus === 'progress'
+                      ? 'bg-blue-950/80 border-blue-600 text-blue-300'
+                      : 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                  }`}
+                >
+                  <option value="progress" className="bg-zinc-900 text-blue-400">
+                    IN PROGRESS (Being worked on)
+                  </option>
+                  <option value="ready" className="bg-zinc-900 text-emerald-400">
+                    READY (Waiting to be picked up)
+                  </option>
+                </select>
               </div>
             </div>
 
