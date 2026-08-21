@@ -268,6 +268,7 @@ export default function Page() {
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
+  const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
@@ -774,12 +775,31 @@ export default function Page() {
         }
       }
 
-      // Auto-Turn Iterative Rotation: If Development finishes, rotate to Study; if Study finishes, rotate to Development
-      const allGroupNames = parallelGroups.map((g) => g.name);
-      const currentIdx = allGroupNames.indexOf(target.parallelGroup);
-      if (currentIdx !== -1) {
-        const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
-        switchActiveTurn(nextGroupName);
+      // Auto-Turn Iterative Rotation:
+      // If Study finishes -> rotate to Development immediately.
+      // If Development finishes -> wait until 3 Development tasks have completed in this turn!
+      if (target.parallelGroup === 'Study') {
+        switchActiveTurn('Development');
+        setDevTurnCompletedCount(0);
+      } else if (target.parallelGroup === 'Development') {
+        const nextDevCount = devTurnCompletedCount + 1;
+        const remainingDevTasks = updated.filter(
+          (t) => t.isParallel && t.parallelGroup === 'Development' && computedStatus(t) !== 'done'
+        ).length;
+
+        if (nextDevCount >= 3 || remainingDevTasks === 0) {
+          switchActiveTurn('Study');
+          setDevTurnCompletedCount(0);
+        } else {
+          setDevTurnCompletedCount(nextDevCount);
+        }
+      } else {
+        const allGroupNames = parallelGroups.map((g) => g.name);
+        const currentIdx = allGroupNames.indexOf(target.parallelGroup);
+        if (currentIdx !== -1) {
+          const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
+          switchActiveTurn(nextGroupName);
+        }
       }
     }
 
@@ -1164,6 +1184,11 @@ export default function Page() {
           <div className="p-1.5 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex items-center justify-between">
             <span className="text-[9px] font-bold uppercase text-indigo-300 flex items-center gap-1">
               <Zap className="w-3 h-3 text-amber-400" /> Focus: {activeTurnGroupName}
+              {activeTurnGroupName === 'Development' && (
+                <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                  ({devTurnCompletedCount}/3 completed this turn)
+                </span>
+              )}
             </span>
             <div className="flex items-center gap-1">
               {activeGroupNames.map((gn) => (
