@@ -780,6 +780,29 @@ export default function Page() {
     );
   };
 
+  // Helper to advance turn counter and auto-rotate focus if turn limit is reached
+  const advanceTurnCounter = (groupName?: string, currentTasksList?: Task[]) => {
+    if (!groupName) return;
+    const currentGrp = parallelGroups.find((g) => g.name === groupName);
+    const turnTarget = currentGrp?.slotLimit || 1;
+    const nextCount = devTurnCompletedCount + 1;
+    const remainingTasks = (currentTasksList || tasks).filter(
+      (t) => t.isParallel && t.parallelGroup === groupName && computedStatus(t) !== 'done'
+    ).length;
+
+    if (nextCount >= turnTarget || remainingTasks === 0) {
+      const allGroupNames = parallelGroups.map((g) => g.name);
+      const currentIdx = allGroupNames.indexOf(groupName);
+      if (currentIdx !== -1) {
+        const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
+        switchActiveTurn(nextGroupName);
+      }
+      setDevTurnCompletedCount(0);
+    } else {
+      setDevTurnCompletedCount(nextCount);
+    }
+  };
+
   // Complete a task in progress, auto-refill open slots from queue, and auto-rotate turns
   const finishTask = (id: string) => {
     const target = tasks.find((t) => t.id === id);
@@ -837,53 +860,39 @@ export default function Page() {
         }
       }
 
-      // Auto-Turn Iterative Rotation:
-      // When a group reaches its configured slot limit / turn target (e.g. 2 for 2 slots, 3 for 3 slots), rotate to next group!
-      const currentGrp = parallelGroups.find((g) => g.name === target.parallelGroup);
-      const turnTarget = currentGrp?.slotLimit || 1;
-
-      const nextCount = devTurnCompletedCount + 1;
-      const remainingGroupTasks = updated.filter(
-        (t) => t.isParallel && t.parallelGroup === target.parallelGroup && computedStatus(t) !== 'done'
-      ).length;
-
-      if (nextCount >= turnTarget || remainingGroupTasks === 0) {
-        const allGroupNames = parallelGroups.map((g) => g.name);
-        const currentIdx = allGroupNames.indexOf(target.parallelGroup);
-        if (currentIdx !== -1) {
-          const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
-          switchActiveTurn(nextGroupName);
-        }
-        setDevTurnCompletedCount(0);
-      } else {
-        setDevTurnCompletedCount(nextCount);
-      }
+      advanceTurnCounter(target.parallelGroup, updated);
     }
 
     saveTasks(updated);
     setReviewingTaskId(null);
   };
 
-  // Goal Task Option: Retry (resets active timer and stays in progress)
+  // Goal Task Option: Retry (resets active timer and increments turn completion)
   const retryGoalTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              manualStatus: 'progress',
-              startedAt: Date.now(),
-            }
-          : t
-      )
+    const target = tasks.find((t) => t.id === id);
+    const updated = tasks.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            manualStatus: 'progress' as const,
+            startedAt: Date.now(),
+          }
+        : t
     );
+
+    if (target?.isParallel && target?.parallelGroup) {
+      advanceTurnCounter(target.parallelGroup, updated);
+    }
+
+    saveTasks(updated);
     setReviewingTaskId(null);
   };
 
-  // Goal Task Option: Blocked (Attaches parent blocker with selected status)
+  // Goal Task Option: Blocked (Attaches parent blocker, auto-refills slot, and increments turn completion)
   const handleConfirmGoalBlock = () => {
     if (!reviewingTaskId) return;
 
+    const target = tasks.find((t) => t.id === reviewingTaskId);
     let finalParentId = blockParentId;
     let updatedTasks = [...tasks];
 
@@ -935,6 +944,45 @@ export default function Page() {
       }
       return t;
     });
+
+    // When goal task becomes blocked, auto-refill open slot from ready queue
+    if (target?.isParallel && target?.parallelGroup) {
+      const grp = parallelGroups.find((g) => g.name === target.parallelGroup);
+      const slotCap = grp?.slotLimit || 3;
+
+      const currentRunningCount = updatedTasks.filter(
+        (t) => t.isParallel && t.parallelGroup === target.parallelGroup && t.manualStatus === 'progress'
+      ).length;
+
+      if (currentRunningCount < slotCap) {
+        const readyCandidates = updatedTasks.filter(
+          (t) => t.isParallel && t.parallelGroup === target.parallelGroup && computedStatus(t) === 'ready'
+        );
+        const sortedCandidates = sortReadyTasksInBoardOrder(readyCandidates);
+        const nextInLine = sortedCandidates[0];
+
+        if (nextInLine) {
+          const maxOrder = Math.max(
+            ...updatedTasks
+              .filter((t) => t.isParallel && t.parallelGroup === target.parallelGroup && t.manualStatus === 'progress')
+              .map((t) => (typeof t.order === 'number' ? t.order : t.createdAt)),
+            Date.now()
+          );
+          updatedTasks = updatedTasks.map((t) =>
+            t.id === nextInLine.id
+              ? {
+                  ...t,
+                  manualStatus: 'progress' as const,
+                  startedAt: Date.now(),
+                  order: maxOrder + 1,
+                }
+              : t
+          );
+        }
+      }
+
+      advanceTurnCounter(target.parallelGroup, updatedTasks);
+    }
 
     saveTasks(updatedTasks);
     setReviewingTaskId(null);
