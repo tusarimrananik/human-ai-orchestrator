@@ -33,6 +33,8 @@ import {
   User,
   Check,
   ListPlus,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -290,15 +292,16 @@ export default function Page() {
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
 
-  // Parallel Group Config Modal & In-Modal Task Queuing State
+  // Parallel Group Config Modal & Multi-Select Queue State
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupSlotLimit, setNewGroupSlotLimit] = useState(3);
 
-  // Selector for attaching an EXISTING task to a group in the modal
-  const [selectedExistingTaskId, setSelectedExistingTaskId] = useState<Record<string, string>>({});
+  // Multi-select task IDs to queue for each group
+  const [selectedTaskIdsForGroup, setSelectedTaskIdsForGroup] = useState<Record<string, string[]>>({});
+  const [groupQueueSearch, setGroupQueueSearch] = useState<Record<string, string>>({});
 
-  // Per-Group Queue Form State inside Group Config Modal
+  // Per-Group New Task Quick Input State
   const [queueTaskInputs, setQueueTaskInputs] = useState<
     Record<
       string,
@@ -756,7 +759,7 @@ export default function Page() {
       estimate: '',
       description: input.isGoal ? `Target: ${input.goalTarget}` : '',
       dependencies: [],
-      manualStatus: 'progress', // directly placed in this group's active/queue list
+      manualStatus: 'progress',
       createdAt: Date.now(),
       order: tasks.length + 1,
       totalTimeSpentSeconds: 0,
@@ -769,20 +772,36 @@ export default function Page() {
     }));
   };
 
-  // Quick Queue: Attach an EXISTING task to this parallel group
-  const handleAssignExistingTaskToGroup = (groupName: string) => {
-    const targetTaskId = selectedExistingTaskId[groupName];
-    if (!targetTaskId) return;
+  // Quick Queue: Attach ALL MULTI-SELECTED EXISTING tasks to this parallel group
+  const handleAssignSelectedTasksToGroup = (groupName: string) => {
+    const selectedIds = selectedTaskIdsForGroup[groupName] || [];
+    if (selectedIds.length === 0) return;
 
     const updated = tasks.map((t) => {
-      if (t.id === targetTaskId) {
+      if (selectedIds.includes(t.id)) {
         return { ...t, parallelGroup: groupName, manualStatus: 'progress' as const };
       }
       return t;
     });
 
     saveTasks(updated);
-    setSelectedExistingTaskId((prev) => ({ ...prev, [groupName]: '' }));
+    setSelectedTaskIdsForGroup((prev) => ({ ...prev, [groupName]: [] }));
+  };
+
+  // Toggle selection checkbox for an existing task in group queue selector
+  const toggleSelectTaskForGroup = (groupName: string, taskId: string) => {
+    const currentSelected = selectedTaskIdsForGroup[groupName] || [];
+    if (currentSelected.includes(taskId)) {
+      setSelectedTaskIdsForGroup((prev) => ({
+        ...prev,
+        [groupName]: currentSelected.filter((id) => id !== taskId),
+      }));
+    } else {
+      setSelectedTaskIdsForGroup((prev) => ({
+        ...prev,
+        [groupName]: [...currentSelected, taskId],
+      }));
+    }
   };
 
   // Remove a task from a parallel group
@@ -1939,7 +1958,7 @@ export default function Page() {
         </div>
       )}
 
-      {/* Parallel Group Configuration & In-Modal Queue Management (Supports BOTH Selecting Existing & Creating New Tasks) */}
+      {/* Parallel Group Configuration & Multi-Select Queue Management Modal */}
       {isGroupConfigOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1951,24 +1970,31 @@ export default function Page() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-                Configure Groups, Slot Limits & Task Queues
+                Configure Groups, Slot Limits & Multi-Task Queues
               </span>
               <button onClick={() => setIsGroupConfigOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Groups List with In-Place Task Queuers & Existing Task Selectors */}
-            <div className="space-y-3">
+            {/* Groups List with Multi-Select Existing Tasks & New Task Queuers */}
+            <div className="space-y-4">
               {parallelGroups.map((grp) => {
                 const grpTasks = tasks.filter((t) => t.parallelGroup === grp.name && computedStatus(t) !== 'done');
                 const formState = queueTaskInputs[grp.name] || { name: '', isGoal: false, goalTarget: '', owner: 'AI' };
-                const otherTasks = tasks.filter((t) => t.parallelGroup !== grp.name && computedStatus(t) !== 'done');
+                const searchTxt = (groupQueueSearch[grp.name] || '').toLowerCase();
+                const availableTasks = tasks.filter(
+                  (t) =>
+                    t.parallelGroup !== grp.name &&
+                    computedStatus(t) !== 'done' &&
+                    (!searchTxt || t.name.toLowerCase().includes(searchTxt) || t.batch.toLowerCase().includes(searchTxt))
+                );
+                const selectedIds = selectedTaskIdsForGroup[grp.name] || [];
 
                 return (
                   <div
                     key={grp.id}
-                    className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5"
+                    className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2000,23 +2026,28 @@ export default function Page() {
                     {/* Current Tasks inside this group */}
                     {grpTasks.length > 0 && (
                       <div className="space-y-1 bg-zinc-900/40 p-2 rounded border border-zinc-800/80">
-                        <div className="text-[9px] uppercase font-bold text-zinc-500 mb-1">
-                          Current Tasks in {grp.name} ({grpTasks.length})
+                        <div className="text-[9px] uppercase font-bold text-zinc-400 mb-1 flex items-center justify-between">
+                          <span>Current Tasks in {grp.name} ({grpTasks.length})</span>
+                          <span className="text-[8px] text-zinc-500">First {grp.slotLimit} run in active slots</span>
                         </div>
                         <div className="space-y-1 max-h-28 overflow-y-auto">
                           {grpTasks.map((t, idx) => (
                             <div
                               key={t.id}
-                              className="flex items-center justify-between p-1.5 bg-zinc-950 rounded border border-zinc-800/80 text-[11px]"
+                              className={`flex items-center justify-between p-1.5 rounded border text-[11px] ${
+                                idx < grp.slotLimit ? 'bg-indigo-950/40 border-indigo-500/40 text-white' : 'bg-zinc-950 border-zinc-800/80 text-zinc-300'
+                              }`}
                             >
                               <div className="flex items-center gap-1.5 truncate flex-1">
-                                <span className="font-mono text-[9px] text-zinc-600">#{idx + 1}</span>
+                                <span className="font-mono text-[9px] text-zinc-500">
+                                  {idx < grp.slotLimit ? `[Slot ${idx + 1}]` : `[Queue #${idx + 1 - grp.slotLimit}]`}
+                                </span>
                                 {t.isGoal && (
                                   <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
                                     <Target className="w-2 h-2" /> Goal
                                   </span>
                                 )}
-                                <span className="truncate text-zinc-200">{t.name}</span>
+                                <span className="truncate">{t.name}</span>
                               </div>
 
                               <div className="flex items-center gap-1.5">
@@ -2038,41 +2069,78 @@ export default function Page() {
                       </div>
                     )}
 
-                    {/* Option 1: Attach an EXISTING task to this group */}
-                    <div className="p-2 bg-indigo-950/20 border border-indigo-500/30 rounded-md space-y-1.5">
-                      <div className="text-[10px] font-bold text-indigo-300 flex items-center gap-1">
-                        <ListPlus className="w-3 h-3 text-indigo-400" /> Select & Attach Existing Task to {grp.name}
+                    {/* Multi-Select Existing Tasks to Queue into this group */}
+                    <div className="p-2.5 bg-indigo-950/20 border border-indigo-500/30 rounded-md space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-indigo-300 flex items-center gap-1">
+                          <ListPlus className="w-3 h-3 text-indigo-400" /> Multi-Select Existing Tasks to Queue
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            placeholder="Filter existing tasks..."
+                            value={groupQueueSearch[grp.name] || ''}
+                            onChange={(e) =>
+                              setGroupQueueSearch((prev) => ({
+                                ...prev,
+                                [grp.name]: e.target.value,
+                              }))
+                            }
+                            className="bg-zinc-950 border border-zinc-800 rounded px-2 py-0.5 text-[10px] text-zinc-200 placeholder-zinc-500"
+                          />
+                          {selectedIds.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleAssignSelectedTasksToGroup(grp.name)}
+                              className="px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px] shadow"
+                            >
+                              Queue {selectedIds.length} Selected Tasks
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={selectedExistingTaskId[grp.name] || ''}
-                          onChange={(e) =>
-                            setSelectedExistingTaskId((prev) => ({
-                              ...prev,
-                              [grp.name]: e.target.value,
-                            }))
-                          }
-                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-                        >
-                          <option value="">-- Choose an existing task to queue --</option>
-                          {otherTasks.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name} ({t.owner}) [{t.batch}]
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!selectedExistingTaskId[grp.name]}
-                          onClick={() => handleAssignExistingTaskToGroup(grp.name)}
-                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-bold rounded text-[10px]"
-                        >
-                          Add to {grp.name}
-                        </button>
+
+                      <div className="max-h-36 overflow-y-auto border border-zinc-800/80 bg-zinc-950 rounded p-1.5 space-y-1">
+                        {availableTasks.length === 0 ? (
+                          <div className="text-[10px] text-zinc-600 italic py-2 text-center">
+                            No other existing tasks available to queue.
+                          </div>
+                        ) : (
+                          availableTasks.map((cand) => {
+                            const isChecked = selectedIds.includes(cand.id);
+                            return (
+                              <label
+                                key={cand.id}
+                                className={`flex items-center justify-between p-1.5 rounded border cursor-pointer transition ${
+                                  isChecked
+                                    ? 'bg-indigo-950/50 border-indigo-500 text-white'
+                                    : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-900'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSelectTaskForGroup(grp.name, cand.id)}
+                                    className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
+                                  />
+                                  <span className="text-[11px] font-medium truncate">{cand.name}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[9px] flex-shrink-0">
+                                  <span className="px-1 py-0.2 rounded bg-zinc-800 text-zinc-400">
+                                    {cand.owner}
+                                  </span>
+                                  <span className="px-1 py-0.2 rounded bg-zinc-800 text-zinc-400">
+                                    {cand.batch}
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
 
-                    {/* Option 2: Quick Queue a BRAND NEW Task into this group */}
+                    {/* Quick Create a BRAND NEW Task into this group */}
                     <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md space-y-1.5">
                       <div className="flex items-center justify-between text-[10px]">
                         <span className="font-bold text-indigo-300">+ Or Create & Queue New Task</span>
