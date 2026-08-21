@@ -104,6 +104,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
         dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
         dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
+        short: 'B1',
       };
     case 'Batch 2':
       return {
@@ -113,6 +114,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
         dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
         dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
+        short: 'B2',
       };
     case 'Batch 3':
       return {
@@ -122,6 +124,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
         dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
         dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
+        short: 'B3',
       };
     case 'Batch 4':
       return {
@@ -131,6 +134,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
         dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
         dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
+        short: 'B4',
       };
     case 'Batch 5':
       return {
@@ -140,6 +144,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
         dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
         dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
+        short: 'B5',
       };
     case 'Batch 6':
       return {
@@ -149,6 +154,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50',
         dropdown: 'bg-cyan-950 text-cyan-300 border-cyan-700/80',
         dagNode: 'bg-cyan-950/60 border-cyan-500 text-cyan-100',
+        short: 'B6',
       };
     case 'Batch 7':
       return {
@@ -158,6 +164,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/50',
         dropdown: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-700/80',
         dagNode: 'bg-fuchsia-950/60 border-fuchsia-500 text-fuchsia-100',
+        short: 'B7',
       };
     case 'Batch 8':
       return {
@@ -167,6 +174,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-lime-500/20 text-lime-300 border border-lime-500/50',
         dropdown: 'bg-lime-950 text-lime-300 border-lime-700/80',
         dagNode: 'bg-lime-950/60 border-lime-500 text-lime-100',
+        short: 'B8',
       };
     case 'Batch 9':
       return {
@@ -176,6 +184,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50',
         dropdown: 'bg-indigo-950 text-indigo-300 border-indigo-700/80',
         dagNode: 'bg-indigo-950/60 border-indigo-500 text-indigo-100',
+        short: 'B9',
       };
     case 'Batch 10':
       return {
@@ -185,6 +194,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-orange-500/20 text-orange-300 border border-orange-500/50',
         dropdown: 'bg-orange-950 text-orange-300 border-orange-700/80',
         dagNode: 'bg-orange-950/60 border-orange-500 text-orange-100',
+        short: 'B10',
       };
     case 'Batch 11':
       return {
@@ -194,6 +204,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-teal-500/20 text-teal-300 border border-teal-500/50',
         dropdown: 'bg-teal-950 text-teal-300 border-teal-700/80',
         dagNode: 'bg-teal-950/60 border-teal-500 text-teal-100',
+        short: 'B11',
       };
     case 'Batch 12':
       return {
@@ -203,6 +214,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-violet-500/20 text-violet-300 border border-violet-500/50',
         dropdown: 'bg-violet-950 text-violet-300 border-violet-700/80',
         dagNode: 'bg-violet-950/60 border-violet-500 text-violet-100',
+        short: 'B12',
       };
     default:
       return {
@@ -212,6 +224,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
         dropdown: 'bg-zinc-900 text-zinc-400 border-zinc-700',
         dagNode: 'bg-zinc-900 border-zinc-700 text-zinc-200',
+        short: 'None',
       };
   }
 }
@@ -269,7 +282,6 @@ export default function Page() {
       const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
       if (storedOrder) {
         const parsed = JSON.parse(storedOrder);
-        // Merge missing batches if list has expanded
         const fullList = [...parsed];
         ALL_BATCHES.forEach((b) => {
           if (!fullList.includes(b)) fullList.push(b);
@@ -531,6 +543,7 @@ export default function Page() {
     );
   };
 
+  // Reopen task resets timer completely to ZERO
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -726,46 +739,48 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Scrollable / Compact Batch Priority Reordering Strip */}
-        <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-md overflow-x-auto max-w-2xl scrollbar-none">
-          <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
-            <Layers className="w-3 h-3 text-indigo-400" /> Order:
-          </span>
-          {batchPriorityOrder.map((b, idx) => {
-            const theme = getBatchTheme(b);
-            return (
-              <div
-                key={b}
-                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition flex-shrink-0 ${theme.badge}`}
-              >
-                <button
-                  onClick={() => setTopBatchPriority(b)}
-                  title={`Set ${b} as #1 priority`}
-                  className="hover:underline"
+        {/* Compact, Zero-Overflow Batch Priority Strip (Shows all 12 Batches in one row) */}
+        <div className="flex-1 flex items-center justify-center min-w-0 px-2">
+          <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-lg overflow-x-auto scrollbar-none max-w-full">
+            <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
+              <Layers className="w-3 h-3 text-indigo-400" /> Order:
+            </span>
+            {batchPriorityOrder.map((b, idx) => {
+              const theme = getBatchTheme(b);
+              return (
+                <div
+                  key={b}
+                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition flex-shrink-0 ${theme.badge}`}
                 >
-                  {b}
-                </button>
-                <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
                   <button
-                    disabled={idx === 0}
-                    onClick={() => shiftBatchPriority(b, 'left')}
-                    className="p-0.2 hover:text-white disabled:opacity-20"
-                    title="Shift Priority Earlier"
+                    onClick={() => setTopBatchPriority(b)}
+                    title={`Set ${b} as #1 Priority`}
+                    className="hover:underline"
                   >
-                    <ArrowLeft className="w-2.5 h-2.5" />
+                    {theme.short || b}
                   </button>
-                  <button
-                    disabled={idx === batchPriorityOrder.length - 1}
-                    onClick={() => shiftBatchPriority(b, 'right')}
-                    className="p-0.2 hover:text-white disabled:opacity-20"
-                    title="Shift Priority Later"
-                  >
-                    <ArrowRight className="w-2.5 h-2.5" />
-                  </button>
+                  <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
+                    <button
+                      disabled={idx === 0}
+                      onClick={() => shiftBatchPriority(b, 'left')}
+                      className="p-0.2 hover:text-white disabled:opacity-20"
+                      title="Shift Left"
+                    >
+                      <ArrowLeft className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      disabled={idx === batchPriorityOrder.length - 1}
+                      onClick={() => shiftBatchPriority(b, 'right')}
+                      className="p-0.2 hover:text-white disabled:opacity-20"
+                      title="Shift Right"
+                    >
+                      <ArrowRight className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
