@@ -20,18 +20,19 @@ import {
   ArrowDown,
   GripVertical,
   Timer,
-  AlignLeft,
+  Layers,
 } from 'lucide-react';
+
+export type BatchTag = 'None' | 'Batch 1' | 'Batch 2' | 'Batch 3' | 'Batch 4' | 'Batch 5';
 
 interface Task {
   id: string;
   name: string;
   owner: 'Me' | 'AI' | 'Other';
-  priority: 'High' | 'Medium' | 'Low';
+  batch: BatchTag;
   deadline: string;
   estimate: string;
   description?: string;
-  doneRule?: string;
   notes?: string;
   dependencies: string[];
   manualStatus: 'todo' | 'progress' | 'done';
@@ -47,10 +48,6 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function priorityScore(p: string) {
-  return p === 'High' ? 3 : p === 'Medium' ? 2 : 1;
-}
-
 function formatElapsed(seconds: number): string {
   if (!seconds || seconds <= 0) return '0s';
   const hrs = Math.floor(seconds / 3600);
@@ -61,13 +58,55 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
+// Color badges and border styling for each batch
+export function getBatchStyle(batch: BatchTag = 'None') {
+  switch (batch) {
+    case 'Batch 1':
+      return {
+        badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/40',
+        cardBorder: 'border-l-4 border-l-sky-500',
+        dagBorder: 'border-sky-500 bg-sky-950/30 text-sky-200',
+      };
+    case 'Batch 2':
+      return {
+        badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/40',
+        cardBorder: 'border-l-4 border-l-purple-500',
+        dagBorder: 'border-purple-500 bg-purple-950/30 text-purple-200',
+      };
+    case 'Batch 3':
+      return {
+        badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/40',
+        cardBorder: 'border-l-4 border-l-amber-500',
+        dagBorder: 'border-amber-500 bg-amber-950/30 text-amber-200',
+      };
+    case 'Batch 4':
+      return {
+        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+        cardBorder: 'border-l-4 border-l-emerald-500',
+        dagBorder: 'border-emerald-500 bg-emerald-950/30 text-emerald-200',
+      };
+    case 'Batch 5':
+      return {
+        badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/40',
+        cardBorder: 'border-l-4 border-l-rose-500',
+        dagBorder: 'border-rose-500 bg-rose-950/30 text-rose-200',
+      };
+    default:
+      return {
+        badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
+        cardBorder: '',
+        dagBorder: 'border-zinc-800 bg-zinc-900 text-zinc-400',
+      };
+  }
+}
+
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState('');
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -88,7 +127,7 @@ export default function Page() {
   const [taskName, setTaskName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
-  const [taskPriority, setTaskPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
   const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
@@ -110,6 +149,7 @@ export default function Page() {
         setTasks(
           parsed.map((t: any) => ({
             ...t,
+            batch: t.batch || (t.priority === 'High' ? 'Batch 1' : t.priority === 'Medium' ? 'Batch 2' : 'None'),
             description: t.description || t.doneRule || t.notes || '',
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
@@ -118,10 +158,10 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -131,49 +171,6 @@ export default function Page() {
     }
     setMounted(true);
   }, []);
-
-  const cascadePriority = (taskList: Task[], taskId: string, newPriority: 'High' | 'Medium' | 'Low'): Task[] => {
-    const updated = [...taskList];
-    const targetScore = priorityScore(newPriority);
-
-    const visitedUp = new Set<string>();
-    const queueUp: string[] = [taskId];
-    while (queueUp.length > 0) {
-      const currId = queueUp.shift()!;
-      if (visitedUp.has(currId)) continue;
-      visitedUp.add(currId);
-      const current = updated.find((t) => t.id === currId);
-      if (!current) continue;
-      (current.dependencies || []).forEach((depId) => {
-        const depIdx = updated.findIndex((t) => t.id === depId);
-        if (depIdx !== -1) {
-          if (priorityScore(updated[depIdx].priority) < targetScore) {
-            updated[depIdx] = { ...updated[depIdx], priority: newPriority };
-          }
-          queueUp.push(depId);
-        }
-      });
-    }
-
-    const visitedDown = new Set<string>();
-    const queueDown: string[] = [taskId];
-    while (queueDown.length > 0) {
-      const currId = queueDown.shift()!;
-      if (visitedDown.has(currId)) continue;
-      visitedDown.add(currId);
-
-      updated.forEach((t, idx) => {
-        if ((t.dependencies || []).includes(currId)) {
-          if (priorityScore(t.priority) < targetScore) {
-            updated[idx] = { ...t, priority: newPriority };
-          }
-          queueDown.push(t.id);
-        }
-      });
-    }
-
-    return updated;
-  };
 
   const saveTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
@@ -209,9 +206,9 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
-  const handlePriorityChange = (taskId: string, newPriority: 'High' | 'Medium' | 'Low') => {
-    let updated = tasks.map((t) => (t.id === taskId ? { ...t, priority: newPriority } : t));
-    updated = cascadePriority(updated, taskId, newPriority);
+  // Change batch tag directly on task
+  const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
   };
 
@@ -250,7 +247,7 @@ export default function Page() {
     (t) =>
       (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
       (!ownerFilter || t.owner === ownerFilter) &&
-      (!priorityFilter || t.priority === priorityFilter)
+      (!batchFilter || t.batch === batchFilter)
   );
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
@@ -316,7 +313,7 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, tasks, ownerFilter, priorityFilter, search]);
+  }, [view, tasks, ownerFilter, batchFilter, search]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -382,10 +379,10 @@ export default function Page() {
   const addSample = () => {
     const a = uid(), b = uid(), c = uid(), d = uid();
     const newSamples: Task[] = [
-      { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-      { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor specs and instructions', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-      { id: c, name: 'Write algorithm report prompt', description: 'Structure code block prompts for report generator', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-      { id: d, name: 'Write micro report prompt', description: 'Prepare assembly inputs and expected outputs', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+      { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor specs and instructions', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+      { id: c, name: 'Write algorithm report prompt', description: 'Structure code block prompts for report generator', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+      { id: d, name: 'Write micro report prompt', description: 'Prepare assembly inputs and expected outputs', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -403,9 +400,9 @@ export default function Page() {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
-    setTaskDescription(current?.description || current?.doneRule || current?.notes || '');
+    setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
-    setTaskPriority(current?.priority || 'Medium');
+    setTaskBatch(current?.batch || 'None');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
     setSelectedDeps(current?.dependencies || []);
@@ -419,10 +416,9 @@ export default function Page() {
       name,
       description: taskDescription.trim(),
       owner: taskOwner,
-      priority: taskPriority,
+      batch: taskBatch,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
-      doneRule: '',
       notes: '',
       dependencies: selectedDeps,
     };
@@ -431,7 +427,6 @@ export default function Page() {
 
     if (editId) {
       updatedTasks = tasks.map((t) => (t.id === editId ? { ...t, ...data } : t));
-      updatedTasks = cascadePriority(updatedTasks, editId, taskPriority);
     } else {
       const newId = uid();
       const newTask: Task = {
@@ -442,7 +437,6 @@ export default function Page() {
         ...data,
       };
       updatedTasks = [...tasks, newTask];
-      updatedTasks = cascadePriority(updatedTasks, newId, taskPriority);
     }
 
     saveTasks(updatedTasks);
@@ -612,7 +606,7 @@ export default function Page() {
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            placeholder="Search tasks or descriptions..."
+            placeholder="Search tasks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
@@ -631,15 +625,19 @@ export default function Page() {
             <option value="Other">Other</option>
           </select>
 
+          {/* Batch Filter */}
           <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none"
+            value={batchFilter}
+            onChange={(e) => setBatchFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-medium"
           >
-            <option value="">All Priorities</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
+            <option value="">All Batches</option>
+            <option value="Batch 1">Batch 1</option>
+            <option value="Batch 2">Batch 2</option>
+            <option value="Batch 3">Batch 3</option>
+            <option value="Batch 4">Batch 4</option>
+            <option value="Batch 5">Batch 5</option>
+            <option value="None">No Batch</option>
           </select>
         </div>
       </div>
@@ -681,6 +679,7 @@ export default function Page() {
                           .filter(Boolean) as Task[];
                         const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
                         const durationDisplay = getTaskDurationDisplay(t);
+                        const batchStyle = getBatchStyle(t.batch);
 
                         return (
                           <div
@@ -690,6 +689,8 @@ export default function Page() {
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
                             className={`group p-2 rounded-md bg-zinc-950 border transition shadow-sm space-y-1 cursor-grab active:cursor-grabbing ${
+                              batchStyle.cardBorder
+                            } ${
                               draggedTaskId === t.id
                                 ? 'border-indigo-500 opacity-60'
                                 : 'border-zinc-800/90 hover:border-zinc-700'
@@ -737,27 +738,31 @@ export default function Page() {
                                   </button>
                                 </div>
 
+                                {/* Batch Dropdown Selector */}
                                 <select
-                                  value={t.priority}
+                                  value={t.batch || 'None'}
                                   onChange={(e) =>
-                                    handlePriorityChange(t.id, e.target.value as 'High' | 'Medium' | 'Low')
+                                    handleBatchChange(t.id, e.target.value as BatchTag)
                                   }
-                                  className={`text-[9px] px-1 rounded font-semibold border-0 cursor-pointer focus:outline-none ${
-                                    t.priority === 'High'
-                                      ? 'text-rose-400 bg-rose-500/10'
-                                      : t.priority === 'Medium'
-                                      ? 'text-amber-400 bg-amber-500/10'
-                                      : 'text-zinc-400 bg-zinc-800'
-                                  }`}
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none transition ${batchStyle.badge}`}
                                 >
-                                  <option value="High" className="bg-zinc-900 text-rose-400">
-                                    High
+                                  <option value="None" className="bg-zinc-900 text-zinc-400">
+                                    No Batch
                                   </option>
-                                  <option value="Medium" className="bg-zinc-900 text-amber-400">
-                                    Medium
+                                  <option value="Batch 1" className="bg-zinc-900 text-sky-400">
+                                    Batch 1
                                   </option>
-                                  <option value="Low" className="bg-zinc-900 text-zinc-300">
-                                    Low
+                                  <option value="Batch 2" className="bg-zinc-900 text-purple-400">
+                                    Batch 2
+                                  </option>
+                                  <option value="Batch 3" className="bg-zinc-900 text-amber-400">
+                                    Batch 3
+                                  </option>
+                                  <option value="Batch 4" className="bg-zinc-900 text-emerald-400">
+                                    Batch 4
+                                  </option>
+                                  <option value="Batch 5" className="bg-zinc-900 text-rose-400">
+                                    Batch 5
                                   </option>
                                 </select>
                               </div>
@@ -767,7 +772,6 @@ export default function Page() {
                               {t.name}
                             </div>
 
-                            {/* Task Description */}
                             {t.description && (
                               <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed bg-zinc-900/60 p-1 rounded border border-zinc-800/60">
                                 {t.description}
@@ -900,6 +904,8 @@ export default function Page() {
                     {levels[level].map((t) => {
                       const status = computedStatus(t);
                       const durationDisplay = getTaskDurationDisplay(t);
+                      const batchStyle = getBatchStyle(t.batch);
+
                       const badgeClass =
                         status === 'ready'
                           ? 'border-emerald-500/80 bg-emerald-950/30 text-emerald-300'
@@ -913,10 +919,17 @@ export default function Page() {
                         <div
                           key={t.id}
                           data-node-id={t.id}
-                          className={`p-2.5 rounded-lg border-2 shadow transition space-y-1 ${badgeClass}`}
+                          className={`p-2.5 rounded-lg border-2 shadow transition space-y-1 ${batchStyle.cardBorder} ${badgeClass}`}
                         >
-                          <div className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight">
-                            {t.name}
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight flex-1">
+                              {t.name}
+                            </div>
+                            {t.batch && t.batch !== 'None' && (
+                              <span className={`text-[8px] font-bold px-1 rounded ${batchStyle.badge}`}>
+                                {t.batch}
+                              </span>
+                            )}
                           </div>
                           {t.description && (
                             <p className="text-[10px] text-zinc-400 line-clamp-2 leading-snug">
@@ -977,13 +990,13 @@ export default function Page() {
 
             <div>
               <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Description / Context / Done Criteria
+                Description / Context
               </label>
               <textarea
                 rows={2}
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Add task description, requirements, or completion details..."
+                placeholder="Add task details or specifications..."
                 className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"
               />
             </div>
@@ -1005,17 +1018,20 @@ export default function Page() {
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                  Priority
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-indigo-400" /> Batch
                 </label>
                 <select
-                  value={taskPriority}
-                  onChange={(e) => setTaskPriority(e.target.value as any)}
+                  value={taskBatch}
+                  onChange={(e) => setTaskBatch(e.target.value as BatchTag)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
                 >
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
+                  <option value="None">No Batch</option>
+                  <option value="Batch 1">Batch 1</option>
+                  <option value="Batch 2">Batch 2</option>
+                  <option value="Batch 3">Batch 3</option>
+                  <option value="Batch 4">Batch 4</option>
+                  <option value="Batch 5">Batch 5</option>
                 </select>
               </div>
             </div>
