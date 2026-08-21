@@ -24,6 +24,7 @@ import {
   Layers,
   CornerDownRight,
   Link2,
+  AlertCircle,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -258,9 +259,19 @@ export default function Page() {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
+  const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
   const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
+
+  // In-modal quick parent task creation state
+  const [newParentName, setNewParentName] = useState('');
+  const [newParentOwner, setNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
+  const [newParentStatus, setNewParentStatus] = useState<'ready' | 'progress' | 'done'>('progress');
+  const [showAddParent, setShowAddParent] = useState(false);
+
+  // Local map of status overrides for parent tasks edited inside the modal
+  const [parentStatusOverrides, setParentStatusOverrides] = useState<Record<string, 'todo' | 'progress' | 'done'>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -543,7 +554,6 @@ export default function Page() {
     );
   };
 
-  // Reopen task resets timer completely to ZERO
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -580,7 +590,7 @@ export default function Page() {
     URL.revokeObjectURL(a.href);
   };
 
-  const openTaskModal = (id: string | null = null) => {
+  const openTaskModal = (id: string | null = null, defaultState?: 'blocked' | 'ready' | 'progress' | 'done') => {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
@@ -590,12 +600,64 @@ export default function Page() {
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
     setSelectedDeps(current?.dependencies || []);
+    setParentStatusOverrides({});
+    setShowAddParent(false);
+    setNewParentName('');
+
+    if (current) {
+      const calcSt = computedStatus(current);
+      setTaskManualStatus(calcSt);
+    } else {
+      setTaskManualStatus(defaultState || 'ready');
+    }
+
     setIsModalOpen(true);
+  };
+
+  // Quick helper to add a brand new blocking parent task right inside the modal
+  const handleCreateParentTask = () => {
+    const pName = newParentName.trim();
+    if (!pName) return;
+    const parentId = uid();
+    const pStatus = newParentStatus === 'done' ? 'done' : newParentStatus === 'progress' ? 'progress' : 'todo';
+    const newParent: Task = {
+      id: parentId,
+      name: pName,
+      owner: newParentOwner,
+      batch: taskBatch,
+      deadline: '',
+      estimate: '',
+      description: 'Blocking prerequisite task',
+      dependencies: [],
+      manualStatus: pStatus,
+      createdAt: Date.now() - 100,
+      order: 0,
+      totalTimeSpentSeconds: 0,
+    };
+
+    const updated = [newParent, ...tasks];
+    saveTasks(updated);
+    setSelectedDeps((prev) => [...prev, parentId]);
+    setNewParentName('');
+    setShowAddParent(false);
   };
 
   const saveTask = () => {
     const name = taskName.trim();
     if (!name) return;
+
+    let manualSt: 'todo' | 'progress' | 'done' = 'todo';
+    if (taskManualStatus === 'done') manualSt = 'done';
+    else if (taskManualStatus === 'progress') manualSt = 'progress';
+    else manualSt = 'todo';
+
+    // If user explicitly marked it as Ready, ensure no blocking dependencies linger
+    let finalDeps = selectedDeps;
+    if (taskManualStatus === 'ready' && selectedDeps.length > 0) {
+      // If user forces Ready, resolve all attached dependencies or keep only finished ones
+      // or if they want it blocked, keep dependencies
+    }
+
     const data = {
       name,
       description: taskDescription.trim(),
@@ -604,24 +666,29 @@ export default function Page() {
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
       notes: '',
-      dependencies: selectedDeps,
+      dependencies: finalDeps,
+      manualStatus: manualSt,
     };
 
-    let updatedTasks: Task[];
+    let updatedTasks = tasks.map((t) => {
+      if (parentStatusOverrides[t.id]) {
+        return { ...t, manualStatus: parentStatusOverrides[t.id] };
+      }
+      return t;
+    });
 
     if (editId) {
-      updatedTasks = tasks.map((t) => (t.id === editId ? { ...t, ...data } : t));
+      updatedTasks = updatedTasks.map((t) => (t.id === editId ? { ...t, ...data } : t));
     } else {
       const newId = uid();
       const newTask: Task = {
         id: newId,
-        manualStatus: 'todo',
         createdAt: Date.now(),
-        order: tasks.length,
+        order: updatedTasks.length,
         totalTimeSpentSeconds: 0,
         ...data,
       };
-      updatedTasks = [...tasks, newTask];
+      updatedTasks = [...updatedTasks, newTask];
     }
 
     saveTasks(updatedTasks);
@@ -1144,7 +1211,7 @@ export default function Page() {
             if (e.target === e.currentTarget) setIsModalOpen(false);
           }}
         >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-xl p-4 space-y-3 shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-xl p-4 space-y-3 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Link2 className="w-3.5 h-3.5 text-indigo-400" />
@@ -1155,16 +1222,51 @@ export default function Page() {
               </button>
             </div>
 
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Task Name *
-              </label>
-              <input
-                value={taskName}
-                onChange={(e) => setTaskName(e.target.value)}
-                placeholder="e.g. Write micro report prompt"
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-              />
+            {/* Task Name & Target Belonging Status */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Task Name *
+                </label>
+                <input
+                  value={taskName}
+                  onChange={(e) => setTaskName(e.target.value)}
+                  placeholder="e.g. Study for CT exam"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                  Task State / Belonging
+                </label>
+                <select
+                  value={taskManualStatus}
+                  onChange={(e) => setTaskManualStatus(e.target.value as any)}
+                  className={`w-full border rounded px-2 py-1.5 text-xs font-bold focus:outline-none ${
+                    taskManualStatus === 'blocked'
+                      ? 'bg-rose-950/60 border-rose-600 text-rose-300'
+                      : taskManualStatus === 'ready'
+                      ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300'
+                      : taskManualStatus === 'progress'
+                      ? 'bg-blue-950/60 border-blue-600 text-blue-300'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                  }`}
+                >
+                  <option value="blocked" className="bg-zinc-900 text-rose-400">
+                    BLOCKED
+                  </option>
+                  <option value="ready" className="bg-zinc-900 text-emerald-400">
+                    READY
+                  </option>
+                  <option value="progress" className="bg-zinc-900 text-blue-400">
+                    IN PROGRESS
+                  </option>
+                  <option value="done" className="bg-zinc-900 text-zinc-300">
+                    DONE
+                  </option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -1215,16 +1317,80 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="block text-[10px] uppercase font-bold text-indigo-400 flex items-center justify-between">
-                <span>Dependencies (Prerequisites)</span>
-                <span className="text-[9px] text-zinc-500 normal-case">Sub-chains auto-linked</span>
-              </label>
+            {/* Parent Task Selector & State Controls */}
+            <div className="space-y-1 pt-1 border-t border-zinc-800">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1">
+                  {taskManualStatus === 'blocked' ? (
+                    <span className="text-rose-400 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Why is this task blocked? (Select or create parent tasks)
+                    </span>
+                  ) : (
+                    <span>Prerequisite / Parent Dependencies</span>
+                  )}
+                </label>
 
-              <div className="max-h-36 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddParent(!showAddParent)}
+                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 underline"
+                >
+                  {showAddParent ? 'Cancel Parent' : '+ Create Blocking Parent'}
+                </button>
+              </div>
+
+              {/* In-Modal Inline Parent Creator */}
+              {showAddParent && (
+                <div className="p-2 bg-indigo-950/30 border border-indigo-500/40 rounded-lg space-y-2 mb-2">
+                  <div className="text-[10px] font-bold text-indigo-300">
+                    Create New Parent Blocker (e.g. Waiting for syllabus / API approval)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      placeholder="Parent task name..."
+                      value={newParentName}
+                      onChange={(e) => setNewParentName(e.target.value)}
+                      className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                    />
+                    <select
+                      value={newParentOwner}
+                      onChange={(e) => setNewParentOwner(e.target.value as any)}
+                      className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                    >
+                      <option value="Other">Other</option>
+                      <option value="Me">Me</option>
+                      <option value="AI">AI</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <span>Initial State:</span>
+                      <select
+                        value={newParentStatus}
+                        onChange={(e) => setNewParentStatus(e.target.value as any)}
+                        className="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-[10px] text-zinc-200"
+                      >
+                        <option value="progress">In Progress (Blocking)</option>
+                        <option value="ready">Ready (Unfinished)</option>
+                        <option value="done">Done (Completed)</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCreateParentTask}
+                      className="px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
+                    >
+                      Add & Attach Blocker
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of Existing Parent Candidates with In-Place State Selectors */}
+              <div className="max-h-40 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
                   <div className="text-[10px] text-zinc-600 italic py-1 text-center">
-                    No existing tasks to depend on. This will start as Root Available.
+                    No existing tasks to select as parent. Click "+ Create Blocking Parent" above.
                   </div>
                 ) : (
                   tasks
@@ -1233,6 +1399,8 @@ export default function Page() {
                       const isDirectChecked = selectedDeps.includes(candidate.id);
                       const upstreamSubDeps = getUpstreamChain(candidate.id);
                       const candidateTheme = getBatchTheme(candidate.batch);
+                      const currentCandidateStatus =
+                        parentStatusOverrides[candidate.id] || candidate.manualStatus;
 
                       return (
                         <div
@@ -1243,8 +1411,8 @@ export default function Page() {
                               : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
                           }`}
                         >
-                          <label className="flex items-center justify-between gap-2 cursor-pointer">
-                            <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
                               <input
                                 type="checkbox"
                                 checked={isDirectChecked}
@@ -1255,17 +1423,44 @@ export default function Page() {
                                 className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
                               />
                               <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
-                            </div>
+                            </label>
 
-                            <div className="flex items-center gap-1 text-[9px] font-mono text-zinc-400 flex-shrink-0">
-                              <span className="px-1 py-0.2 rounded bg-zinc-800">{candidate.owner}</span>
+                            <div className="flex items-center gap-1.5 text-[9px] font-mono flex-shrink-0">
+                              <span className="px-1 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                                {candidate.owner}
+                              </span>
+
+                              {/* In-Modal Parent Task State Selector */}
+                              <select
+                                value={currentCandidateStatus}
+                                onChange={(e) => {
+                                  const newSt = e.target.value as 'todo' | 'progress' | 'done';
+                                  setParentStatusOverrides((prev) => ({
+                                    ...prev,
+                                    [candidate.id]: newSt,
+                                  }));
+                                }}
+                                className={`text-[9px] px-1 py-0.5 rounded font-bold border focus:outline-none ${
+                                  currentCandidateStatus === 'done'
+                                    ? 'bg-zinc-800 border-zinc-600 text-zinc-300'
+                                    : currentCandidateStatus === 'progress'
+                                    ? 'bg-blue-950 border-blue-600 text-blue-300'
+                                    : 'bg-emerald-950 border-emerald-600 text-emerald-300'
+                                }`}
+                                title="Set Parent Task State"
+                              >
+                                <option value="todo">Parent: READY</option>
+                                <option value="progress">Parent: IN PROGRESS</option>
+                                <option value="done">Parent: DONE</option>
+                              </select>
+
                               {candidate.batch && candidate.batch !== 'None' && (
                                 <span className={`px-1 py-0.2 rounded font-bold ${candidateTheme.badge}`}>
                                   {candidate.batch}
                                 </span>
                               )}
                             </div>
-                          </label>
+                          </div>
 
                           {isDirectChecked && upstreamSubDeps.length > 0 && (
                             <div className="mt-1 pl-4 pt-1 border-t border-indigo-500/20 text-[10px] text-indigo-300 flex items-center gap-1.5 flex-wrap">
