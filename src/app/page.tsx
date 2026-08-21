@@ -26,8 +26,10 @@ import {
   Link2,
   AlertCircle,
   ArrowRightCircle,
-  Bot,
-  Check,
+  FolderKanban,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -45,11 +47,10 @@ export type BatchTag =
   | 'Batch 11'
   | 'Batch 12';
 
-export interface SubWorkflowItem {
+export interface ParallelGroupConfig {
   id: string;
-  title: string;
-  assignee: 'Me' | 'AI' | 'Other';
-  status: 'todo' | 'progress' | 'done';
+  name: string;
+  slotLimit: number; // e.g. Development = 3, Study = 1
 }
 
 interface Task {
@@ -57,6 +58,7 @@ interface Task {
   name: string;
   owner: 'Me' | 'AI' | 'Other';
   batch: BatchTag;
+  parallelGroup?: string; // Optional: "Development", "Study", etc.
   deadline: string;
   estimate: string;
   description?: string;
@@ -68,11 +70,16 @@ interface Task {
   startedAt?: number | null;
   completedAt?: number | null;
   totalTimeSpentSeconds?: number;
-  subWorkflows?: SubWorkflowItem[]; // Optional parallel sub-tasks / sub-prompts
 }
 
 const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
+const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
+
+const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
+  { id: 'pgrp_dev', name: 'Development', slotLimit: 3 },
+  { id: 'pgrp_study', name: 'Study', slotLimit: 1 },
+];
 
 export const ALL_BATCHES: BatchTag[] = [
   'Batch 1',
@@ -244,6 +251,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
+  const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
@@ -270,18 +278,19 @@ export default function Page() {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
+  const [taskParallelGroup, setTaskParallelGroup] = useState<string>('');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
 
+  // Parallel Group Config Modal
+  const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupSlotLimit, setNewGroupSlotLimit] = useState(3);
+
   // Bi-directional dependency tracking
   const [selectedParents, setSelectedParents] = useState<string[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
-
-  // Optional Parallel Sub-tasks state
-  const [subWorkflows, setSubWorkflows] = useState<SubWorkflowItem[]>([]);
-  const [newSubTitle, setNewSubTitle] = useState('');
-  const [newSubAssignee, setNewSubAssignee] = useState<'Me' | 'AI' | 'Other'>('AI');
 
   // Inline Quick Creators
   const [showAddParent, setShowAddParent] = useState(false);
@@ -313,6 +322,9 @@ export default function Page() {
   // Initial Load from LocalStorage
   useEffect(() => {
     try {
+      const storedGroups = localStorage.getItem(PARALLEL_GROUPS_KEY);
+      if (storedGroups) setParallelGroups(JSON.parse(storedGroups));
+
       const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
       if (storedOrder) {
         const parsed = JSON.parse(storedOrder);
@@ -334,16 +346,16 @@ export default function Page() {
             description: t.description || t.doneRule || t.notes || '',
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
-            subWorkflows: t.subWorkflows || [],
+            parallelGroup: t.parallelGroup || '',
           }))
         );
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
-          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
-          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Development', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: d, name: 'Study for CT exam', description: 'Prepare sample problems and solve questions', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Study', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -358,6 +370,13 @@ export default function Page() {
     setTasks(newTasks);
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newTasks));
+    }
+  };
+
+  const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
+    setParallelGroups(newGroups);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PARALLEL_GROUPS_KEY, JSON.stringify(newGroups));
     }
   };
 
@@ -605,25 +624,6 @@ export default function Page() {
     );
   };
 
-  // Toggle or update individual sub-workflow item status
-  const toggleSubWorkflowStatus = (taskId: string, subId: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === taskId && t.subWorkflows) {
-          const updatedSubs = t.subWorkflows.map((s) => {
-            if (s.id === subId) {
-              const nextStatus = s.status === 'todo' ? 'progress' : s.status === 'progress' ? 'done' : 'todo';
-              return { ...s, status: nextStatus as any };
-            }
-            return s;
-          });
-          return { ...t, subWorkflows: updatedSubs };
-        }
-        return t;
-      })
-    );
-  };
-
   const exportData = () => {
     const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -640,9 +640,9 @@ export default function Page() {
     setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
     setTaskBatch(current?.batch || 'None');
+    setTaskParallelGroup(current?.parallelGroup || '');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
-    setSubWorkflows(current?.subWorkflows || []);
 
     setSelectedParents(current?.dependencies || []);
     const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
@@ -672,6 +672,7 @@ export default function Page() {
       name: pName,
       owner: newParentOwner,
       batch: taskBatch,
+      parallelGroup: taskParallelGroup,
       deadline: '',
       estimate: '',
       description: 'Blocking prerequisite parent task',
@@ -697,6 +698,7 @@ export default function Page() {
       name: cName,
       owner: newChildOwner,
       batch: taskBatch,
+      parallelGroup: taskParallelGroup,
       deadline: '',
       estimate: '',
       description: 'Downstream child task',
@@ -711,19 +713,6 @@ export default function Page() {
     setSelectedChildren((prev) => [...prev, childId]);
     setNewChildName('');
     setShowAddChild(false);
-  };
-
-  const handleAddSubWorkflow = () => {
-    const title = newSubTitle.trim();
-    if (!title) return;
-    const item: SubWorkflowItem = {
-      id: uid(),
-      title,
-      assignee: newSubAssignee,
-      status: 'todo',
-    };
-    setSubWorkflows((prev) => [...prev, item]);
-    setNewSubTitle('');
   };
 
   const saveTask = () => {
@@ -742,12 +731,12 @@ export default function Page() {
       description: taskDescription.trim(),
       owner: taskOwner,
       batch: taskBatch,
+      parallelGroup: taskParallelGroup,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
       notes: '',
       dependencies: selectedParents,
       manualStatus: manualSt,
-      subWorkflows,
     };
 
     let baseList = tasks.map((t) => {
@@ -869,6 +858,267 @@ export default function Page() {
 
   const { levels, orderedLevels } = getAlignedLevels();
 
+  // Helper to partition In Progress items into parallel group queues and active slots
+  const renderInProgressColumn = () => {
+    const inProgressList = groups.progress;
+    if (inProgressList.length === 0) {
+      return <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>;
+    }
+
+    // Check if there are tasks with assigned parallel groups
+    const groupedMap: Record<string, Task[]> = {};
+    const ungroupedList: Task[] = [];
+
+    inProgressList.forEach((t) => {
+      if (t.parallelGroup) {
+        (groupedMap[t.parallelGroup] ||= []).push(t);
+      } else {
+        ungroupedList.push(t);
+      }
+    });
+
+    const activeGroupNames = Object.keys(groupedMap);
+
+    return (
+      <div className="space-y-2">
+        {/* Render Each Parallel Group Queue & Active Slots inside In Progress */}
+        {activeGroupNames.map((grpName) => {
+          const cfg = parallelGroups.find((g) => g.name === grpName) || {
+            id: 'temp',
+            name: grpName,
+            slotLimit: 3,
+          };
+          const allGrpTasks = groupedMap[grpName];
+          const activeSlots = allGrpTasks.slice(0, cfg.slotLimit);
+          const queuedTasks = allGrpTasks.slice(cfg.slotLimit);
+
+          return (
+            <div
+              key={grpName}
+              className="p-1.5 rounded-lg border border-indigo-500/40 bg-indigo-950/20 space-y-1.5"
+            >
+              <div className="flex items-center justify-between px-1 text-[10px] font-bold text-indigo-300">
+                <span className="flex items-center gap-1">
+                  <FolderKanban className="w-3 h-3 text-indigo-400" />
+                  {grpName} [Slots: {activeSlots.length}/{cfg.slotLimit}]
+                </span>
+                {queuedTasks.length > 0 && (
+                  <span className="text-[9px] text-zinc-400 font-mono">
+                    {queuedTasks.length} in queue
+                  </span>
+                )}
+              </div>
+
+              {/* Active Running Slots */}
+              <div className="space-y-1">
+                {activeSlots.map((t) => renderTaskCard(t, 'progress'))}
+              </div>
+
+              {/* Internal Waiting Queue for this parallel group */}
+              {queuedTasks.length > 0 && (
+                <div className="pt-1 border-t border-indigo-500/20 space-y-1">
+                  <span className="text-[9px] uppercase font-bold text-zinc-500 px-1">
+                    Waiting Queue (Auto-refills when slot opens)
+                  </span>
+                  {queuedTasks.map((t, qIdx) => (
+                    <div
+                      key={t.id}
+                      className="p-1.5 rounded bg-zinc-950/80 border border-zinc-800 text-[10px] text-zinc-400 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="font-mono text-[9px] text-zinc-600">#{qIdx + 1}</span>
+                        <span className="truncate text-zinc-300">{t.name}</span>
+                      </div>
+                      <button
+                        onClick={() => openTaskModal(t.id)}
+                        className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                      >
+                        <Pencil className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Ungrouped Standard In-Progress Tasks */}
+        {ungroupedList.length > 0 && (
+          <div className="space-y-1">
+            {activeGroupNames.length > 0 && (
+              <div className="text-[9px] font-bold uppercase text-zinc-500 px-1 pt-1">
+                Individual Tasks
+              </div>
+            )}
+            {ungroupedList.map((t) => renderTaskCard(t, 'progress'))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderTaskCard = (t: Task, colKey: 'blocked' | 'ready' | 'progress' | 'done') => {
+    const depNames = (t.dependencies || [])
+      .map((id) => tasks.find((x) => x.id === id))
+      .filter(Boolean) as Task[];
+    const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+    const durationDisplay = getTaskDurationDisplay(t);
+    const batchTheme = getBatchTheme(t.batch);
+
+    const list = groups[colKey];
+    const batchSiblings = list.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
+    const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
+    const isFirstInBatch = posInBatch === 0;
+    const isLastInBatch = posInBatch === batchSiblings.length - 1;
+
+    return (
+      <div
+        key={t.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, t.id)}
+        onDragOver={handleDragOver}
+        onDrop={() => handleDropOnTask(t.id)}
+        className={`p-2 rounded-md border shadow-sm space-y-1 ${batchTheme.cardBg} ${
+          draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
+        }`}
+      >
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1">
+            <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
+            <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
+              {t.owner}
+            </span>
+            {t.parallelGroup && (
+              <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                {t.parallelGroup}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 mr-1">
+              <button
+                disabled={isFirstInBatch}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveTaskWithinBatch(t.id, list, 'up');
+                }}
+                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                title="Move Up Within Batch"
+              >
+                <ArrowUp className="w-2.5 h-2.5" />
+              </button>
+              <button
+                disabled={isLastInBatch}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveTaskWithinBatch(t.id, list, 'down');
+                }}
+                className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                title="Move Down Within Batch"
+              >
+                <ArrowDown className="w-2.5 h-2.5" />
+              </button>
+            </div>
+
+            <select
+              value={t.batch || 'None'}
+              onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
+              className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
+            >
+              <option value="None" className="bg-zinc-900 text-zinc-400">
+                No Batch
+              </option>
+              {ALL_BATCHES.map((b) => (
+                <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className={`text-xs font-bold leading-snug line-clamp-2 ${batchTheme.cardTitle}`}>
+          {t.name}
+        </div>
+
+        {t.description && (
+          <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
+            {t.description}
+          </p>
+        )}
+
+        {waiting.length > 0 && (
+          <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+            <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
+            <span className="truncate">Waiting: {waiting.join(', ')}</span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
+          {durationDisplay ? (
+            <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+              <Timer className="w-2.5 h-2.5" />
+              <span>{durationDisplay}</span>
+            </div>
+          ) : t.estimate ? (
+            <div className="text-zinc-400 flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5" /> {t.estimate}
+            </div>
+          ) : (
+            <span />
+          )}
+
+          {t.estimate && durationDisplay && (
+            <span className="text-[9px] text-zinc-400 font-mono">est: {t.estimate}</span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
+          {colKey === 'ready' && (
+            <button
+              onClick={() => startInProgress(t.id)}
+              className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold shadow"
+            >
+              Start
+            </button>
+          )}
+          {colKey === 'progress' && (
+            <button
+              onClick={() => finishTask(t.id)}
+              className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
+            >
+              Done
+            </button>
+          )}
+          {colKey === 'done' && (
+            <button
+              onClick={() => reopenTask(t.id)}
+              className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
+            >
+              Reopen
+            </button>
+          )}
+          <button
+            onClick={() => openTaskModal(t.id)}
+            className="p-0.5 text-zinc-400 hover:text-white"
+            title="Edit"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => deleteTask(t.id)}
+            className="p-0.5 text-zinc-400 hover:text-rose-400"
+            title="Delete"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   if (!mounted) return null;
 
   return (
@@ -944,6 +1194,13 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={() => setIsGroupConfigOpen(true)}
+            className="p-1 rounded bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 transition"
+            title="Configure Parallel Group Slot Limits"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={exportData}
             className="p-1 rounded bg-zinc-800/80 text-zinc-400 transition"
@@ -1036,203 +1293,13 @@ export default function Page() {
                   </div>
 
                   <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
-                    {list.length === 0 ? (
+                    {colKey === 'progress' ? (
+                      /* Special Parallel Queue & Slot Engine inside In-Progress */
+                      renderInProgressColumn()
+                    ) : list.length === 0 ? (
                       <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
                     ) : (
-                      list.map((t) => {
-                        const depNames = (t.dependencies || [])
-                          .map((id) => tasks.find((x) => x.id === id))
-                          .filter(Boolean) as Task[];
-                        const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
-                        const durationDisplay = getTaskDurationDisplay(t);
-                        const batchTheme = getBatchTheme(t.batch);
-
-                        const batchSiblings = list.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
-                        const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
-                        const isFirstInBatch = posInBatch === 0;
-                        const isLastInBatch = posInBatch === batchSiblings.length - 1;
-
-                        return (
-                          <div
-                            key={t.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, t.id)}
-                            onDragOver={handleDragOver}
-                            onDrop={() => handleDropOnTask(t.id)}
-                            className={`p-2 rounded-md border shadow-sm space-y-1 ${batchTheme.cardBg} ${
-                              draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <div className="flex items-center gap-1">
-                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
-                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
-                                  {t.owner}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                <div className="flex items-center gap-0.5 mr-1">
-                                  <button
-                                    disabled={isFirstInBatch}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveTaskWithinBatch(t.id, list, 'up');
-                                    }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Up Within Batch"
-                                  >
-                                    <ArrowUp className="w-2.5 h-2.5" />
-                                  </button>
-                                  <button
-                                    disabled={isLastInBatch}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveTaskWithinBatch(t.id, list, 'down');
-                                    }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Down Within Batch"
-                                  >
-                                    <ArrowDown className="w-2.5 h-2.5" />
-                                  </button>
-                                </div>
-
-                                <select
-                                  value={t.batch || 'None'}
-                                  onChange={(e) =>
-                                    handleBatchChange(t.id, e.target.value as BatchTag)
-                                  }
-                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
-                                >
-                                  <option value="None" className="bg-zinc-900 text-zinc-400">
-                                    No Batch
-                                  </option>
-                                  {ALL_BATCHES.map((b) => (
-                                    <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
-                                      {b}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className={`text-xs font-bold leading-snug line-clamp-2 ${batchTheme.cardTitle}`}>
-                              {t.name}
-                            </div>
-
-                            {t.description && (
-                              <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
-                                {t.description}
-                              </p>
-                            )}
-
-                            {/* Optional In-Progress Parallel Sub-Workflow Items */}
-                            {t.subWorkflows && t.subWorkflows.length > 0 && (
-                              <div className="pt-1 space-y-1">
-                                <div className="text-[9px] font-bold uppercase text-zinc-400 flex items-center justify-between">
-                                  <span>Parallel Steps ({t.subWorkflows.filter((s) => s.status === 'done').length}/{t.subWorkflows.length})</span>
-                                </div>
-                                <div className="space-y-1">
-                                  {t.subWorkflows.map((sub) => (
-                                    <div
-                                      key={sub.id}
-                                      onClick={() => toggleSubWorkflowStatus(t.id, sub.id)}
-                                      className={`p-1 rounded text-[10px] flex items-center justify-between cursor-pointer border transition ${
-                                        sub.status === 'done'
-                                          ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300 line-through opacity-70'
-                                          : sub.status === 'progress'
-                                          ? 'bg-blue-950/60 border-blue-500 text-blue-200'
-                                          : 'bg-zinc-900/90 border-zinc-800 text-zinc-300'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                        <span className="truncate">{sub.title}</span>
-                                      </div>
-                                      <span className="text-[8px] font-mono opacity-80 uppercase px-1 rounded bg-black/40">
-                                        {sub.assignee} : {sub.status}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {waiting.length > 0 && (
-                              <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
-                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
-                              </div>
-                            )}
-
-                            <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
-                              {durationDisplay ? (
-                                <div
-                                  className={`flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    colKey === 'progress'
-                                      ? 'bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50'
-                                      : 'bg-black/40 text-emerald-300 border border-emerald-500/30'
-                                  }`}
-                                >
-                                  <Timer className="w-2.5 h-2.5" />
-                                  <span>{durationDisplay}</span>
-                                </div>
-                              ) : t.estimate ? (
-                                <div className="text-zinc-400 flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                                </div>
-                              ) : (
-                                <span />
-                              )}
-
-                              {t.estimate && durationDisplay && (
-                                <span className="text-[9px] text-zinc-400 font-mono">est: {t.estimate}</span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
-                              {colKey === 'ready' && (
-                                <button
-                                  onClick={() => startInProgress(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold shadow"
-                                >
-                                  Start
-                                </button>
-                              )}
-                              {colKey === 'progress' && (
-                                <button
-                                  onClick={() => finishTask(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
-                                >
-                                  Done
-                                </button>
-                              )}
-                              {colKey === 'done' && (
-                                <button
-                                  onClick={() => reopenTask(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
-                                >
-                                  Reopen
-                                </button>
-                              )}
-                              <button
-                                onClick={() => openTaskModal(t.id)}
-                                className="p-0.5 text-zinc-400 hover:text-white"
-                                title="Edit"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => deleteTask(t.id)}
-                                className="p-0.5 text-zinc-400 hover:text-rose-400"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
+                      list.map((t) => renderTaskCard(t, colKey))
                     )}
                   </div>
                 </div>
@@ -1328,7 +1395,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal (With Optional In-Progress Parallel Workflows) */}
+      {/* Task Edit/Create Modal */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1356,7 +1423,7 @@ export default function Page() {
                 <input
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  placeholder="e.g. Develop AI feature"
+                  placeholder="e.g. Write prompt for homepage design"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -1407,7 +1474,7 @@ export default function Page() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
                   Assignee
@@ -1440,63 +1507,23 @@ export default function Page() {
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* OPTIONAL PARALLEL SUB-WORKFLOW STEPS */}
-            <div className="p-2.5 bg-indigo-950/20 border border-indigo-500/30 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase text-indigo-400 flex items-center gap-1">
-                  <Bot className="w-3 h-3" /> Optional Parallel Sub-Steps / AI Prompts
-                </span>
-                <span className="text-[9px] text-zinc-500">Run parallel steps inside this task</span>
-              </div>
-
-              {subWorkflows.length > 0 && (
-                <div className="space-y-1">
-                  {subWorkflows.map((sub, sIdx) => (
-                    <div
-                      key={sub.id}
-                      className="p-1 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-1 text-[11px]"
-                    >
-                      <span className="truncate flex-1 text-zinc-200">{sub.title}</span>
-                      <div className="flex items-center gap-1 text-[9px]">
-                        <span className="px-1 rounded bg-zinc-900 text-zinc-400">{sub.assignee}</span>
-                        <button
-                          type="button"
-                          onClick={() => setSubWorkflows(subWorkflows.filter((_, i) => i !== sIdx))}
-                          className="p-0.5 text-zinc-500 hover:text-rose-400"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex items-center gap-1.5">
-                <input
-                  placeholder="e.g. Prompt 1: Build database schema"
-                  value={newSubTitle}
-                  onChange={(e) => setNewSubTitle(e.target.value)}
-                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-                />
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                  <FolderKanban className="w-3 h-3 text-indigo-400" /> Parallel Group
+                </label>
                 <select
-                  value={newSubAssignee}
-                  onChange={(e) => setNewSubAssignee(e.target.value as any)}
-                  className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                  value={taskParallelGroup}
+                  onChange={(e) => setTaskParallelGroup(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
                 >
-                  <option value="AI">AI</option>
-                  <option value="Me">Me</option>
-                  <option value="Other">Other</option>
+                  <option value="">None (Individual)</option>
+                  {parallelGroups.map((g) => (
+                    <option key={g.id} value={g.name}>
+                      {g.name} [{g.slotLimit} slots]
+                    </option>
+                  ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={handleAddSubWorkflow}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded"
-                >
-                  + Add
-                </button>
               </div>
             </div>
 
@@ -1773,6 +1800,92 @@ export default function Page() {
         </div>
       )}
 
+      {/* Parallel Group Configuration Modal */}
+      {isGroupConfigOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsGroupConfigOpen(false);
+          }}
+        >
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                Configure Parallel Groups (Active Slot Limits)
+              </span>
+              <button onClick={() => setIsGroupConfigOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {parallelGroups.map((grp) => (
+                <div
+                  key={grp.id}
+                  className="p-2 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-2"
+                >
+                  <span className="font-bold text-xs text-white">{grp.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-zinc-400">Max Active Slots:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={grp.slotLimit}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 1;
+                        saveParallelGroups(
+                          parallelGroups.map((g) => (g.id === grp.id ? { ...g, slotLimit: val } : g))
+                        );
+                      }}
+                      className="w-14 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-center text-white font-bold"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800 space-y-2">
+              <span className="text-[10px] font-bold uppercase text-zinc-400">Add New Parallel Group</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                <input
+                  placeholder="Group name (e.g. Research)"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={newGroupSlotLimit}
+                  onChange={(e) => setNewGroupSlotLimit(parseInt(e.target.value) || 1)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-center text-zinc-200 font-bold"
+                  title="Slot limit"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const gName = newGroupName.trim();
+                  if (!gName) return;
+                  const newGrp: ParallelGroupConfig = {
+                    id: 'pgrp_' + uid(),
+                    name: gName,
+                    slotLimit: newGroupSlotLimit,
+                  };
+                  saveParallelGroups([...parallelGroups, newGrp]);
+                  setNewGroupName('');
+                }}
+                className="w-full py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-xs shadow"
+              >
+                + Add Parallel Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <input
         type="file"
         ref={fileInputRef}
@@ -1785,8 +1898,7 @@ export default function Page() {
           r.onload = () => {
             try {
               const data = JSON.parse(r.result as string);
-              if (!Array.isArray(data)) throw new Error();
-              saveTasks(data);
+              if (Array.isArray(data)) saveTasks(data);
             } catch {
               alert('Invalid JSON file');
             }
