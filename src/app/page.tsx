@@ -36,6 +36,10 @@ import {
   ListTodo,
   RefreshCw,
   Zap,
+  Target,
+  RotateCcw,
+  Ban,
+  Eye,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -68,6 +72,7 @@ export interface SubTask {
 interface Task {
   id: string;
   name: string;
+  taskType?: 'normal' | 'goal'; // Normal task vs Goal task
   owner: 'Me' | 'AI' | 'Other';
   batch: BatchTag;
   isParallel?: boolean; // true = Parallel stream work, false/undefined = Standard sequential
@@ -293,6 +298,7 @@ export default function Page() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [taskName, setTaskName] = useState('');
+  const [taskType, setTaskType] = useState<'normal' | 'goal'>('normal');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
@@ -303,6 +309,14 @@ export default function Page() {
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
+
+  // Goal Task Review Modal State
+  const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
+  const [isBlockPickerOpen, setIsBlockPickerOpen] = useState<boolean>(false);
+  const [blockParentId, setBlockParentId] = useState<string>('');
+  const [blockParentStatus, setBlockParentStatus] = useState<'progress' | 'ready'>('progress');
+  const [blockNewParentName, setBlockNewParentName] = useState<string>('');
+  const [blockNewParentOwner, setBlockNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
 
   // Parallel Group Config Modal & Multi-Select Queue State
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
@@ -317,7 +331,7 @@ export default function Page() {
   const [queueTaskInputs, setQueueTaskInputs] = useState<
     Record<
       string,
-      { name: string; owner: 'Me' | 'AI' | 'Other' }
+      { name: string; taskType: 'normal' | 'goal'; owner: 'Me' | 'AI' | 'Other' }
     >
   >({});
 
@@ -377,6 +391,7 @@ export default function Page() {
         setTasks(
           parsed.map((t: any, idx: number) => ({
             ...t,
+            taskType: t.taskType || (t.isGoal ? 'goal' : 'normal'),
             order: typeof t.order === 'number' ? t.order : idx,
             batch: t.batch || (t.priority === 'High' ? 'Batch 1' : t.priority === 'Medium' ? 'Batch 2' : 'None'),
             description: t.description || t.doneRule || t.notes || '',
@@ -390,12 +405,13 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
-          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: a, name: 'Plan for algorithm Lab report', taskType: 'goal', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', taskType: 'goal', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', taskType: 'normal', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
           {
             id: d,
             name: 'Study Numerical Methods',
+            taskType: 'goal',
             description: 'Solve CT preparation problem sets',
             owner: 'Me',
             batch: 'Batch 2',
@@ -845,6 +861,84 @@ export default function Page() {
     }
 
     saveTasks(updated);
+    setReviewingTaskId(null);
+  };
+
+  // Goal Task Option: Retry (resets active timer and stays in progress)
+  const retryGoalTask = (id: string) => {
+    saveTasks(
+      tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              manualStatus: 'progress',
+              startedAt: Date.now(),
+            }
+          : t
+      )
+    );
+    setReviewingTaskId(null);
+  };
+
+  // Goal Task Option: Blocked (Attaches parent blocker with selected status)
+  const handleConfirmGoalBlock = () => {
+    if (!reviewingTaskId) return;
+
+    let finalParentId = blockParentId;
+    let updatedTasks = [...tasks];
+
+    // If user typed a new blocker parent name, create it on the fly with the selected status
+    if (!finalParentId && blockNewParentName.trim()) {
+      finalParentId = uid();
+      const currentBlocked = tasks.find((t) => t.id === reviewingTaskId);
+      const newParent: Task = {
+        id: finalParentId,
+        name: blockNewParentName.trim(),
+        taskType: 'normal',
+        owner: blockNewParentOwner,
+        batch: currentBlocked?.batch || 'Batch 1',
+        deadline: '',
+        estimate: '',
+        description: `Prerequisite blocker for ${currentBlocked?.name || 'task'}`,
+        dependencies: [],
+        manualStatus: blockParentStatus === 'progress' ? 'progress' : 'todo',
+        startedAt: blockParentStatus === 'progress' ? Date.now() : null,
+        createdAt: Date.now() - 100,
+        order: 0,
+        totalTimeSpentSeconds: 0,
+      };
+      updatedTasks = [newParent, ...updatedTasks];
+    } else if (finalParentId) {
+      // If an existing parent was selected, update its status according to user choice
+      updatedTasks = updatedTasks.map((t) => {
+        if (t.id === finalParentId) {
+          return {
+            ...t,
+            manualStatus: blockParentStatus === 'progress' ? ('progress' as const) : ('todo' as const),
+            startedAt: blockParentStatus === 'progress' && !t.startedAt ? Date.now() : t.startedAt,
+          };
+        }
+        return t;
+      });
+    }
+
+    // Attach parent blocker to the target task and set its status to todo (which automatically evaluates to blocked)
+    updatedTasks = updatedTasks.map((t) => {
+      if (t.id === reviewingTaskId) {
+        const nextDeps = finalParentId ? Array.from(new Set([...(t.dependencies || []), finalParentId])) : t.dependencies;
+        return {
+          ...t,
+          manualStatus: 'todo' as const,
+          dependencies: nextDeps,
+          startedAt: null,
+        };
+      }
+      return t;
+    });
+
+    saveTasks(updatedTasks);
+    setReviewingTaskId(null);
+    setIsBlockPickerOpen(false);
   };
 
   const reopenTask = (id: string) => {
@@ -887,6 +981,7 @@ export default function Page() {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
+    setTaskType(current?.taskType || 'normal');
     setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
     setTaskBatch(current?.batch || 'None');
@@ -923,6 +1018,7 @@ export default function Page() {
     const newParent: Task = {
       id: parentId,
       name: pName,
+      taskType: 'normal',
       owner: newParentOwner,
       batch: taskBatch,
       isParallel: taskIsParallel,
@@ -950,6 +1046,7 @@ export default function Page() {
     const newChild: Task = {
       id: childId,
       name: cName,
+      taskType: 'normal',
       owner: newChildOwner,
       batch: taskBatch,
       isParallel: taskIsParallel,
@@ -989,6 +1086,7 @@ export default function Page() {
     const newTask: Task = {
       id: uid(),
       name: input.name.trim(),
+      taskType: input.taskType || 'normal',
       owner: input.owner,
       batch: 'Batch 1',
       isParallel: true,
@@ -1006,7 +1104,7 @@ export default function Page() {
     saveTasks([...tasks, newTask]);
     setQueueTaskInputs((prev) => ({
       ...prev,
-      [groupName]: { name: '', owner: 'AI' },
+      [groupName]: { name: '', taskType: 'normal', owner: 'AI' },
     }));
   };
 
@@ -1061,6 +1159,7 @@ export default function Page() {
     const data = {
       id: targetId,
       name,
+      taskType,
       description: taskDescription.trim(),
       owner: taskOwner,
       batch: taskBatch,
@@ -1304,6 +1403,11 @@ export default function Page() {
                     >
                       <div className="flex items-center gap-1.5 truncate flex-1">
                         <span className="font-mono text-[9px] text-zinc-600">#{qIdx + 1}</span>
+                        {t.taskType === 'goal' && (
+                          <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                            <Target className="w-2 h-2" /> Goal
+                          </span>
+                        )}
                         <span className="truncate text-zinc-300">{t.name}</span>
                       </div>
                       <button
@@ -1369,6 +1473,11 @@ export default function Page() {
             <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
               {t.owner}
             </span>
+            {t.taskType === 'goal' && (
+              <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                <Target className="w-2.5 h-2.5" /> Goal
+              </span>
+            )}
             {t.isParallel && t.parallelGroup && (
               <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
                 <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
@@ -1498,14 +1607,27 @@ export default function Page() {
             </button>
           )}
 
-          {colKey === 'progress' && (
+          {/* Goal Task Review Action in In Progress */}
+          {colKey === 'progress' && t.taskType === 'goal' ? (
+            <button
+              onClick={() => {
+                setReviewingTaskId(t.id);
+                setIsBlockPickerOpen(false);
+                setBlockParentId('');
+                setBlockNewParentName('');
+              }}
+              className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold shadow flex items-center gap-1"
+            >
+              <Eye className="w-3 h-3" /> Review
+            </button>
+          ) : colKey === 'progress' && t.taskType !== 'goal' ? (
             <button
               onClick={() => finishTask(t.id)}
               className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
             >
               Done
             </button>
-          )}
+          ) : null}
 
           {colKey === 'done' && (
             <button
@@ -1536,6 +1658,8 @@ export default function Page() {
       </div>
     );
   };
+
+  const reviewingTask = tasks.find((t) => t.id === reviewingTaskId);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
@@ -1614,7 +1738,7 @@ export default function Page() {
           <button
             onClick={handleStartParallelWork}
             className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[10px] flex items-center gap-1 shadow transition"
-            title="Auto-start top 3 Development and 1 Study tasks in Parallel"
+            title="Auto-start top tasks for each parallel group in exact board order"
           >
             <Play className="w-3 h-3 fill-current" /> Start Parallel Work
           </button>
@@ -1836,7 +1960,153 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal (Cleaned up, zero goal task clutter) */}
+      {/* Goal Task Review Modal (3 Options: Done, Retry, Blocked) */}
+      {reviewingTaskId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReviewingTaskId(null);
+          }}
+        >
+          <div className="bg-zinc-900 border border-amber-500/50 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <span className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                <Target className="w-4 h-4 text-amber-400" />
+                Review Goal: "{reviewingTask?.name}"
+              </span>
+              <button onClick={() => setReviewingTaskId(null)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!isBlockPickerOpen ? (
+              <div className="space-y-3 pt-1">
+                <div className="text-[11px] text-zinc-300">
+                  Choose outcome for this goal task iteration:
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => finishTask(reviewingTaskId)}
+                    className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>✓ Done</span>
+                  </button>
+
+                  <button
+                    onClick={() => retryGoalTask(reviewingTaskId)}
+                    className="p-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>🔄 Retry</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsBlockPickerOpen(true)}
+                    className="p-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
+                  >
+                    <Ban className="w-4 h-4" />
+                    <span>🚫 Blocked</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Blocked Sub-flow: Select/Create Parent Task & Parent State */
+              <div className="space-y-2.5 pt-1">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                    1. Select prerequisite parent task causing block:
+                  </label>
+                  <select
+                    value={blockParentId}
+                    onChange={(e) => {
+                      setBlockParentId(e.target.value);
+                      if (e.target.value) setBlockNewParentName('');
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs text-zinc-200"
+                  >
+                    <option value="">-- Or type new parent below --</option>
+                    {tasks
+                      .filter((t) => t.id !== reviewingTaskId && computedStatus(t) !== 'done')
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.owner}) [{t.batch}]
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold text-zinc-400">
+                    2. Or create brand new prerequisite task:
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      placeholder="e.g. Waiting for API / Syllabus approval"
+                      value={blockNewParentName}
+                      onChange={(e) => {
+                        setBlockNewParentName(e.target.value);
+                        if (e.target.value) setBlockParentId('');
+                      }}
+                      className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                    />
+                    <select
+                      value={blockNewParentOwner}
+                      onChange={(e) => setBlockNewParentOwner(e.target.value as any)}
+                      className="bg-zinc-950 border border-zinc-800 rounded px-1 text-[10px] text-zinc-300"
+                    >
+                      <option value="Other">Other</option>
+                      <option value="AI">AI</option>
+                      <option value="Me">Me</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Set Parent Task State */}
+                <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-zinc-300 uppercase">
+                    Parent Task State:
+                  </span>
+                  <select
+                    value={blockParentStatus}
+                    onChange={(e) => setBlockParentStatus(e.target.value as any)}
+                    className={`border rounded px-2 py-1 text-xs font-bold focus:outline-none ${
+                      blockParentStatus === 'progress'
+                        ? 'bg-blue-950/80 border-blue-600 text-blue-300'
+                        : 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                    }`}
+                  >
+                    <option value="progress" className="bg-zinc-900 text-blue-400">
+                      IN PROGRESS (Being worked on)
+                    </option>
+                    <option value="ready" className="bg-zinc-900 text-emerald-400">
+                      READY (Waiting to be picked up)
+                    </option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                  <button
+                    onClick={() => setIsBlockPickerOpen(false)}
+                    className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleConfirmGoalBlock}
+                    className="px-3.5 py-1 bg-rose-600 hover:bg-rose-500 font-bold text-white rounded text-xs shadow"
+                  >
+                    Confirm & Move to Blocked
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Task Edit/Create Modal */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1899,6 +2169,37 @@ export default function Page() {
                     DONE
                   </option>
                 </select>
+              </div>
+            </div>
+
+            {/* Task Type Option (Normal vs Goal Task) */}
+            <div className="p-2 bg-zinc-950/80 border border-zinc-800 rounded-lg flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1">
+                <Target className="w-3 h-3 text-amber-400" /> Task Type
+              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 cursor-pointer text-xs">
+                  <input
+                    type="radio"
+                    name="taskTypeSelect"
+                    checked={taskType === 'normal'}
+                    onChange={() => setTaskType('normal')}
+                    className="text-indigo-600"
+                  />
+                  <span className="text-zinc-300">Normal Task</span>
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer text-xs">
+                  <input
+                    type="radio"
+                    name="taskTypeSelect"
+                    checked={taskType === 'goal'}
+                    onChange={() => setTaskType('goal')}
+                    className="text-amber-500"
+                  />
+                  <span className="text-amber-300 font-semibold flex items-center gap-0.5">
+                    🎯 Goal Task (Review: Done / Retry / Blocked)
+                  </span>
+                </label>
               </div>
             </div>
 
@@ -2370,7 +2671,7 @@ export default function Page() {
             <div className="space-y-4">
               {parallelGroups.map((grp) => {
                 const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) !== 'done');
-                const formState = queueTaskInputs[grp.name] || { name: '', owner: 'AI' };
+                const formState = queueTaskInputs[grp.name] || { name: '', taskType: 'normal', owner: 'AI' };
                 const searchTxt = (groupQueueSearch[grp.name] || '').toLowerCase();
                 const availableTasks = tasks.filter(
                   (t) =>
@@ -2450,6 +2751,11 @@ export default function Page() {
                                 <span className="font-mono text-[9px] text-indigo-400 font-bold flex-shrink-0">
                                   {idx < grp.slotLimit ? `[Slot ${idx + 1}]` : `[Queue #${idx + 1 - grp.slotLimit}]`}
                                 </span>
+                                {t.taskType === 'goal' && (
+                                  <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                                    <Target className="w-2 h-2" /> Goal
+                                  </span>
+                                )}
                                 <span className="truncate">{t.name}</span>
                               </div>
 
@@ -2548,7 +2854,42 @@ export default function Page() {
 
                     {/* Quick Create a BRAND NEW Task into this group */}
                     <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md space-y-1.5">
-                      <span className="font-bold text-indigo-300 text-[10px]">+ Create & Queue New Task</span>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-indigo-300">+ Create & Queue New Task</span>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`type_${grp.name}`}
+                              checked={formState.taskType === 'normal'}
+                              onChange={() =>
+                                setQueueTaskInputs((prev) => ({
+                                  ...prev,
+                                  [grp.name]: { ...formState, taskType: 'normal' },
+                                }))
+                              }
+                            />
+                            <span className="text-zinc-400">Normal</span>
+                          </label>
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`type_${grp.name}`}
+                              checked={formState.taskType === 'goal'}
+                              onChange={() =>
+                                setQueueTaskInputs((prev) => ({
+                                  ...prev,
+                                  [grp.name]: { ...formState, taskType: 'goal' },
+                                }))
+                              }
+                            />
+                            <span className="text-amber-300 font-bold flex items-center gap-0.5">
+                              <Target className="w-2.5 h-2.5" /> Goal
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-4 gap-1.5">
                         <input
                           placeholder="Task name..."
