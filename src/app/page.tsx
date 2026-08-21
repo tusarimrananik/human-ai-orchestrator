@@ -20,7 +20,7 @@ import {
   ArrowDown,
   GripVertical,
   Timer,
-  Check,
+  AlignLeft,
 } from 'lucide-react';
 
 interface Task {
@@ -30,8 +30,9 @@ interface Task {
   priority: 'High' | 'Medium' | 'Low';
   deadline: string;
   estimate: string;
-  doneRule: string;
-  notes: string;
+  description?: string;
+  doneRule?: string;
+  notes?: string;
   dependencies: string[];
   manualStatus: 'todo' | 'progress' | 'done';
   createdAt: number;
@@ -85,12 +86,11 @@ export default function Page() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [taskName, setTaskName] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskPriority, setTaskPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
-  const [taskDoneRule, setTaskDoneRule] = useState('');
-  const [taskNotes, setTaskNotes] = useState('');
   const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +110,7 @@ export default function Page() {
         setTasks(
           parsed.map((t: any) => ({
             ...t,
+            description: t.description || t.doneRule || t.notes || '',
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
           }))
@@ -117,10 +118,10 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Plan for micro lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Write algorithm report prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Write micro report prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', priority: 'Medium', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -247,7 +248,7 @@ export default function Page() {
   const q = search.toLowerCase();
   const filtered = tasks.filter(
     (t) =>
-      (!q || (t.name + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
+      (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
       (!ownerFilter || t.owner === ownerFilter) &&
       (!priorityFilter || t.priority === priorityFilter)
   );
@@ -317,7 +318,6 @@ export default function Page() {
     return () => clearTimeout(timer);
   }, [view, tasks, ownerFilter, priorityFilter, search]);
 
-  // Start task & begin live timer
   const startInProgress = (id: string) => {
     saveTasks(
       tasks.map((t) => {
@@ -334,7 +334,6 @@ export default function Page() {
     );
   };
 
-  // Finish task & record total duration
   const finishTask = (id: string) => {
     saveTasks(
       tasks.map((t) => {
@@ -354,7 +353,6 @@ export default function Page() {
     );
   };
 
-  // Reopen task
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -382,14 +380,12 @@ export default function Page() {
   };
 
   const addSample = () => {
-    const a = uid(), b = uid(), c = uid(), d = uid(), e = uid(), f = uid();
+    const a = uid(), b = uid(), c = uid(), d = uid();
     const newSamples: Task[] = [
-      { id: a, name: 'Plan for algorithm Lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-      { id: b, name: 'Plan for micro lab report', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: 'Plan ready', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-      { id: c, name: 'Write algorithm report prompt', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-      { id: d, name: 'Write micro report prompt', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: 'Prompt ready', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
-      { id: e, name: 'AI: Generate algorithm report', owner: 'AI', priority: 'High', deadline: '', estimate: '1h', doneRule: 'Content ready', notes: '', dependencies: [c], manualStatus: 'todo', createdAt: Date.now() + 4 },
-      { id: f, name: 'AI: Generate micro report', owner: 'AI', priority: 'High', deadline: '', estimate: '1h', doneRule: 'Content ready', notes: '', dependencies: [d], manualStatus: 'todo', createdAt: Date.now() + 5 },
+      { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+      { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor specs and instructions', owner: 'Me', priority: 'High', deadline: '', estimate: '30m', doneRule: '', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+      { id: c, name: 'Write algorithm report prompt', description: 'Structure code block prompts for report generator', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+      { id: d, name: 'Write micro report prompt', description: 'Prepare assembly inputs and expected outputs', owner: 'Me', priority: 'High', deadline: '', estimate: '45m', doneRule: '', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -407,12 +403,11 @@ export default function Page() {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
+    setTaskDescription(current?.description || current?.doneRule || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
     setTaskPriority(current?.priority || 'Medium');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
-    setTaskDoneRule(current?.doneRule || '');
-    setTaskNotes(current?.notes || '');
     setSelectedDeps(current?.dependencies || []);
     setIsModalOpen(true);
   };
@@ -422,12 +417,13 @@ export default function Page() {
     if (!name) return;
     const data = {
       name,
+      description: taskDescription.trim(),
       owner: taskOwner,
       priority: taskPriority,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
-      doneRule: taskDoneRule.trim(),
-      notes: taskNotes.trim(),
+      doneRule: '',
+      notes: '',
       dependencies: selectedDeps,
     };
 
@@ -453,7 +449,6 @@ export default function Page() {
     setIsModalOpen(false);
   };
 
-  // Helper to compute live elapsed time string for a task
   const getTaskDurationDisplay = (t: Task): string | null => {
     let totalSec = t.totalTimeSpentSeconds || 0;
     if (t.manualStatus === 'progress' && t.startedAt) {
@@ -463,7 +458,6 @@ export default function Page() {
     return formatElapsed(totalSec);
   };
 
-  // Topological DAG calculation with parallel line alignment
   const getAlignedLevels = () => {
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const memo = new Map<string, number>();
@@ -618,7 +612,7 @@ export default function Page() {
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            placeholder="Search tasks..."
+            placeholder="Search tasks or descriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
@@ -718,7 +712,6 @@ export default function Page() {
                               </div>
 
                               <div className="flex items-center gap-1">
-                                {/* Up/Down buttons across columns to prioritize */}
                                 <div className="flex items-center gap-0.5 mr-1">
                                   <button
                                     disabled={idx === 0}
@@ -744,7 +737,6 @@ export default function Page() {
                                   </button>
                                 </div>
 
-                                {/* Priority Selector with Auto-Cascade */}
                                 <select
                                   value={t.priority}
                                   onChange={(e) =>
@@ -774,6 +766,13 @@ export default function Page() {
                             <div className="text-xs font-semibold text-zinc-100 leading-snug line-clamp-2">
                               {t.name}
                             </div>
+
+                            {/* Task Description */}
+                            {t.description && (
+                              <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed bg-zinc-900/60 p-1 rounded border border-zinc-800/60">
+                                {t.description}
+                              </p>
+                            )}
 
                             {waiting.length > 0 && (
                               <div className="text-[10px] text-rose-400/90 bg-rose-500/10 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
@@ -892,7 +891,7 @@ export default function Page() {
                 ))}
               </svg>
 
-              <div className="grid grid-flow-col auto-cols-[210px] gap-16 items-start relative z-20">
+              <div className="grid grid-flow-col auto-cols-[220px] gap-16 items-start relative z-20">
                 {orderedLevels.map((level, index) => (
                   <div key={level} className="flex flex-col gap-4">
                     <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
@@ -914,12 +913,17 @@ export default function Page() {
                         <div
                           key={t.id}
                           data-node-id={t.id}
-                          className={`p-2.5 rounded-lg border-2 shadow transition ${badgeClass}`}
+                          className={`p-2.5 rounded-lg border-2 shadow transition space-y-1 ${badgeClass}`}
                         >
                           <div className="text-xs font-bold text-zinc-100 line-clamp-2 leading-tight">
                             {t.name}
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1.5 pt-1 border-t border-zinc-800/80">
+                          {t.description && (
+                            <p className="text-[10px] text-zinc-400 line-clamp-2 leading-snug">
+                              {t.description}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1 pt-1 border-t border-zinc-800/80">
                             <span>{t.owner}</span>
                             <div className="flex items-center gap-1">
                               {durationDisplay && (
@@ -971,6 +975,19 @@ export default function Page() {
               />
             </div>
 
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                Description / Context / Done Criteria
+              </label>
+              <textarea
+                rows={2}
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="Add task description, requirements, or completion details..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
@@ -1007,7 +1024,7 @@ export default function Page() {
               <label className="block text-[10px] uppercase font-bold text-indigo-400 mb-1">
                 Dependencies (Prerequisites)
               </label>
-              <div className="max-h-28 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
+              <div className="max-h-24 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
                   <div className="text-[10px] text-zinc-600 italic">No other tasks available</div>
                 ) : (
