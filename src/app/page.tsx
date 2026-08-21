@@ -40,6 +40,7 @@ interface Task {
   dependencies: string[];
   manualStatus: 'todo' | 'progress' | 'done';
   createdAt: number;
+  order?: number;
   startedAt?: number | null;
   completedAt?: number | null;
   totalTimeSpentSeconds?: number;
@@ -171,7 +172,6 @@ export default function Page() {
     paths: [],
   });
 
-  // Dynamic Batch Weight based on active user-defined priority order
   const getBatchWeight = (b: BatchTag = 'None'): number => {
     if (b === 'None') return 999;
     const idx = batchPriorityOrder.indexOf(b);
@@ -190,8 +190,9 @@ export default function Page() {
       if (stored) {
         const parsed = JSON.parse(stored);
         setTasks(
-          parsed.map((t: any) => ({
+          parsed.map((t: any, idx: number) => ({
             ...t,
+            order: typeof t.order === 'number' ? t.order : idx,
             batch: t.batch || (t.priority === 'High' ? 'Batch 1' : t.priority === 'Medium' ? 'Batch 2' : 'None'),
             description: t.description || t.doneRule || t.notes || '',
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
@@ -201,10 +202,10 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
-          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
-          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -229,7 +230,6 @@ export default function Page() {
     }
   };
 
-  // Move batch priority up (left) or down (right)
   const shiftBatchPriority = (batch: BatchTag, direction: 'left' | 'right') => {
     const idx = batchPriorityOrder.indexOf(batch);
     if (idx === -1) return;
@@ -243,7 +243,6 @@ export default function Page() {
     saveBatchOrder(newOrder);
   };
 
-  // Promote batch directly to #1 priority
   const setTopBatchPriority = (batch: BatchTag) => {
     const remaining = batchPriorityOrder.filter((b) => b !== batch);
     saveBatchOrder([batch, ...remaining]);
@@ -257,14 +256,20 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  const moveTaskWithinGroup = (taskId: string, groupList: Task[], direction: 'up' | 'down') => {
-    const groupIdx = groupList.findIndex((t) => t.id === taskId);
-    if (groupIdx === -1) return;
+  // Reorder task positions strictly WITHIN the same batch and column
+  const moveTaskWithinBatch = (taskId: string, columnTasks: Task[], direction: 'up' | 'down') => {
+    const currentTask = tasks.find((t) => t.id === taskId);
+    if (!currentTask) return;
 
-    const targetGroupIdx = direction === 'up' ? groupIdx - 1 : groupIdx + 1;
-    if (targetGroupIdx < 0 || targetGroupIdx >= groupList.length) return;
+    // Filter tasks belonging to the SAME batch within this column
+    const batchTasks = columnTasks.filter((t) => (t.batch || 'None') === (currentTask.batch || 'None'));
+    const batchIdx = batchTasks.findIndex((t) => t.id === taskId);
+    if (batchIdx === -1) return;
 
-    const targetTask = groupList[targetGroupIdx];
+    const targetBatchIdx = direction === 'up' ? batchIdx - 1 : batchIdx + 1;
+    if (targetBatchIdx < 0 || targetBatchIdx >= batchTasks.length) return;
+
+    const targetTask = batchTasks[targetBatchIdx];
     const idxA = tasks.findIndex((t) => t.id === taskId);
     const idxB = tasks.findIndex((t) => t.id === targetTask.id);
     if (idxA === -1 || idxB === -1) return;
@@ -273,6 +278,12 @@ export default function Page() {
     const temp = newTasks[idxA];
     newTasks[idxA] = newTasks[idxB];
     newTasks[idxB] = temp;
+
+    // Recalculate relative order index
+    newTasks.forEach((t, i) => {
+      t.order = i;
+    });
+
     saveTasks(newTasks);
   };
 
@@ -281,7 +292,7 @@ export default function Page() {
     saveTasks(updated);
   };
 
-  // Drag and Drop handlers
+  // Drag and Drop handlers restricted within same batch
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId);
     setDraggedTaskId(taskId);
@@ -294,6 +305,16 @@ export default function Page() {
   const handleDropOnTask = (targetTaskId: string) => {
     if (!draggedTaskId || draggedTaskId === targetTaskId) return;
 
+    const sourceTask = tasks.find((t) => t.id === draggedTaskId);
+    const targetTask = tasks.find((t) => t.id === targetTaskId);
+    if (!sourceTask || !targetTask) return;
+
+    // Only allow drag-reordering within the SAME batch
+    if ((sourceTask.batch || 'None') !== (targetTask.batch || 'None')) {
+      setDraggedTaskId(null);
+      return;
+    }
+
     const idxA = tasks.findIndex((t) => t.id === draggedTaskId);
     const idxB = tasks.findIndex((t) => t.id === targetTaskId);
     if (idxA === -1 || idxB === -1) return;
@@ -301,6 +322,10 @@ export default function Page() {
     const newTasks = [...tasks];
     const [moved] = newTasks.splice(idxA, 1);
     newTasks.splice(idxB, 0, moved);
+
+    newTasks.forEach((t, i) => {
+      t.order = i;
+    });
 
     saveTasks(newTasks);
     setDraggedTaskId(null);
@@ -326,13 +351,15 @@ export default function Page() {
     groups[st].push(t);
   });
 
-  // Enforce dynamic user batch priority order in each Board column
+  // Group by Batch Priority First, then preserve manual user order (Up/Down / Drag & Drop) within that batch
   (['blocked', 'ready', 'progress', 'done'] as const).forEach((key) => {
     groups[key].sort((a, b) => {
       const bwA = getBatchWeight(a.batch);
       const bwB = getBatchWeight(b.batch);
       if (bwA !== bwB) return bwA - bwB;
-      return a.createdAt - b.createdAt;
+      const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+      const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+      return ordA - ordB;
     });
   });
 
@@ -416,6 +443,7 @@ export default function Page() {
     );
   };
 
+  // Reopen task resets timer completely to ZERO
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -489,6 +517,7 @@ export default function Page() {
         id: newId,
         manualStatus: 'todo',
         createdAt: Date.now(),
+        order: tasks.length,
         totalTimeSpentSeconds: 0,
         ...data,
       };
@@ -556,7 +585,7 @@ export default function Page() {
     orderedLevelKeys.forEach((lvl) => {
       const list = levels[lvl];
 
-      // Sort primarily by active batch priority order
+      // Sort primarily by active batch priority order, then user order
       list.sort((a, b) => {
         const bwA = getBatchWeight(a.batch);
         const bwB = getBatchWeight(b.batch);
@@ -749,13 +778,19 @@ export default function Page() {
                     {list.length === 0 ? (
                       <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
                     ) : (
-                      list.map((t, idx) => {
+                      list.map((t) => {
                         const depNames = (t.dependencies || [])
                           .map((id) => tasks.find((x) => x.id === id))
                           .filter(Boolean) as Task[];
                         const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
                         const durationDisplay = getTaskDurationDisplay(t);
                         const batchTheme = getBatchTheme(t.batch);
+
+                        // Calculate bounds specifically within this task's batch
+                        const batchSiblings = list.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
+                        const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
+                        const isFirstInBatch = posInBatch === 0;
+                        const isLastInBatch = posInBatch === batchSiblings.length - 1;
 
                         return (
                           <div
@@ -770,7 +805,7 @@ export default function Page() {
                           >
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1">
-                                <GripVertical className="w-3 h-3 text-zinc-400/60" />
+                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
                                 <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
                                   {t.owner}
                                 </span>
@@ -779,24 +814,24 @@ export default function Page() {
                               <div className="flex items-center gap-1">
                                 <div className="flex items-center gap-0.5 mr-1">
                                   <button
-                                    disabled={idx === 0}
+                                    disabled={isFirstInBatch}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      moveTaskWithinGroup(t.id, list, 'up');
+                                      moveTaskWithinBatch(t.id, list, 'up');
                                     }}
                                     className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Up"
+                                    title="Move Up Within Batch"
                                   >
                                     <ArrowUp className="w-2.5 h-2.5" />
                                   </button>
                                   <button
-                                    disabled={idx === list.length - 1}
+                                    disabled={isLastInBatch}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      moveTaskWithinGroup(t.id, list, 'down');
+                                      moveTaskWithinBatch(t.id, list, 'down');
                                     }}
                                     className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Down"
+                                    title="Move Down Within Batch"
                                   >
                                     <ArrowDown className="w-2.5 h-2.5" />
                                   </button>
