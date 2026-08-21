@@ -21,6 +21,8 @@ import {
   GripVertical,
   Timer,
   Layers,
+  CornerDownRight,
+  Link2,
 } from 'lucide-react';
 
 export type BatchTag = 'None' | 'Batch 1' | 'Batch 2' | 'Batch 3' | 'Batch 4' | 'Batch 5';
@@ -58,7 +60,6 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-// Color badges and border styling for each batch
 export function getBatchStyle(batch: BatchTag = 'None') {
   switch (batch) {
     case 'Batch 1':
@@ -206,7 +207,6 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
-  // Change batch tag directly on task
   const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
@@ -377,12 +377,14 @@ export default function Page() {
   };
 
   const addSample = () => {
-    const a = uid(), b = uid(), c = uid(), d = uid();
+    const a = uid(), b = uid(), c = uid(), d = uid(), e = uid(), f = uid();
     const newSamples: Task[] = [
       { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
       { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor specs and instructions', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
       { id: c, name: 'Write algorithm report prompt', description: 'Structure code block prompts for report generator', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
       { id: d, name: 'Write micro report prompt', description: 'Prepare assembly inputs and expected outputs', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+      { id: e, name: 'AI: Generate algorithm report', description: 'Execute report generation script', owner: 'AI', batch: 'Batch 3', deadline: '', estimate: '1h', notes: '', dependencies: [c], manualStatus: 'todo', createdAt: Date.now() + 4 },
+      { id: f, name: 'AI: Generate micro report', description: 'Execute assembly simulation and diagrams', owner: 'AI', batch: 'Batch 3', deadline: '', estimate: '1h', notes: '', dependencies: [d], manualStatus: 'todo', createdAt: Date.now() + 5 },
     ];
     saveTasks([...tasks, ...newSamples]);
   };
@@ -450,6 +452,23 @@ export default function Page() {
     }
     if (totalSec <= 0) return null;
     return formatElapsed(totalSec);
+  };
+
+  // Helper to trace full upstream dependency chain for any task
+  const getUpstreamChain = (taskId: string, stack = new Set<string>()): Task[] => {
+    if (stack.has(taskId)) return [];
+    stack.add(taskId);
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return [];
+    const chain: Task[] = [];
+    (task.dependencies || []).forEach((dId) => {
+      const depTask = tasks.find((t) => t.id === dId);
+      if (depTask) {
+        chain.push(depTask);
+        chain.push(...getUpstreamChain(dId, new Set(stack)));
+      }
+    });
+    return chain;
   };
 
   const getAlignedLevels = () => {
@@ -606,7 +625,7 @@ export default function Page() {
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            placeholder="Search tasks..."
+            placeholder="Search tasks or descriptions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
@@ -958,7 +977,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal */}
+      {/* Task Edit/Create Modal with Enhanced Dependency & Sub-dependency chaining */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -966,10 +985,11 @@ export default function Page() {
             if (e.target === e.currentTarget) setIsModalOpen(false);
           }}
         >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-lg p-4 space-y-3 shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-xl p-4 space-y-3 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-xs text-zinc-100">
-                {editId ? 'Edit Task' : 'New Task'}
+              <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
+                <Link2 className="w-3.5 h-3.5 text-indigo-400" />
+                {editId ? 'Edit Task' : 'New Task & Dependencies'}
               </span>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
@@ -978,12 +998,12 @@ export default function Page() {
 
             <div>
               <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Task Name
+                Task Name *
               </label>
               <input
                 value={taskName}
                 onChange={(e) => setTaskName(e.target.value)}
-                placeholder="e.g. Build API authentication"
+                placeholder="e.g. Write micro report prompt"
                 className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -1024,46 +1044,86 @@ export default function Page() {
                 <select
                   value={taskBatch}
                   onChange={(e) => setTaskBatch(e.target.value as BatchTag)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
                 >
                   <option value="None">No Batch</option>
-                  <option value="Batch 1">Batch 1</option>
-                  <option value="Batch 2">Batch 2</option>
-                  <option value="Batch 3">Batch 3</option>
-                  <option value="Batch 4">Batch 4</option>
-                  <option value="Batch 5">Batch 5</option>
+                  <option value="Batch 1">Batch 1 (Sky)</option>
+                  <option value="Batch 2">Batch 2 (Purple)</option>
+                  <option value="Batch 3">Batch 3 (Amber)</option>
+                  <option value="Batch 4">Batch 4 (Emerald)</option>
+                  <option value="Batch 5">Batch 5 (Rose)</option>
                 </select>
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-indigo-400 mb-1">
-                Dependencies (Prerequisites)
+            {/* Direct Dependencies & Sub-Dependency Chaining Selector */}
+            <div className="space-y-1">
+              <label className="block text-[10px] uppercase font-bold text-indigo-400 flex items-center justify-between">
+                <span>Direct Dependencies (Prerequisites that must finish first)</span>
+                <span className="text-[9px] text-zinc-500 normal-case">Sub-chains auto-linked</span>
               </label>
-              <div className="max-h-24 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1">
+
+              <div className="max-h-36 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
-                  <div className="text-[10px] text-zinc-600 italic">No other tasks available</div>
+                  <div className="text-[10px] text-zinc-600 italic py-1 text-center">
+                    No existing tasks to depend on. This will start as Root Available.
+                  </div>
                 ) : (
                   tasks
                     .filter((t) => t.id !== editId)
-                    .map((t) => {
-                      const checked = selectedDeps.includes(t.id);
+                    .map((candidate) => {
+                      const isDirectChecked = selectedDeps.includes(candidate.id);
+                      const upstreamSubDeps = getUpstreamChain(candidate.id);
+
                       return (
-                        <label
-                          key={t.id}
-                          className="flex items-center gap-2 text-[11px] text-zinc-300 cursor-pointer hover:bg-zinc-900 p-1 rounded"
+                        <div
+                          key={candidate.id}
+                          className={`p-1.5 rounded border transition ${
+                            isDirectChecked
+                              ? 'bg-indigo-950/40 border-indigo-500/60 text-white'
+                              : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-300 hover:border-zinc-700'
+                          }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) setSelectedDeps([...selectedDeps, t.id]);
-                              else setSelectedDeps(selectedDeps.filter((id) => id !== t.id));
-                            }}
-                            className="rounded border-zinc-700"
-                          />
-                          <span className="truncate">{t.name}</span>
-                        </label>
+                          <label className="flex items-center justify-between gap-2 cursor-pointer">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isDirectChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedDeps([...selectedDeps, candidate.id]);
+                                  else setSelectedDeps(selectedDeps.filter((id) => id !== candidate.id));
+                                }}
+                                className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
+                              />
+                              <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1 text-[9px] font-mono text-zinc-400 flex-shrink-0">
+                              <span className="px-1 py-0.2 rounded bg-zinc-800">{candidate.owner}</span>
+                              {candidate.batch && candidate.batch !== 'None' && (
+                                <span className={`px-1 py-0.2 rounded font-bold ${getBatchStyle(candidate.batch).badge}`}>
+                                  {candidate.batch}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+
+                          {/* Render Sub-dependencies chain preview if selected */}
+                          {isDirectChecked && upstreamSubDeps.length > 0 && (
+                            <div className="mt-1 pl-4 pt-1 border-t border-indigo-500/20 text-[10px] text-indigo-300 flex items-center gap-1.5 flex-wrap">
+                              <CornerDownRight className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                              <span className="font-mono text-zinc-400">Chained Prereqs:</span>
+                              {upstreamSubDeps.map((sub, sIdx) => (
+                                <span
+                                  key={sub.id + sIdx}
+                                  className="px-1.5 py-0.2 rounded bg-zinc-800/80 text-zinc-300 border border-zinc-700"
+                                >
+                                  {sub.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       );
                     })
                 )}
@@ -1106,7 +1166,7 @@ export default function Page() {
                 onClick={saveTask}
                 className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
               >
-                Save
+                Save Task
               </button>
             </div>
           </div>
