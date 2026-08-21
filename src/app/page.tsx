@@ -17,6 +17,8 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   GripVertical,
   Timer,
   Layers,
@@ -44,20 +46,12 @@ interface Task {
 }
 
 const STORAGE_KEY = 'smart_task_manager_v1';
+const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
+
+const DEFAULT_BATCH_ORDER: BatchTag[] = ['Batch 1', 'Batch 2', 'Batch 3', 'Batch 4', 'Batch 5'];
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
-
-function batchWeight(b: BatchTag = 'None'): number {
-  switch (b) {
-    case 'Batch 1': return 1;
-    case 'Batch 2': return 2;
-    case 'Batch 3': return 3;
-    case 'Batch 4': return 4;
-    case 'Batch 5': return 5;
-    default: return 99;
-  }
 }
 
 function formatElapsed(seconds: number): string {
@@ -81,6 +75,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
         dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
         dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
+        tabActive: 'bg-sky-500/20 text-sky-300 border-sky-500',
       };
     case 'Batch 2':
       return {
@@ -90,6 +85,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
         dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
         dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
+        tabActive: 'bg-purple-500/20 text-purple-300 border-purple-500',
       };
     case 'Batch 3':
       return {
@@ -99,6 +95,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
         dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
         dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
+        tabActive: 'bg-amber-500/20 text-amber-300 border-amber-500',
       };
     case 'Batch 4':
       return {
@@ -108,6 +105,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
         dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
         dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
+        tabActive: 'bg-emerald-500/20 text-emerald-300 border-emerald-500',
       };
     case 'Batch 5':
       return {
@@ -117,6 +115,7 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
         dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
         dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
+        tabActive: 'bg-rose-500/20 text-rose-300 border-rose-500',
       };
     default:
       return {
@@ -126,12 +125,14 @@ export function getBatchTheme(batch: BatchTag = 'None') {
         badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
         dropdown: 'bg-zinc-900 text-zinc-400 border-zinc-700',
         dagNode: 'bg-zinc-900 border-zinc-700 text-zinc-200',
+        tabActive: 'bg-zinc-800 text-zinc-300 border-zinc-700',
       };
   }
 }
 
 export default function Page() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
@@ -170,9 +171,21 @@ export default function Page() {
     paths: [],
   });
 
+  // Dynamic Batch Weight based on active user-defined priority order
+  const getBatchWeight = (b: BatchTag = 'None'): number => {
+    if (b === 'None') return 999;
+    const idx = batchPriorityOrder.indexOf(b);
+    return idx !== -1 ? idx : 99;
+  };
+
   // Initial Load from LocalStorage
   useEffect(() => {
     try {
+      const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
+      if (storedOrder) {
+        setBatchPriorityOrder(JSON.parse(storedOrder));
+      }
+
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -209,6 +222,33 @@ export default function Page() {
     }
   };
 
+  const saveBatchOrder = (newOrder: BatchTag[]) => {
+    setBatchPriorityOrder(newOrder);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(BATCH_ORDER_KEY, JSON.stringify(newOrder));
+    }
+  };
+
+  // Move batch priority up (left) or down (right)
+  const shiftBatchPriority = (batch: BatchTag, direction: 'left' | 'right') => {
+    const idx = batchPriorityOrder.indexOf(batch);
+    if (idx === -1) return;
+    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= batchPriorityOrder.length) return;
+
+    const newOrder = [...batchPriorityOrder];
+    const temp = newOrder[idx];
+    newOrder[idx] = newOrder[targetIdx];
+    newOrder[targetIdx] = temp;
+    saveBatchOrder(newOrder);
+  };
+
+  // Promote batch directly to #1 priority
+  const setTopBatchPriority = (batch: BatchTag) => {
+    const remaining = batchPriorityOrder.filter((b) => b !== batch);
+    saveBatchOrder([batch, ...remaining]);
+  };
+
   const computedStatus = (t: Task): 'done' | 'progress' | 'blocked' | 'ready' => {
     if (t.manualStatus === 'done') return 'done';
     if (t.manualStatus === 'progress') return 'progress';
@@ -236,7 +276,6 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
-  // Change batch tag on task
   const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
@@ -282,17 +321,16 @@ export default function Page() {
     done: [],
   };
 
-  // Group and sort tasks by Batch (Batch 1 -> Batch 2 -> Batch 3 -> Batch 4 -> Batch 5 -> None)
   filtered.forEach((t) => {
     const st = computedStatus(t);
     groups[st].push(t);
   });
 
-  // Enforce batch-based sorting in each Board column
+  // Enforce dynamic user batch priority order in each Board column
   (['blocked', 'ready', 'progress', 'done'] as const).forEach((key) => {
     groups[key].sort((a, b) => {
-      const bwA = batchWeight(a.batch);
-      const bwB = batchWeight(b.batch);
+      const bwA = getBatchWeight(a.batch);
+      const bwB = getBatchWeight(b.batch);
       if (bwA !== bwB) return bwA - bwB;
       return a.createdAt - b.createdAt;
     });
@@ -341,7 +379,7 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, filtered, ownerFilter, batchFilter, search]);
+  }, [view, filtered, ownerFilter, batchFilter, search, batchPriorityOrder]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -378,7 +416,6 @@ export default function Page() {
     );
   };
 
-  // Reopen task resets timer completely to ZERO
   const reopenTask = (id: string) => {
     saveTasks(
       tasks.map((t) =>
@@ -487,7 +524,7 @@ export default function Page() {
     return chain;
   };
 
-  // Topological DAG calculation with BATCH PRIORITY & straight-lane sorting
+  // Topological DAG calculation with DYNAMIC BATCH PRIORITY & straight-lane sorting
   const getAlignedLevels = () => {
     const sourceTasks = filtered;
     const byId = new Map(sourceTasks.map((t) => [t.id, t]));
@@ -519,11 +556,10 @@ export default function Page() {
     orderedLevelKeys.forEach((lvl) => {
       const list = levels[lvl];
 
-      // 1. Sort primarily by Batch (Batch 1 -> Batch 2 -> Batch 3 -> Batch 4 -> Batch 5 -> None)
-      // 2. If same batch, sort by predecessor's lane so connected paths stay straight!
+      // Sort primarily by active batch priority order
       list.sort((a, b) => {
-        const bwA = batchWeight(a.batch);
-        const bwB = batchWeight(b.batch);
+        const bwA = getBatchWeight(a.batch);
+        const bwB = getBatchWeight(b.batch);
         if (bwA !== bwB) return bwA - bwB;
 
         const predA = (a.dependencies || [])[0];
@@ -573,6 +609,48 @@ export default function Page() {
               <GitFork className="w-3 h-3" /> DAG Graph
             </button>
           </div>
+        </div>
+
+        {/* Batch Priority Reordering Strip */}
+        <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-md">
+          <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1">
+            <Layers className="w-3 h-3 text-indigo-400" /> Order:
+          </span>
+          {batchPriorityOrder.map((b, idx) => {
+            const theme = getBatchTheme(b);
+            return (
+              <div
+                key={b}
+                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition ${theme.badge}`}
+              >
+                <button
+                  onClick={() => setTopBatchPriority(b)}
+                  title={`Set ${b} as #1 priority`}
+                  className="hover:underline"
+                >
+                  {b}
+                </button>
+                <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
+                  <button
+                    disabled={idx === 0}
+                    onClick={() => shiftBatchPriority(b, 'left')}
+                    className="p-0.2 hover:text-white disabled:opacity-20"
+                    title="Shift Priority Earlier"
+                  >
+                    <ArrowLeft className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    disabled={idx === batchPriorityOrder.length - 1}
+                    onClick={() => shiftBatchPriority(b, 'right')}
+                    className="p-0.2 hover:text-white disabled:opacity-20"
+                    title="Shift Priority Later"
+                  >
+                    <ArrowRight className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-1.5">
