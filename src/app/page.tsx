@@ -49,6 +49,17 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+function batchWeight(b: BatchTag = 'None'): number {
+  switch (b) {
+    case 'Batch 1': return 1;
+    case 'Batch 2': return 2;
+    case 'Batch 3': return 3;
+    case 'Batch 4': return 4;
+    case 'Batch 5': return 5;
+    default: return 99;
+  }
+}
+
 function formatElapsed(seconds: number): string {
   if (!seconds || seconds <= 0) return '0s';
   const hrs = Math.floor(seconds / 3600);
@@ -59,7 +70,6 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-// Full element background, border, text & badge styling with high contrast readability
 export function getBatchTheme(batch: BatchTag = 'None') {
   switch (batch) {
     case 'Batch 1':
@@ -174,6 +184,16 @@ export default function Page() {
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
           }))
         );
+      } else {
+        const a = uid(), b = uid(), c = uid(), d = uid();
+        const initialTasks: Task[] = [
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2 },
+          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3 },
+        ];
+        setTasks(initialTasks);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
       }
     } catch (err) {
       console.warn('LocalStorage access error:', err);
@@ -265,9 +285,9 @@ export default function Page() {
     groups[st].push(t);
   });
 
-  // Straight horizontal dependency lines calculation
+  // Straight horizontal dependency lines calculation for DAG
   useLayoutEffect(() => {
-    if (view !== 'dependency' || !stageRef.current || !tasks.length) return;
+    if (view !== 'dependency' || !stageRef.current || !filtered.length) return;
 
     const timer = setTimeout(() => {
       const stage = stageRef.current;
@@ -278,7 +298,7 @@ export default function Page() {
       const height = stage.scrollHeight;
       const paths: string[] = [];
 
-      tasks.forEach((targetTask) => {
+      filtered.forEach((targetTask) => {
         (targetTask.dependencies || []).forEach((depId) => {
           const source = stage.querySelector(`[data-node-id="${depId}"]`);
           const target = stage.querySelector(`[data-node-id="${targetTask.id}"]`);
@@ -308,7 +328,7 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, tasks, ownerFilter, batchFilter, search]);
+  }, [view, filtered, ownerFilter, batchFilter, search]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -438,7 +458,6 @@ export default function Page() {
     return formatElapsed(totalSec);
   };
 
-  // Helper to trace full upstream dependency chain for any task
   const getUpstreamChain = (taskId: string, stack = new Set<string>()): Task[] => {
     if (stack.has(taskId)) return [];
     stack.add(taskId);
@@ -455,8 +474,10 @@ export default function Page() {
     return chain;
   };
 
+  // Topological DAG calculation with BATCH PRIORITY & straight-lane sorting
   const getAlignedLevels = () => {
-    const byId = new Map(tasks.map((t) => [t.id, t]));
+    const sourceTasks = filtered;
+    const byId = new Map(sourceTasks.map((t) => [t.id, t]));
     const memo = new Map<string, number>();
 
     function levelOf(task: Task, stack = new Set<string>()): number {
@@ -474,7 +495,7 @@ export default function Page() {
     }
 
     const levels: Record<number, Task[]> = {};
-    tasks.forEach((t) => {
+    sourceTasks.forEach((t) => {
       const l = levelOf(t);
       (levels[l] ||= []).push(t);
     });
@@ -484,22 +505,27 @@ export default function Page() {
 
     orderedLevelKeys.forEach((lvl) => {
       const list = levels[lvl];
-      if (lvl === 0) {
-        list.forEach((t, i) => laneMap.set(t.id, i));
-      } else {
-        list.sort((a, b) => {
-          const predA = (a.dependencies || [])[0];
-          const predB = (b.dependencies || [])[0];
-          const laneA = predA ? laneMap.get(predA) ?? 999 : 999;
-          const laneB = predB ? laneMap.get(predB) ?? 999 : 999;
-          return laneA - laneB;
-        });
-        list.forEach((t, i) => {
-          const pred = (t.dependencies || [])[0];
-          const inheritedLane = pred ? laneMap.get(pred) : undefined;
-          laneMap.set(t.id, inheritedLane !== undefined ? inheritedLane : i);
-        });
-      }
+
+      // 1. Sort primarily by Batch (Batch 1 -> Batch 2 -> Batch 3 -> Batch 4 -> Batch 5 -> None)
+      // 2. If same batch or root, sort by predecessor's lane so connected paths stay straight!
+      list.sort((a, b) => {
+        const bwA = batchWeight(a.batch);
+        const bwB = batchWeight(b.batch);
+        if (bwA !== bwB) return bwA - bwB;
+
+        const predA = (a.dependencies || [])[0];
+        const predB = (b.dependencies || [])[0];
+        const laneA = predA ? laneMap.get(predA) ?? 999 : 999;
+        const laneB = predB ? laneMap.get(predB) ?? 999 : 999;
+        return laneA - laneB;
+      });
+
+      // Assign horizontal row lane indices
+      list.forEach((t, i) => {
+        const pred = (t.dependencies || [])[0];
+        const inheritedLane = pred !== undefined ? laneMap.get(pred) : undefined;
+        laneMap.set(t.id, inheritedLane !== undefined ? inheritedLane : i);
+      });
     });
 
     return { levels, orderedLevels: orderedLevelKeys };
@@ -585,6 +611,7 @@ export default function Page() {
             <option value="Other">Other</option>
           </select>
 
+          {/* Batch Filter */}
           <select
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
