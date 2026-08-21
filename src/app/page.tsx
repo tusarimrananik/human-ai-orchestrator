@@ -33,8 +33,7 @@ import {
   User,
   Check,
   ListPlus,
-  CheckSquare,
-  Square,
+  Split,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -63,6 +62,7 @@ interface Task {
   name: string;
   owner: 'Me' | 'AI' | 'Other';
   batch: BatchTag;
+  isParallel?: boolean; // true = Parallel stream work, false/undefined = Standard sequential
   parallelGroup?: string; // e.g. "Development", "Study", etc.
   isGoal?: boolean; // true = Goal-oriented task, false/undefined = Normal task
   goalTarget?: string; // target outcome criteria (e.g. "Pass Jest tests", "Derive formula")
@@ -264,6 +264,7 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
+  const [parallelGroupFilter, setParallelGroupFilter] = useState(''); // Filter by Parallel Group / Mode
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -285,7 +286,8 @@ export default function Page() {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
-  const [taskParallelGroup, setTaskParallelGroup] = useState<string>('');
+  const [taskIsParallel, setTaskIsParallel] = useState(false); // Explicit Parallel Selector
+  const [taskParallelGroup, setTaskParallelGroup] = useState<string>('Development');
   const [taskIsGoal, setTaskIsGoal] = useState(false);
   const [taskGoalTarget, setTaskGoalTarget] = useState('');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
@@ -367,6 +369,7 @@ export default function Page() {
             description: t.description || t.doneRule || t.notes || '',
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
+            isParallel: typeof t.isParallel === 'boolean' ? t.isParallel : !!t.parallelGroup,
             parallelGroup: t.parallelGroup || '',
             isGoal: !!t.isGoal,
             goalTarget: t.goalTarget || '',
@@ -375,10 +378,10 @@ export default function Page() {
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', isGoal: true, goalTarget: 'Complete structure with working math derivations', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
-          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', isGoal: true, goalTarget: 'All pinout charts verified', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Development', isGoal: false, deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
-          { id: d, name: 'Study for CT exam', description: 'Solve practice problems', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Study', isGoal: true, goalTarget: '100% correct score on Question 1-3', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'Complete structure with working math derivations', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'All pinout charts verified', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', isGoal: false, deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: d, name: 'Study for CT exam', description: 'Solve practice problems', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Study', isGoal: true, goalTarget: '100% correct score on Question 1-3', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -509,12 +512,21 @@ export default function Page() {
   };
 
   const q = search.toLowerCase();
-  const filtered = tasks.filter(
-    (t) =>
-      (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
-      (!ownerFilter || t.owner === ownerFilter) &&
-      (!batchFilter || t.batch === batchFilter)
-  );
+  const filtered = tasks.filter((t) => {
+    const matchesSearch =
+      !q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + (t.notes || '')).toLowerCase().includes(q);
+    const matchesOwner = !ownerFilter || t.owner === ownerFilter;
+    const matchesBatch = !batchFilter || t.batch === batchFilter;
+    const matchesParallelGroup =
+      !parallelGroupFilter ||
+      (parallelGroupFilter === 'parallel_only'
+        ? t.isParallel || !!t.parallelGroup
+        : parallelGroupFilter === 'non_parallel_only'
+        ? !t.isParallel && !t.parallelGroup
+        : t.parallelGroup === parallelGroupFilter);
+
+    return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
+  });
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
     blocked: [],
@@ -583,7 +595,7 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, filtered, ownerFilter, batchFilter, search, batchPriorityOrder]);
+  }, [view, filtered, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -663,7 +675,8 @@ export default function Page() {
     setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
     setTaskBatch(current?.batch || 'None');
-    setTaskParallelGroup(current?.parallelGroup || '');
+    setTaskIsParallel(typeof current?.isParallel === 'boolean' ? current.isParallel : !!current?.parallelGroup);
+    setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
     setTaskIsGoal(!!current?.isGoal);
     setTaskGoalTarget(current?.goalTarget || '');
     setTaskDeadline(current?.deadline || '');
@@ -697,7 +710,8 @@ export default function Page() {
       name: pName,
       owner: newParentOwner,
       batch: taskBatch,
-      parallelGroup: taskParallelGroup,
+      isParallel: taskIsParallel,
+      parallelGroup: taskIsParallel ? taskParallelGroup : '',
       isGoal: false,
       deadline: '',
       estimate: '',
@@ -724,7 +738,8 @@ export default function Page() {
       name: cName,
       owner: newChildOwner,
       batch: taskBatch,
-      parallelGroup: taskParallelGroup,
+      isParallel: taskIsParallel,
+      parallelGroup: taskIsParallel ? taskParallelGroup : '',
       isGoal: false,
       deadline: '',
       estimate: '',
@@ -752,6 +767,7 @@ export default function Page() {
       name: input.name.trim(),
       owner: input.owner,
       batch: 'Batch 1',
+      isParallel: true,
       parallelGroup: groupName,
       isGoal: input.isGoal,
       goalTarget: input.isGoal ? input.goalTarget.trim() : '',
@@ -779,7 +795,7 @@ export default function Page() {
 
     const updated = tasks.map((t) => {
       if (selectedIds.includes(t.id)) {
-        return { ...t, parallelGroup: groupName, manualStatus: 'progress' as const };
+        return { ...t, isParallel: true, parallelGroup: groupName, manualStatus: 'progress' as const };
       }
       return t;
     });
@@ -806,7 +822,7 @@ export default function Page() {
 
   // Remove a task from a parallel group
   const handleRemoveTaskFromGroup = (taskId: string) => {
-    const updated = tasks.map((t) => (t.id === taskId ? { ...t, parallelGroup: '' } : t));
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, isParallel: false, parallelGroup: '' } : t));
     saveTasks(updated);
   };
 
@@ -826,7 +842,8 @@ export default function Page() {
       description: taskDescription.trim(),
       owner: taskOwner,
       batch: taskBatch,
-      parallelGroup: taskParallelGroup,
+      isParallel: taskIsParallel,
+      parallelGroup: taskIsParallel ? taskParallelGroup : '',
       isGoal: taskIsGoal,
       goalTarget: taskIsGoal ? taskGoalTarget.trim() : '',
       deadline: taskDeadline,
@@ -966,7 +983,7 @@ export default function Page() {
     const ungroupedList: Task[] = [];
 
     inProgressList.forEach((t) => {
-      if (t.parallelGroup) {
+      if (t.isParallel && t.parallelGroup) {
         (groupedMap[t.parallelGroup] ||= []).push(t);
       } else {
         ungroupedList.push(t);
@@ -1049,7 +1066,7 @@ export default function Page() {
           <div className="space-y-1">
             {activeGroupNames.length > 0 && (
               <div className="text-[9px] font-bold uppercase text-zinc-500 px-1 pt-1">
-                Individual Tasks
+                Standard (Sequential) Tasks
               </div>
             )}
             {ungroupedList.map((t) => renderTaskCard(t, 'progress'))}
@@ -1099,9 +1116,9 @@ export default function Page() {
                 Normal
               </span>
             )}
-            {t.parallelGroup && (
-              <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                {t.parallelGroup}
+            {t.isParallel && t.parallelGroup && (
+              <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
+                <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
               </span>
             )}
           </div>
@@ -1340,7 +1357,7 @@ export default function Page() {
         </div>
       </header>
 
-      {/* Filter Row */}
+      {/* Filter Row with Parallel Group View Filter */}
       <div className="px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 flex items-center justify-between gap-2 flex-shrink-0">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
@@ -1353,6 +1370,22 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Parallel Group Stream Filter */}
+          <select
+            value={parallelGroupFilter}
+            onChange={(e) => setParallelGroupFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-indigo-300 focus:outline-none font-medium"
+          >
+            <option value="">All Streams (Parallel & Standard)</option>
+            <option value="parallel_only">⚡ All Parallel Work Only</option>
+            <option value="non_parallel_only">Standard (Non-Parallel) Only</option>
+            {parallelGroups.map((g) => (
+              <option key={g.id} value={g.name}>
+                📁 {g.name} Stream
+              </option>
+            ))}
+          </select>
+
           <select
             value={ownerFilter}
             onChange={(e) => setOwnerFilter(e.target.value)}
@@ -1577,6 +1610,54 @@ export default function Page() {
               </div>
             </div>
 
+            {/* Parallel Work Selector Option */}
+            <div className="p-2.5 bg-indigo-950/20 border border-indigo-500/30 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-indigo-300 flex items-center gap-1">
+                  <Split className="w-3 h-3 text-indigo-400" /> Work Type (Parallel Stream vs. Standard)
+                </span>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="parallelChoice"
+                      checked={!taskIsParallel}
+                      onChange={() => setTaskIsParallel(false)}
+                      className="text-indigo-600"
+                    />
+                    <span className="text-zinc-300">Standard Sequential</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="parallelChoice"
+                      checked={taskIsParallel}
+                      onChange={() => setTaskIsParallel(true)}
+                      className="text-indigo-500"
+                    />
+                    <span className="text-indigo-300 font-semibold">⚡ Parallel Group Work</span>
+                  </label>
+                </div>
+              </div>
+
+              {taskIsParallel && (
+                <div className="flex items-center gap-2 pt-1 border-t border-indigo-500/20">
+                  <span className="text-[10px] text-zinc-400 font-semibold flex-shrink-0">Assign to Parallel Stream:</span>
+                  <select
+                    value={taskParallelGroup}
+                    onChange={(e) => setTaskParallelGroup(e.target.value)}
+                    className="flex-1 bg-zinc-950 border border-indigo-500/40 rounded px-2 py-1 text-xs text-indigo-200 font-bold"
+                  >
+                    {parallelGroups.map((g) => (
+                      <option key={g.id} value={g.name}>
+                        📁 {g.name} [{g.slotLimit} active slots]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
             {/* Task Nature Option (Normal vs Goal-Oriented) */}
             <div className="p-2 bg-zinc-950/80 border border-zinc-800 rounded-lg space-y-2">
               <div className="flex items-center justify-between">
@@ -1632,7 +1713,7 @@ export default function Page() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
                   Assignee
@@ -1661,24 +1742,6 @@ export default function Page() {
                   {ALL_BATCHES.map((b) => (
                     <option key={b} value={b}>
                       {b}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
-                  <FolderKanban className="w-3 h-3 text-indigo-400" /> Parallel Group
-                </label>
-                <select
-                  value={taskParallelGroup}
-                  onChange={(e) => setTaskParallelGroup(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
-                >
-                  <option value="">None (Individual)</option>
-                  {parallelGroups.map((g) => (
-                    <option key={g.id} value={g.name}>
-                      {g.name} [{g.slotLimit} slots]
                     </option>
                   ))}
                 </select>
@@ -1980,12 +2043,12 @@ export default function Page() {
             {/* Groups List with Multi-Select Existing Tasks & New Task Queuers */}
             <div className="space-y-4">
               {parallelGroups.map((grp) => {
-                const grpTasks = tasks.filter((t) => t.parallelGroup === grp.name && computedStatus(t) !== 'done');
+                const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) !== 'done');
                 const formState = queueTaskInputs[grp.name] || { name: '', isGoal: false, goalTarget: '', owner: 'AI' };
                 const searchTxt = (groupQueueSearch[grp.name] || '').toLowerCase();
                 const availableTasks = tasks.filter(
                   (t) =>
-                    t.parallelGroup !== grp.name &&
+                    (!t.isParallel || t.parallelGroup !== grp.name) &&
                     computedStatus(t) !== 'done' &&
                     (!searchTxt || t.name.toLowerCase().includes(searchTxt) || t.batch.toLowerCase().includes(searchTxt))
                 );
