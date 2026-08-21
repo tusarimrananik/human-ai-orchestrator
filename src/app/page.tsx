@@ -34,6 +34,9 @@ import {
   Check,
   ListPlus,
   Split,
+  CheckSquare,
+  Square,
+  ListTodo,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -57,6 +60,12 @@ export interface ParallelGroupConfig {
   slotLimit: number; // e.g. Development = 3, Study = 1
 }
 
+export interface SubTask {
+  id: string;
+  name: string;
+  status: 'todo' | 'done';
+}
+
 interface Task {
   id: string;
   name: string;
@@ -66,6 +75,7 @@ interface Task {
   parallelGroup?: string; // e.g. "Development", "Study", etc.
   isGoal?: boolean; // true = Goal-oriented task, false/undefined = Normal task
   goalTarget?: string; // target outcome criteria (e.g. "Pass Jest tests", "Derive formula")
+  subTasks?: SubTask[]; // Sub-tasks breakdown (e.g. solve question 1, 2, 3)
   deadline: string;
   estimate: string;
   description?: string;
@@ -264,7 +274,7 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
-  const [parallelGroupFilter, setParallelGroupFilter] = useState(''); // Filter by Parallel Group / Mode
+  const [parallelGroupFilter, setParallelGroupFilter] = useState('');
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -286,10 +296,12 @@ export default function Page() {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
-  const [taskIsParallel, setTaskIsParallel] = useState(false); // Explicit Parallel Selector
+  const [taskIsParallel, setTaskIsParallel] = useState(false);
   const [taskParallelGroup, setTaskParallelGroup] = useState<string>('Development');
   const [taskIsGoal, setTaskIsGoal] = useState(false);
   const [taskGoalTarget, setTaskGoalTarget] = useState('');
+  const [taskSubTasks, setTaskSubTasks] = useState<SubTask[]>([]);
+  const [newSubTaskInput, setNewSubTaskInput] = useState('');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
@@ -373,6 +385,7 @@ export default function Page() {
             parallelGroup: t.parallelGroup || '',
             isGoal: !!t.isGoal,
             goalTarget: t.goalTarget || '',
+            subTasks: t.subTasks || [],
           }))
         );
       } else {
@@ -381,7 +394,29 @@ export default function Page() {
           { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'Complete structure with working math derivations', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
           { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', isParallel: true, parallelGroup: 'Development', isGoal: true, goalTarget: 'All pinout charts verified', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
           { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Development', isGoal: false, deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
-          { id: d, name: 'Study for CT exam', description: 'Solve practice problems', owner: 'Me', batch: 'Batch 2', isParallel: true, parallelGroup: 'Study', isGoal: true, goalTarget: '100% correct score on Question 1-3', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
+          {
+            id: d,
+            name: 'Study Numerical Methods',
+            description: 'Solve CT preparation problem sets',
+            owner: 'Me',
+            batch: 'Batch 2',
+            isParallel: true,
+            parallelGroup: 'Study',
+            isGoal: true,
+            goalTarget: '100% correct score on Question 1-3',
+            subTasks: [
+              { id: 'sub_1', name: 'Solve Question 1 (Newton-Raphson)', status: 'done' },
+              { id: 'sub_2', name: 'Solve Question 2 (Runge-Kutta 4th)', status: 'todo' },
+              { id: 'sub_3', name: 'Solve Question 3 (Gauss-Seidel)', status: 'todo' },
+            ],
+            deadline: '',
+            estimate: '45m',
+            notes: '',
+            dependencies: [b],
+            manualStatus: 'todo',
+            createdAt: Date.now() + 3,
+            order: 3,
+          },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -473,6 +508,18 @@ export default function Page() {
     saveTasks(updated);
   };
 
+  // Toggle sub-task checkbox on a task card
+  const toggleSubTask = (taskId: string, subId: string) => {
+    const updated = tasks.map((t) => {
+      if (t.id === taskId && t.subTasks) {
+        const nextSubs = t.subTasks.map((s) => (s.id === subId ? { ...s, status: s.status === 'done' ? ('todo' as const) : ('done' as const) } : s));
+        return { ...t, subTasks: nextSubs };
+      }
+      return t;
+    });
+    saveTasks(updated);
+  };
+
   // Drag and Drop handlers restricted within same batch
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId);
@@ -513,8 +560,9 @@ export default function Page() {
 
   const q = search.toLowerCase();
   const filtered = tasks.filter((t) => {
+    const subText = (t.subTasks || []).map((s) => s.name).join(' ');
     const matchesSearch =
-      !q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + (t.notes || '')).toLowerCase().includes(q);
+      !q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + subText + ' ' + (t.notes || '')).toLowerCase().includes(q);
     const matchesOwner = !ownerFilter || t.owner === ownerFilter;
     const matchesBatch = !batchFilter || t.batch === batchFilter;
     const matchesParallelGroup =
@@ -679,6 +727,8 @@ export default function Page() {
     setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
     setTaskIsGoal(!!current?.isGoal);
     setTaskGoalTarget(current?.goalTarget || '');
+    setTaskSubTasks(current?.subTasks || []);
+    setNewSubTaskInput('');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
 
@@ -755,6 +805,18 @@ export default function Page() {
     setSelectedChildren((prev) => [...prev, childId]);
     setNewChildName('');
     setShowAddChild(false);
+  };
+
+  // Add a subtask inside modal
+  const handleAddSubTask = () => {
+    const title = newSubTaskInput.trim();
+    if (!title) return;
+    setTaskSubTasks((prev) => [...prev, { id: uid(), name: title, status: 'todo' }]);
+    setNewSubTaskInput('');
+  };
+
+  const handleRemoveSubTask = (subId: string) => {
+    setTaskSubTasks((prev) => prev.filter((s) => s.id !== subId));
   };
 
   // Quick Queue: Add BRAND NEW Task directly into group queue
@@ -846,6 +908,7 @@ export default function Page() {
       parallelGroup: taskIsParallel ? taskParallelGroup : '',
       isGoal: taskIsGoal,
       goalTarget: taskIsGoal ? taskGoalTarget.trim() : '',
+      subTasks: taskSubTasks,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
       notes: '',
@@ -1090,6 +1153,9 @@ export default function Page() {
     const isFirstInBatch = posInBatch === 0;
     const isLastInBatch = posInBatch === batchSiblings.length - 1;
 
+    const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
+    const totalSubsCount = (t.subTasks || []).length;
+
     return (
       <div
         key={t.id}
@@ -1181,6 +1247,38 @@ export default function Page() {
             {t.description}
           </p>
         ) : null}
+
+        {/* Sub-Tasks Checklist Breakdown */}
+        {t.subTasks && t.subTasks.length > 0 && (
+          <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
+            <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
+              <span className="flex items-center gap-1">
+                <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
+              </span>
+              <span className="font-mono text-[8px] text-emerald-400">
+                {completedSubsCount}/{totalSubsCount} Done
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {t.subTasks.map((st) => (
+                <div
+                  key={st.id}
+                  onClick={() => toggleSubTask(t.id, st.id)}
+                  className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
+                >
+                  {st.status === 'done' ? (
+                    <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  ) : (
+                    <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+                  )}
+                  <span className={`truncate ${st.status === 'done' ? 'line-through opacity-60 text-zinc-400' : ''}`}>
+                    {st.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {waiting.length > 0 && (
           <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
@@ -1362,7 +1460,7 @@ export default function Page() {
         <div className="relative flex-1 max-w-xs">
           <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
           <input
-            placeholder="Search tasks..."
+            placeholder="Search tasks or sub-tasks..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
@@ -1544,7 +1642,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal */}
+      {/* Task Edit/Create Modal (With Sub-Tasks Breakdown Section) */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1572,7 +1670,7 @@ export default function Page() {
                 <input
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  placeholder="e.g. Write prompt for homepage design"
+                  placeholder="e.g. Study numerical methods"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -1607,6 +1705,66 @@ export default function Page() {
                     DONE
                   </option>
                 </select>
+              </div>
+            </div>
+
+            {/* Sub-Tasks Breakdown Section */}
+            <div className="p-2.5 bg-zinc-950/90 border border-zinc-800 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1">
+                  <ListTodo className="w-3 h-3 text-indigo-400" /> Sub-Tasks Breakdown (e.g. Solve Question 1, 2, 3)
+                </span>
+                <span className="text-[9px] text-zinc-500 font-mono">
+                  {taskSubTasks.filter((s) => s.status === 'done').length}/{taskSubTasks.length} Done
+                </span>
+              </div>
+
+              {taskSubTasks.length > 0 && (
+                <div className="space-y-1">
+                  {taskSubTasks.map((st, idx) => (
+                    <div
+                      key={st.id}
+                      className="p-1 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-1 text-[11px]"
+                    >
+                      <div className="flex items-center gap-2 truncate flex-1">
+                        <span className="font-mono text-[9px] text-zinc-500">#{idx + 1}</span>
+                        <span className={`truncate text-zinc-200 ${st.status === 'done' ? 'line-through opacity-50' : ''}`}>
+                          {st.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSubTask(st.id)}
+                        className="p-0.5 text-zinc-500 hover:text-rose-400"
+                        title="Remove sub-task"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  placeholder="Add sub-task (e.g. Solve question 1)..."
+                  value={newSubTaskInput}
+                  onChange={(e) => setNewSubTaskInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSubTask();
+                    }
+                  }}
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddSubTask}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded"
+                >
+                  + Add Sub-Task
+                </button>
               </div>
             </div>
 
