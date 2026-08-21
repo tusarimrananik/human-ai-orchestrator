@@ -1396,13 +1396,15 @@ export default function Page() {
           >
             <Pencil className="w-3 h-3" />
           </button>
-          <button
-            onClick={() => deleteTask(t.id)}
-            className="p-0.5 text-zinc-400 hover:text-rose-400"
-            title="Delete"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
+          {colKey === 'done' && (
+            <button
+              onClick={() => deleteTask(t.id)}
+              className="p-0.5 text-zinc-400 hover:text-rose-400"
+              title="Delete"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
     );
