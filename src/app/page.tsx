@@ -788,8 +788,21 @@ export default function Page() {
         const nextInLine = sortedCandidates[0];
 
         if (nextInLine) {
+          const maxOrder = Math.max(
+            ...updated
+              .filter((t) => t.isParallel && t.parallelGroup === target.parallelGroup && t.manualStatus === 'progress')
+              .map((t) => (typeof t.order === 'number' ? t.order : t.createdAt)),
+            Date.now()
+          );
           updated = updated.map((t) =>
-            t.id === nextInLine.id ? { ...t, manualStatus: 'progress' as const, startedAt: Date.now() } : t
+            t.id === nextInLine.id
+              ? {
+                  ...t,
+                  manualStatus: 'progress' as const,
+                  startedAt: Date.now(),
+                  order: maxOrder + 1,
+                }
+              : t
           );
         }
       }
