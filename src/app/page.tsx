@@ -867,20 +867,31 @@ export default function Page() {
     setReviewingTaskId(null);
   };
 
-  // Goal Task Option: Retry (resets active timer and increments turn completion)
+  // Goal Task Option: Retry (moves task to last position, resets timer, and increments turn completion)
   const retryGoalTask = (id: string) => {
     const target = tasks.find((t) => t.id === id);
+    if (!target) return;
+
+    // Calculate maximum order among active in-progress tasks to put this task at the bottom (last)
+    const maxOrder = Math.max(
+      ...tasks
+        .filter((t) => t.isParallel === target.isParallel && t.parallelGroup === target.parallelGroup && t.manualStatus === 'progress')
+        .map((t) => (typeof t.order === 'number' ? t.order : t.createdAt)),
+      Date.now()
+    );
+
     const updated = tasks.map((t) =>
       t.id === id
         ? {
             ...t,
             manualStatus: 'progress' as const,
             startedAt: Date.now(),
+            order: maxOrder + 1, // Moves from top to the very bottom / last position
           }
         : t
     );
 
-    if (target?.isParallel && target?.parallelGroup) {
+    if (target.isParallel && target.parallelGroup) {
       advanceTurnCounter(target.parallelGroup, updated);
     }
 
