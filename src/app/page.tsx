@@ -37,6 +37,8 @@ import {
   CheckSquare,
   Square,
   ListTodo,
+  RotateCcw,
+  Ban,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -305,6 +307,12 @@ export default function Page() {
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
+
+  // Quick Blocker Modal State (Triggered when marking a task as Blocked)
+  const [quickBlockTaskId, setQuickBlockTaskId] = useState<string | null>(null);
+  const [quickBlockParentId, setQuickBlockParentId] = useState<string>('');
+  const [quickBlockNewParentName, setQuickBlockNewParentName] = useState<string>('');
+  const [quickBlockNewParentOwner, setQuickBlockNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
 
   // Parallel Group Config Modal & Multi-Select Queue State
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
@@ -661,7 +669,8 @@ export default function Page() {
     );
   };
 
-  const finishTask = (id: string) => {
+  // Goal Task: Option 1 - Goal Reached (Done)
+  const finishGoalReached = (id: string) => {
     saveTasks(
       tasks.map((t) => {
         if (t.id === id) {
@@ -678,6 +687,76 @@ export default function Page() {
         return t;
       })
     );
+  };
+
+  // Goal Task: Option 2 - Retry (Try Again)
+  const retryGoalTask = (id: string) => {
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            manualStatus: 'progress',
+            startedAt: Date.now(), // reset active iteration timer
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  // Goal Task: Option 3 - Mark Blocked & assign parent blocker
+  const openQuickBlockModal = (taskId: string) => {
+    setQuickBlockTaskId(taskId);
+    setQuickBlockParentId('');
+    setQuickBlockNewParentName('');
+    setQuickBlockNewParentOwner('Other');
+  };
+
+  const handleConfirmQuickBlock = () => {
+    if (!quickBlockTaskId) return;
+
+    let finalParentId = quickBlockParentId;
+    let updatedTasks = [...tasks];
+
+    // If user typed a new blocker parent name, create it on the fly
+    if (!finalParentId && quickBlockNewParentName.trim()) {
+      finalParentId = uid();
+      const currentBlocked = tasks.find((t) => t.id === quickBlockTaskId);
+      const newParent: Task = {
+        id: finalParentId,
+        name: quickBlockNewParentName.trim(),
+        owner: quickBlockNewParentOwner,
+        batch: currentBlocked?.batch || 'Batch 1',
+        isGoal: false,
+        deadline: '',
+        estimate: '',
+        description: `Prerequisite blocker for ${currentBlocked?.name || 'task'}`,
+        dependencies: [],
+        manualStatus: 'progress', // parent is active/in progress
+        createdAt: Date.now() - 100,
+        order: 0,
+        totalTimeSpentSeconds: 0,
+      };
+      updatedTasks = [newParent, ...updatedTasks];
+    }
+
+    // Attach parent blocker to the target task and set its status to todo (which automatically evaluates to blocked)
+    updatedTasks = updatedTasks.map((t) => {
+      if (t.id === quickBlockTaskId) {
+        const nextDeps = finalParentId ? Array.from(new Set([...(t.dependencies || []), finalParentId])) : t.dependencies;
+        return {
+          ...t,
+          manualStatus: 'todo' as const,
+          dependencies: nextDeps,
+          startedAt: null,
+        };
+      }
+      return t;
+    });
+
+    saveTasks(updatedTasks);
+    setQuickBlockTaskId(null);
   };
 
   const reopenTask = (id: string) => {
@@ -807,7 +886,6 @@ export default function Page() {
     setShowAddChild(false);
   };
 
-  // Add a subtask inside modal
   const handleAddSubTask = () => {
     const title = newSubTaskInput.trim();
     if (!title) return;
@@ -1271,7 +1349,7 @@ export default function Page() {
                   ) : (
                     <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
                   )}
-                  <span className={`truncate ${st.status === 'done' ? 'line-through opacity-60 text-zinc-400' : ''}`}>
+                  <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
                     {st.name}
                   </span>
                 </div>
@@ -1306,23 +1384,55 @@ export default function Page() {
           )}
         </div>
 
+        {/* Dynamic Action Buttons */}
         <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
           {colKey === 'ready' && (
             <button
               onClick={() => startInProgress(t.id)}
-              className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold shadow"
+              className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold shadow"
             >
               Start
             </button>
           )}
-          {colKey === 'progress' && (
+
+          {/* 3 Options for Goal Tasks in Progress */}
+          {colKey === 'progress' && t.isGoal ? (
+            <div className="flex items-center gap-1 w-full justify-between">
+              <button
+                onClick={() => finishGoalReached(t.id)}
+                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5"
+                title="Goal satisfied and finished"
+              >
+                <Check className="w-2.5 h-2.5" /> Goal Reached
+              </button>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => openQuickBlockModal(t.id)}
+                  className="px-1.5 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-300 text-[10px] font-semibold flex items-center gap-0.5"
+                  title="Mark blocked and assign parent prerequisite"
+                >
+                  <Ban className="w-2.5 h-2.5 text-rose-400" /> Blocked
+                </button>
+
+                <button
+                  onClick={() => retryGoalTask(t.id)}
+                  className="px-1.5 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 border border-amber-600 text-amber-300 text-[10px] font-semibold flex items-center gap-0.5"
+                  title="Try again / new prompt"
+                >
+                  <RotateCcw className="w-2.5 h-2.5 text-amber-400" /> Retry
+                </button>
+              </div>
+            </div>
+          ) : colKey === 'progress' && !t.isGoal ? (
             <button
-              onClick={() => finishTask(t.id)}
-              className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
+              onClick={() => finishGoalReached(t.id)}
+              className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
             >
-              {t.isGoal ? 'Goal Reached (Done)' : 'Done'}
+              Done
             </button>
-          )}
+          ) : null}
+
           {colKey === 'done' && (
             <button
               onClick={() => reopenTask(t.id)}
@@ -1331,6 +1441,7 @@ export default function Page() {
               Reopen
             </button>
           )}
+
           <button
             onClick={() => openTaskModal(t.id)}
             className="p-0.5 text-zinc-400 hover:text-white"
@@ -1350,7 +1461,7 @@ export default function Page() {
     );
   };
 
-  if (!mounted) return null;
+  const targetBlockedTask = tasks.find((t) => t.id === quickBlockTaskId);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
@@ -1641,6 +1752,92 @@ export default function Page() {
           </div>
         )}
       </main>
+
+      {/* Quick Blocker Assignment Modal (Opens when Goal Task clicks "Blocked") */}
+      {quickBlockTaskId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setQuickBlockTaskId(null);
+          }}
+        >
+          <div className="bg-zinc-900 border border-rose-600/50 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <span className="font-bold text-xs text-rose-300 flex items-center gap-1.5">
+                <Ban className="w-3.5 h-3.5 text-rose-400" />
+                Why is "{targetBlockedTask?.name}" blocked?
+              </span>
+              <button onClick={() => setQuickBlockTaskId(null)} className="text-zinc-500 hover:text-zinc-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[10px] uppercase font-bold text-zinc-400">
+                1. Select existing task causing the block:
+              </label>
+              <select
+                value={quickBlockParentId}
+                onChange={(e) => {
+                  setQuickBlockParentId(e.target.value);
+                  if (e.target.value) setQuickBlockNewParentName('');
+                }}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+              >
+                <option value="">-- Or create a new blocker below --</option>
+                {tasks
+                  .filter((t) => t.id !== quickBlockTaskId && computedStatus(t) !== 'done')
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.owner}) [{t.batch}]
+                    </option>
+                  ))}
+              </select>
+
+              <div className="pt-2 border-t border-zinc-800 space-y-1.5">
+                <label className="block text-[10px] uppercase font-bold text-zinc-400">
+                  2. Or type a new prerequisite blocker task:
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <input
+                    placeholder="e.g. Waiting for teacher syllabus / API key..."
+                    value={quickBlockNewParentName}
+                    onChange={(e) => {
+                      setQuickBlockNewParentName(e.target.value);
+                      if (e.target.value) setQuickBlockParentId('');
+                    }}
+                    className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                  />
+                  <select
+                    value={quickBlockNewParentOwner}
+                    onChange={(e) => setQuickBlockNewParentOwner(e.target.value as any)}
+                    className="bg-zinc-950 border border-zinc-800 rounded px-1 text-[10px] text-zinc-300"
+                  >
+                    <option value="Other">Other</option>
+                    <option value="AI">AI</option>
+                    <option value="Me">Me</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                onClick={() => setQuickBlockTaskId(null)}
+                className="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmQuickBlock}
+                className="px-3.5 py-1 bg-rose-600 hover:bg-rose-500 font-bold text-white rounded text-xs shadow"
+              >
+                Confirm Blocker & Move to Blocked
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Task Edit/Create Modal (With Sub-Tasks Breakdown Section) */}
       {isModalOpen && (
