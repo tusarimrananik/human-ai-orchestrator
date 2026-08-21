@@ -27,55 +27,69 @@ import {
   AlertCircle,
   ArrowRightCircle,
   Bot,
-  User,
-  Sparkles,
-  RefreshCw,
   Check,
-  ChevronRight,
-  Sliders,
 } from 'lucide-react';
 
-export type TaskType = 'normal' | 'ai_goal';
-export type AIGoalPhase = 'prompting' | 'working' | 'review';
+export type BatchTag =
+  | 'None'
+  | 'Batch 1'
+  | 'Batch 2'
+  | 'Batch 3'
+  | 'Batch 4'
+  | 'Batch 5'
+  | 'Batch 6'
+  | 'Batch 7'
+  | 'Batch 8'
+  | 'Batch 9'
+  | 'Batch 10'
+  | 'Batch 11'
+  | 'Batch 12';
 
-export interface TaskGroup {
+export interface SubWorkflowItem {
   id: string;
-  name: string;
-  slotLimit: number;
-  color: string;
+  title: string;
+  assignee: 'Me' | 'AI' | 'Other';
+  status: 'todo' | 'progress' | 'done';
 }
 
-export interface Task {
+interface Task {
   id: string;
   name: string;
-  type: TaskType;
   owner: 'Me' | 'AI' | 'Other';
-  groupId: string; // Belongs to a parallel task group (Development, Study, etc.)
+  batch: BatchTag;
   deadline: string;
   estimate: string;
   description?: string;
   notes?: string;
   dependencies: string[];
   manualStatus: 'todo' | 'progress' | 'done';
-  aiPhase?: AIGoalPhase;
-  aiPrompt?: string;
-  aiOutput?: string;
   createdAt: number;
   order?: number;
   startedAt?: number | null;
   completedAt?: number | null;
   totalTimeSpentSeconds?: number;
+  subWorkflows?: SubWorkflowItem[]; // Optional parallel sub-tasks / sub-prompts
 }
 
-const STORAGE_KEY = 'smart_task_manager_v2';
-const GROUPS_STORAGE_KEY = 'smart_task_groups_v2';
-const ACTIVE_TURN_KEY = 'smart_task_active_turn_v2';
+const STORAGE_KEY = 'smart_task_manager_v1';
+const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
 
-const DEFAULT_GROUPS: TaskGroup[] = [
-  { id: 'grp_dev', name: 'Development', slotLimit: 3, color: 'sky' },
-  { id: 'grp_study', name: 'Study', slotLimit: 1, color: 'emerald' },
-  { id: 'grp_business', name: 'Business', slotLimit: 2, color: 'purple' },
+export const ALL_BATCHES: BatchTag[] = [
+  'Batch 1',
+  'Batch 2',
+  'Batch 3',
+  'Batch 4',
+  'Batch 5',
+  'Batch 6',
+  'Batch 7',
+  'Batch 8',
+  'Batch 9',
+  'Batch 10',
+  'Batch 11',
+  'Batch 12',
 ];
+
+const DEFAULT_BATCH_ORDER: BatchTag[] = [...ALL_BATCHES];
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -91,62 +105,150 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-export function getGroupTheme(color: string = 'sky') {
-  switch (color) {
-    case 'sky':
+// 12 unique color themes for batches with high readability
+export function getBatchTheme(batch: BatchTag = 'None') {
+  switch (batch) {
+    case 'Batch 1':
       return {
         cardBg: 'bg-sky-950/40 border-sky-600/70 text-sky-100',
+        cardTitle: 'text-sky-100',
+        descBg: 'bg-sky-950/60 border-sky-800/60 text-sky-200/90',
         badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
-        activePill: 'bg-sky-600 text-white',
-        border: 'border-sky-500',
+        dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
+        dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
+        short: 'B1',
       };
-    case 'emerald':
-      return {
-        cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
-        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
-        activePill: 'bg-emerald-600 text-white',
-        border: 'border-emerald-500',
-      };
-    case 'purple':
+    case 'Batch 2':
       return {
         cardBg: 'bg-purple-950/40 border-purple-600/70 text-purple-100',
+        cardTitle: 'text-purple-100',
+        descBg: 'bg-purple-950/60 border-purple-800/60 text-purple-200/90',
         badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
-        activePill: 'bg-purple-600 text-white',
-        border: 'border-purple-500',
+        dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
+        dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
+        short: 'B2',
       };
-    case 'amber':
+    case 'Batch 3':
       return {
         cardBg: 'bg-amber-950/40 border-amber-600/70 text-amber-100',
+        cardTitle: 'text-amber-100',
+        descBg: 'bg-amber-950/60 border-amber-800/60 text-amber-200/90',
         badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
-        activePill: 'bg-amber-600 text-white',
-        border: 'border-amber-500',
+        dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
+        dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
+        short: 'B3',
       };
-    case 'rose':
+    case 'Batch 4':
+      return {
+        cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
+        cardTitle: 'text-emerald-100',
+        descBg: 'bg-emerald-950/60 border-emerald-800/60 text-emerald-200/90',
+        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
+        dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
+        dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
+        short: 'B4',
+      };
+    case 'Batch 5':
       return {
         cardBg: 'bg-rose-950/40 border-rose-600/70 text-rose-100',
+        cardTitle: 'text-rose-100',
+        descBg: 'bg-rose-950/60 border-rose-800/60 text-rose-200/90',
         badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
-        activePill: 'bg-rose-600 text-white',
-        border: 'border-rose-500',
+        dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
+        dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
+        short: 'B5',
+      };
+    case 'Batch 6':
+      return {
+        cardBg: 'bg-cyan-950/40 border-cyan-600/70 text-cyan-100',
+        cardTitle: 'text-cyan-100',
+        descBg: 'bg-cyan-950/60 border-cyan-800/60 text-cyan-200/90',
+        badge: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50',
+        dropdown: 'bg-cyan-950 text-cyan-300 border-cyan-700/80',
+        dagNode: 'bg-cyan-950/60 border-cyan-500 text-cyan-100',
+        short: 'B6',
+      };
+    case 'Batch 7':
+      return {
+        cardBg: 'bg-fuchsia-950/40 border-fuchsia-600/70 text-fuchsia-100',
+        cardTitle: 'text-fuchsia-100',
+        descBg: 'bg-fuchsia-950/60 border-fuchsia-800/60 text-fuchsia-200/90',
+        badge: 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/50',
+        dropdown: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-700/80',
+        dagNode: 'bg-fuchsia-950/60 border-fuchsia-500 text-fuchsia-100',
+        short: 'B7',
+      };
+    case 'Batch 8':
+      return {
+        cardBg: 'bg-lime-950/40 border-lime-600/70 text-lime-100',
+        cardTitle: 'text-lime-100',
+        descBg: 'bg-lime-950/60 border-lime-800/60 text-lime-200/90',
+        badge: 'bg-lime-500/20 text-lime-300 border border-lime-500/50',
+        dropdown: 'bg-lime-950 text-lime-300 border-lime-700/80',
+        dagNode: 'bg-lime-950/60 border-lime-500 text-lime-100',
+        short: 'B8',
+      };
+    case 'Batch 9':
+      return {
+        cardBg: 'bg-indigo-950/40 border-indigo-600/70 text-indigo-100',
+        cardTitle: 'text-indigo-100',
+        descBg: 'bg-indigo-950/60 border-indigo-800/60 text-indigo-200/90',
+        badge: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50',
+        dropdown: 'bg-indigo-950 text-indigo-300 border-indigo-700/80',
+        dagNode: 'bg-indigo-950/60 border-indigo-500 text-indigo-100',
+        short: 'B9',
+      };
+    case 'Batch 10':
+      return {
+        cardBg: 'bg-orange-950/40 border-orange-600/70 text-orange-100',
+        cardTitle: 'text-orange-100',
+        descBg: 'bg-orange-950/60 border-orange-800/60 text-orange-200/90',
+        badge: 'bg-orange-500/20 text-orange-300 border border-orange-500/50',
+        dropdown: 'bg-orange-950 text-orange-300 border-orange-700/80',
+        dagNode: 'bg-orange-950/60 border-orange-500 text-orange-100',
+        short: 'B10',
+      };
+    case 'Batch 11':
+      return {
+        cardBg: 'bg-teal-950/40 border-teal-600/70 text-teal-100',
+        cardTitle: 'text-teal-100',
+        descBg: 'bg-teal-950/60 border-teal-800/60 text-teal-200/90',
+        badge: 'bg-teal-500/20 text-teal-300 border border-teal-500/50',
+        dropdown: 'bg-teal-950 text-teal-300 border-teal-700/80',
+        dagNode: 'bg-teal-950/60 border-teal-500 text-teal-100',
+        short: 'B11',
+      };
+    case 'Batch 12':
+      return {
+        cardBg: 'bg-violet-950/40 border-violet-600/70 text-violet-100',
+        cardTitle: 'text-violet-100',
+        descBg: 'bg-violet-950/60 border-violet-800/60 text-violet-200/90',
+        badge: 'bg-violet-500/20 text-violet-300 border border-violet-500/50',
+        dropdown: 'bg-violet-950 text-violet-300 border-violet-700/80',
+        dagNode: 'bg-violet-950/60 border-violet-500 text-violet-100',
+        short: 'B12',
       };
     default:
       return {
         cardBg: 'bg-zinc-950 border-zinc-800 text-zinc-200',
+        cardTitle: 'text-zinc-100',
+        descBg: 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400',
         badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
-        activePill: 'bg-zinc-700 text-white',
-        border: 'border-zinc-700',
+        dropdown: 'bg-zinc-900 text-zinc-400 border-zinc-700',
+        dagNode: 'bg-zinc-900 border-zinc-700 text-zinc-200',
+        short: 'None',
       };
   }
 }
 
 export default function Page() {
-  const [groups, setGroups] = useState<TaskGroup[]>(DEFAULT_GROUPS);
-  const [activeTurnGroupId, setActiveTurnGroupId] = useState<string>('grp_dev');
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'board' | 'dependency' | 'interleaved'>('board');
+  const [view, setView] = useState<'board' | 'dependency'>('board');
   const [search, setSearch] = useState('');
-  const [groupFilter, setGroupFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState('');
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -158,31 +260,28 @@ export default function Page() {
     return () => clearInterval(interval);
   }, []);
 
-  // Modal States
+  // Drag-and-drop state
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [taskName, setTaskName] = useState('');
-  const [taskType, setTaskType] = useState<TaskType>('normal');
+  const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
-  const [taskGroupId, setTaskGroupId] = useState<string>('grp_dev');
+  const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
-  const [taskDescription, setTaskDescription] = useState('');
-
-  // AI Task prompt & output
-  const [taskAiPrompt, setTaskAiPrompt] = useState('');
-  const [taskAiOutput, setTaskAiOutput] = useState('');
-
-  // Group config modal
-  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupLimit, setNewGroupLimit] = useState(3);
-  const [newGroupColor, setNewGroupColor] = useState('sky');
 
   // Bi-directional dependency tracking
   const [selectedParents, setSelectedParents] = useState<string[]>([]);
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+
+  // Optional Parallel Sub-tasks state
+  const [subWorkflows, setSubWorkflows] = useState<SubWorkflowItem[]>([]);
+  const [newSubTitle, setNewSubTitle] = useState('');
+  const [newSubAssignee, setNewSubAssignee] = useState<'Me' | 'AI' | 'Other'>('AI');
 
   // Inline Quick Creators
   const [showAddParent, setShowAddParent] = useState(false);
@@ -194,6 +293,9 @@ export default function Page() {
   const [newChildName, setNewChildName] = useState('');
   const [newChildOwner, setNewChildOwner] = useState<'Me' | 'AI' | 'Other'>('AI');
 
+  // Local map of status overrides for parent tasks edited inside the modal
+  const [parentStatusOverrides, setParentStatusOverrides] = useState<Record<string, 'todo' | 'progress' | 'done'>>({});
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<{ width: number; height: number; paths: string[] }>({
@@ -202,32 +304,52 @@ export default function Page() {
     paths: [],
   });
 
+  const getBatchWeight = (b: BatchTag = 'None'): number => {
+    if (b === 'None') return 999;
+    const idx = batchPriorityOrder.indexOf(b);
+    return idx !== -1 ? idx : 99;
+  };
+
   // Initial Load from LocalStorage
   useEffect(() => {
     try {
-      const storedGroups = localStorage.getItem(GROUPS_STORAGE_KEY);
-      if (storedGroups) setGroups(JSON.parse(storedGroups));
-
-      const storedTurn = localStorage.getItem(ACTIVE_TURN_KEY);
-      if (storedTurn) setActiveTurnGroupId(storedTurn);
+      const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
+      if (storedOrder) {
+        const parsed = JSON.parse(storedOrder);
+        const fullList = [...parsed];
+        ALL_BATCHES.forEach((b) => {
+          if (!fullList.includes(b)) fullList.push(b);
+        });
+        setBatchPriorityOrder(fullList);
+      }
 
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setTasks(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setTasks(
+          parsed.map((t: any, idx: number) => ({
+            ...t,
+            order: typeof t.order === 'number' ? t.order : idx,
+            batch: t.batch || (t.priority === 'High' ? 'Batch 1' : t.priority === 'Medium' ? 'Batch 2' : 'None'),
+            description: t.description || t.doneRule || t.notes || '',
+            manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
+            totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
+            subWorkflows: t.subWorkflows || [],
+          }))
+        );
       } else {
-        const d1 = uid(), d2 = uid(), d3 = uid(), s1 = uid(), s2 = uid();
+        const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: d1, name: 'Build Authentication API', type: 'ai_goal', owner: 'AI', groupId: 'grp_dev', deadline: '', estimate: '45m', description: 'Write JWT OAuth backend in Node/Go', dependencies: [], manualStatus: 'progress', aiPhase: 'working', aiPrompt: 'Implement JWT refresh rotation in Next.js', aiOutput: 'Generated middleware & token helpers.', createdAt: Date.now(), order: 0 },
-          { id: d2, name: 'Design Database Schema', type: 'ai_goal', owner: 'AI', groupId: 'grp_dev', deadline: '', estimate: '30m', description: 'Postgres Prisma models', dependencies: [], manualStatus: 'progress', aiPhase: 'working', aiPrompt: 'Draft Prisma schema for multi-tenant tasks', aiOutput: 'Schema written with relations.', createdAt: Date.now() + 1, order: 1 },
-          { id: d3, name: 'Setup Vercel Deployment', type: 'normal', owner: 'Me', groupId: 'grp_dev', deadline: '', estimate: '20m', description: 'Configure env variables and domain', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
-          { id: s1, name: 'Solve Algorithm CT Question 1', type: 'normal', owner: 'Me', groupId: 'grp_study', deadline: '', estimate: '30m', description: 'Dynamic programming matrix chain multiplication', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
-          { id: s2, name: 'Solve Algorithm CT Question 2', type: 'normal', owner: 'Me', groupId: 'grp_study', deadline: '', estimate: '30m', description: 'Greedy activity selection problem', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 4, order: 4 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: d, name: 'Write micro report prompt', description: 'Prepare code blocks and input parameters prompt', owner: 'Me', batch: 'Batch 2', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
       }
     } catch (err) {
-      console.warn('LocalStorage error:', err);
+      console.warn('LocalStorage access error:', err);
     }
     setMounted(true);
   }, []);
@@ -239,18 +361,29 @@ export default function Page() {
     }
   };
 
-  const saveGroups = (newGroups: TaskGroup[]) => {
-    setGroups(newGroups);
+  const saveBatchOrder = (newOrder: BatchTag[]) => {
+    setBatchPriorityOrder(newOrder);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(newGroups));
+      localStorage.setItem(BATCH_ORDER_KEY, JSON.stringify(newOrder));
     }
   };
 
-  const switchActiveTurn = (groupId: string) => {
-    setActiveTurnGroupId(groupId);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ACTIVE_TURN_KEY, groupId);
-    }
+  const shiftBatchPriority = (batch: BatchTag, direction: 'left' | 'right') => {
+    const idx = batchPriorityOrder.indexOf(batch);
+    if (idx === -1) return;
+    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= batchPriorityOrder.length) return;
+
+    const newOrder = [...batchPriorityOrder];
+    const temp = newOrder[idx];
+    newOrder[idx] = newOrder[targetIdx];
+    newOrder[targetIdx] = temp;
+    saveBatchOrder(newOrder);
+  };
+
+  const setTopBatchPriority = (batch: BatchTag) => {
+    const remaining = batchPriorityOrder.filter((b) => b !== batch);
+    saveBatchOrder([batch, ...remaining]);
   };
 
   const computedStatus = (t: Task): 'done' | 'progress' | 'blocked' | 'ready' => {
@@ -261,295 +394,87 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  // Auto-refill active slots from queue when a task completes
-  const completeTask = (id: string) => {
-    const target = tasks.find((t) => t.id === id);
-    if (!target) return;
+  // Reorder task positions strictly WITHIN the same batch and column
+  const moveTaskWithinBatch = (taskId: string, columnTasks: Task[], direction: 'up' | 'down') => {
+    const currentTask = tasks.find((t) => t.id === taskId);
+    if (!currentTask) return;
 
-    const sessionSeconds = target.startedAt ? Math.floor((Date.now() - target.startedAt) / 1000) : 0;
-    const total = (target.totalTimeSpentSeconds || 0) + sessionSeconds;
+    const batchTasks = columnTasks.filter((t) => (t.batch || 'None') === (currentTask.batch || 'None'));
+    const batchIdx = batchTasks.findIndex((t) => t.id === taskId);
+    if (batchIdx === -1) return;
 
-    const updated = tasks.map((t) => {
-      if (t.id === id) {
-        return {
-          ...t,
-          manualStatus: 'done' as const,
-          startedAt: null,
-          completedAt: Date.now(),
-          totalTimeSpentSeconds: total,
-        };
-      }
-      return t;
+    const targetBatchIdx = direction === 'up' ? batchIdx - 1 : batchIdx + 1;
+    if (targetBatchIdx < 0 || targetBatchIdx >= batchTasks.length) return;
+
+    const targetTask = batchTasks[targetBatchIdx];
+    const idxA = tasks.findIndex((t) => t.id === taskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTask.id);
+    if (idxA === -1 || idxB === -1) return;
+
+    const newTasks = [...tasks];
+    const temp = newTasks[idxA];
+    newTasks[idxA] = newTasks[idxB];
+    newTasks[idxB] = temp;
+
+    newTasks.forEach((t, i) => {
+      t.order = i;
     });
 
+    saveTasks(newTasks);
+  };
+
+  const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
   };
 
-  const reopenTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              manualStatus: 'todo' as const,
-              aiPhase: t.type === 'ai_goal' ? 'prompting' : undefined,
-              startedAt: null,
-              completedAt: null,
-              totalTimeSpentSeconds: 0,
-            }
-          : t
-      )
-    );
+  // Drag and Drop handlers restricted within same batch
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    setDraggedTaskId(taskId);
   };
 
-  const deleteTask = (id: string) => {
-    saveTasks(
-      tasks
-        .filter((x) => x.id !== id)
-        .map((x) => ({
-          ...x,
-          dependencies: (x.dependencies || []).filter((d) => d !== id),
-        }))
-    );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
   };
 
-  // AI Goal Task Actions
-  const submitAiPrompt = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            manualStatus: 'progress' as const,
-            aiPhase: 'working' as const,
-            startedAt: Date.now(),
-          };
-        }
-        return t;
-      })
-    );
-  };
+  const handleDropOnTask = (targetTaskId: string) => {
+    if (!draggedTaskId || draggedTaskId === targetTaskId) return;
 
-  const finishAiGeneration = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            aiPhase: 'review' as const,
-          };
-        }
-        return t;
-      })
-    );
-  };
+    const sourceTask = tasks.find((t) => t.id === draggedTaskId);
+    const targetTask = tasks.find((t) => t.id === targetTaskId);
+    if (!sourceTask || !targetTask) return;
 
-  const rejectAndRepromptAi = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            manualStatus: 'todo' as const,
-            aiPhase: 'prompting' as const,
-          };
-        }
-        return t;
-      })
-    );
-  };
-
-  const startNormalTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) => {
-        if (t.id === id) {
-          return {
-            ...t,
-            manualStatus: 'progress' as const,
-            startedAt: Date.now(),
-          };
-        }
-        return t;
-      })
-    );
-  };
-
-  const exportData = () => {
-    const blob = new Blob([JSON.stringify({ groups, tasks }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'orchestrator-backup.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  const openTaskModal = (id: string | null = null, defaultGroup?: string) => {
-    setEditId(id);
-    const current = tasks.find((t) => t.id === id);
-    setTaskName(current?.name || '');
-    setTaskType(current?.type || 'normal');
-    setTaskDescription(current?.description || current?.notes || '');
-    setTaskOwner(current?.owner || (current?.type === 'ai_goal' ? 'AI' : 'Me'));
-    setTaskGroupId(current?.groupId || defaultGroup || activeTurnGroupId);
-    setTaskDeadline(current?.deadline || '');
-    setTaskEstimate(current?.estimate || '');
-    setTaskAiPrompt(current?.aiPrompt || '');
-    setTaskAiOutput(current?.aiOutput || '');
-
-    setSelectedParents(current?.dependencies || []);
-    const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
-    setSelectedChildren(existingChildren);
-
-    setShowAddParent(false);
-    setNewParentName('');
-    setShowAddChild(false);
-    setNewChildName('');
-
-    if (current) {
-      setTaskManualStatus(computedStatus(current));
-    } else {
-      setTaskManualStatus('ready');
+    if ((sourceTask.batch || 'None') !== (targetTask.batch || 'None')) {
+      setDraggedTaskId(null);
+      return;
     }
 
-    setIsModalOpen(true);
-  };
+    const idxA = tasks.findIndex((t) => t.id === draggedTaskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTaskId);
+    if (idxA === -1 || idxB === -1) return;
 
-  const handleCreateParentTask = () => {
-    const pName = newParentName.trim();
-    if (!pName) return;
-    const parentId = uid();
-    const newParent: Task = {
-      id: parentId,
-      name: pName,
-      type: 'normal',
-      owner: newParentOwner,
-      groupId: taskGroupId,
-      deadline: '',
-      estimate: '',
-      description: 'Blocking prerequisite task',
-      dependencies: [],
-      manualStatus: newParentStatus === 'done' ? 'done' : newParentStatus === 'progress' ? 'progress' : 'todo',
-      createdAt: Date.now() - 100,
-      order: 0,
-      totalTimeSpentSeconds: 0,
-    };
+    const newTasks = [...tasks];
+    const [moved] = newTasks.splice(idxA, 1);
+    newTasks.splice(idxB, 0, moved);
 
-    saveTasks([newParent, ...tasks]);
-    setSelectedParents((prev) => [...prev, parentId]);
-    setNewParentName('');
-    setShowAddParent(false);
-  };
-
-  const handleCreateChildTask = () => {
-    const cName = newChildName.trim();
-    if (!cName) return;
-    const childId = uid();
-    const newChild: Task = {
-      id: childId,
-      name: cName,
-      type: newChildOwner === 'AI' ? 'ai_goal' : 'normal',
-      owner: newChildOwner,
-      groupId: taskGroupId,
-      deadline: '',
-      estimate: '',
-      description: 'Downstream child task',
-      dependencies: editId ? [editId] : [],
-      manualStatus: 'todo',
-      aiPhase: newChildOwner === 'AI' ? 'prompting' : undefined,
-      createdAt: Date.now() + 100,
-      order: tasks.length + 1,
-      totalTimeSpentSeconds: 0,
-    };
-
-    saveTasks([...tasks, newChild]);
-    setSelectedChildren((prev) => [...prev, childId]);
-    setNewChildName('');
-    setShowAddChild(false);
-  };
-
-  const saveTask = () => {
-    const name = taskName.trim();
-    if (!name) return;
-
-    let manualSt: 'todo' | 'progress' | 'done' = 'todo';
-    if (taskManualStatus === 'done') manualSt = 'done';
-    else if (taskManualStatus === 'progress') manualSt = 'progress';
-
-    const targetId = editId || uid();
-    const data: Partial<Task> = {
-      name,
-      type: taskType,
-      description: taskDescription.trim(),
-      owner: taskOwner,
-      groupId: taskGroupId,
-      deadline: taskDeadline,
-      estimate: taskEstimate.trim(),
-      dependencies: selectedParents,
-      manualStatus: manualSt,
-      aiPrompt: taskAiPrompt.trim(),
-      aiOutput: taskAiOutput.trim(),
-      aiPhase: taskType === 'ai_goal' ? (manualSt === 'progress' ? 'working' : 'prompting') : undefined,
-    };
-
-    let updatedTasks = tasks.map((t) => (t.id === targetId ? { ...t, ...data } : t));
-
-    if (!editId) {
-      const newTask: Task = {
-        id: targetId,
-        createdAt: Date.now(),
-        order: tasks.length,
-        totalTimeSpentSeconds: 0,
-        dependencies: selectedParents,
-        name,
-        type: taskType,
-        owner: taskOwner,
-        groupId: taskGroupId,
-        deadline: taskDeadline,
-        estimate: taskEstimate.trim(),
-        manualStatus: manualSt,
-        aiPrompt: taskAiPrompt.trim(),
-        aiOutput: taskAiOutput.trim(),
-        aiPhase: taskType === 'ai_goal' ? 'prompting' : undefined,
-      };
-      updatedTasks = [...tasks, newTask];
-    }
-
-    // Bi-directionally synchronize child downstream tasks
-    updatedTasks = updatedTasks.map((t) => {
-      if (t.id === targetId) return t;
-      const isMarkedAsChild = selectedChildren.includes(t.id);
-      const currentlyHasAsDep = (t.dependencies || []).includes(targetId);
-
-      if (isMarkedAsChild && !currentlyHasAsDep) {
-        return { ...t, dependencies: [...(t.dependencies || []), targetId] };
-      } else if (!isMarkedAsChild && currentlyHasAsDep) {
-        return { ...t, dependencies: (t.dependencies || []).filter((d) => d !== targetId) };
-      }
-      return t;
+    newTasks.forEach((t, i) => {
+      t.order = i;
     });
 
-    saveTasks(updatedTasks);
-    setIsModalOpen(false);
-  };
-
-  const getTaskDurationDisplay = (t: Task): string | null => {
-    let totalSec = t.totalTimeSpentSeconds || 0;
-    if (t.manualStatus === 'progress' && t.startedAt) {
-      totalSec += Math.floor((now - t.startedAt) / 1000);
-    }
-    if (totalSec <= 0) return null;
-    return formatElapsed(totalSec);
+    saveTasks(newTasks);
+    setDraggedTaskId(null);
   };
 
   const q = search.toLowerCase();
   const filtered = tasks.filter(
     (t) =>
-      (!q || (t.name + ' ' + (t.description || '')).toLowerCase().includes(q)) &&
+      (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
       (!ownerFilter || t.owner === ownerFilter) &&
-      (!groupFilter || t.groupId === groupFilter)
+      (!batchFilter || t.batch === batchFilter)
   );
 
-  const groupsObj: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
+  const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
     blocked: [],
     ready: [],
     progress: [],
@@ -558,21 +483,20 @@ export default function Page() {
 
   filtered.forEach((t) => {
     const st = computedStatus(t);
-    groupsObj[st].push(t);
+    groups[st].push(t);
   });
 
-  // Calculate Interleaved Parallel Group States (Active Slots vs Waiting Queue)
-  const activeTurnGroup = groups.find((g) => g.id === activeTurnGroupId) || groups[0];
-
-  const getGroupSlotData = (group: TaskGroup) => {
-    const groupTasks = tasks.filter((t) => t.groupId === group.id && computedStatus(t) !== 'done');
-    const activeTasks = groupTasks.slice(0, group.slotLimit);
-    const queuedTasks = groupTasks.slice(group.slotLimit);
-    const isTurnHandedOff = activeTasks.every(
-      (t) => t.manualStatus === 'progress' || t.aiPhase === 'working' || t.aiPhase === 'review'
-    );
-    return { activeTasks, queuedTasks, isTurnHandedOff, totalRemaining: groupTasks.length };
-  };
+  // Group by Batch Priority First, then preserve manual user order within that batch
+  (['blocked', 'ready', 'progress', 'done'] as const).forEach((key) => {
+    groups[key].sort((a, b) => {
+      const bwA = getBatchWeight(a.batch);
+      const bwB = getBatchWeight(b.batch);
+      if (bwA !== bwB) return bwA - bwB;
+      const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+      const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+      return ordA - ordB;
+    });
+  });
 
   // Straight horizontal dependency lines calculation for DAG
   useLayoutEffect(() => {
@@ -617,13 +541,339 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, filtered, search, groupFilter]);
+  }, [view, filtered, ownerFilter, batchFilter, search, batchPriorityOrder]);
+
+  const startInProgress = (id: string) => {
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            manualStatus: 'progress',
+            startedAt: Date.now(),
+            completedAt: null,
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const finishTask = (id: string) => {
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === id) {
+          const sessionSeconds = t.startedAt ? Math.floor((Date.now() - t.startedAt) / 1000) : 0;
+          const total = (t.totalTimeSpentSeconds || 0) + sessionSeconds;
+          return {
+            ...t,
+            manualStatus: 'done',
+            startedAt: null,
+            completedAt: Date.now(),
+            totalTimeSpentSeconds: total,
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const reopenTask = (id: string) => {
+    saveTasks(
+      tasks.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              manualStatus: 'todo',
+              startedAt: null,
+              completedAt: null,
+              totalTimeSpentSeconds: 0,
+            }
+          : t
+      )
+    );
+  };
+
+  const deleteTask = (id: string) => {
+    saveTasks(
+      tasks
+        .filter((x) => x.id !== id)
+        .map((x) => ({
+          ...x,
+          dependencies: (x.dependencies || []).filter((d) => d !== id),
+        }))
+    );
+  };
+
+  // Toggle or update individual sub-workflow item status
+  const toggleSubWorkflowStatus = (taskId: string, subId: string) => {
+    saveTasks(
+      tasks.map((t) => {
+        if (t.id === taskId && t.subWorkflows) {
+          const updatedSubs = t.subWorkflows.map((s) => {
+            if (s.id === subId) {
+              const nextStatus = s.status === 'todo' ? 'progress' : s.status === 'progress' ? 'done' : 'todo';
+              return { ...s, status: nextStatus as any };
+            }
+            return s;
+          });
+          return { ...t, subWorkflows: updatedSubs };
+        }
+        return t;
+      })
+    );
+  };
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tasks-backup.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const openTaskModal = (id: string | null = null, defaultState?: 'blocked' | 'ready' | 'progress' | 'done') => {
+    setEditId(id);
+    const current = tasks.find((t) => t.id === id);
+    setTaskName(current?.name || '');
+    setTaskDescription(current?.description || current?.notes || '');
+    setTaskOwner(current?.owner || 'Me');
+    setTaskBatch(current?.batch || 'None');
+    setTaskDeadline(current?.deadline || '');
+    setTaskEstimate(current?.estimate || '');
+    setSubWorkflows(current?.subWorkflows || []);
+
+    setSelectedParents(current?.dependencies || []);
+    const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
+    setSelectedChildren(existingChildren);
+
+    setParentStatusOverrides({});
+    setShowAddParent(false);
+    setNewParentName('');
+    setShowAddChild(false);
+    setNewChildName('');
+
+    if (current) {
+      setTaskManualStatus(computedStatus(current));
+    } else {
+      setTaskManualStatus(defaultState || 'ready');
+    }
+
+    setIsModalOpen(true);
+  };
+
+  const handleCreateParentTask = () => {
+    const pName = newParentName.trim();
+    if (!pName) return;
+    const parentId = uid();
+    const newParent: Task = {
+      id: parentId,
+      name: pName,
+      owner: newParentOwner,
+      batch: taskBatch,
+      deadline: '',
+      estimate: '',
+      description: 'Blocking prerequisite parent task',
+      dependencies: [],
+      manualStatus: newParentStatus === 'done' ? 'done' : newParentStatus === 'progress' ? 'progress' : 'todo',
+      createdAt: Date.now() - 100,
+      order: 0,
+      totalTimeSpentSeconds: 0,
+    };
+
+    saveTasks([newParent, ...tasks]);
+    setSelectedParents((prev) => [...prev, parentId]);
+    setNewParentName('');
+    setShowAddParent(false);
+  };
+
+  const handleCreateChildTask = () => {
+    const cName = newChildName.trim();
+    if (!cName) return;
+    const childId = uid();
+    const newChild: Task = {
+      id: childId,
+      name: cName,
+      owner: newChildOwner,
+      batch: taskBatch,
+      deadline: '',
+      estimate: '',
+      description: 'Downstream child task',
+      dependencies: editId ? [editId] : [],
+      manualStatus: 'todo',
+      createdAt: Date.now() + 100,
+      order: tasks.length + 1,
+      totalTimeSpentSeconds: 0,
+    };
+
+    saveTasks([...tasks, newChild]);
+    setSelectedChildren((prev) => [...prev, childId]);
+    setNewChildName('');
+    setShowAddChild(false);
+  };
+
+  const handleAddSubWorkflow = () => {
+    const title = newSubTitle.trim();
+    if (!title) return;
+    const item: SubWorkflowItem = {
+      id: uid(),
+      title,
+      assignee: newSubAssignee,
+      status: 'todo',
+    };
+    setSubWorkflows((prev) => [...prev, item]);
+    setNewSubTitle('');
+  };
+
+  const saveTask = () => {
+    const name = taskName.trim();
+    if (!name) return;
+
+    let manualSt: 'todo' | 'progress' | 'done' = 'todo';
+    if (taskManualStatus === 'done') manualSt = 'done';
+    else if (taskManualStatus === 'progress') manualSt = 'progress';
+
+    const targetId = editId || uid();
+
+    const data = {
+      id: targetId,
+      name,
+      description: taskDescription.trim(),
+      owner: taskOwner,
+      batch: taskBatch,
+      deadline: taskDeadline,
+      estimate: taskEstimate.trim(),
+      notes: '',
+      dependencies: selectedParents,
+      manualStatus: manualSt,
+      subWorkflows,
+    };
+
+    let baseList = tasks.map((t) => {
+      if (parentStatusOverrides[t.id]) {
+        return { ...t, manualStatus: parentStatusOverrides[t.id] };
+      }
+      return t;
+    });
+
+    let updatedTasks: Task[];
+    if (editId) {
+      updatedTasks = baseList.map((t) => (t.id === editId ? { ...t, ...data } : t));
+    } else {
+      const newTask: Task = {
+        ...data,
+        createdAt: Date.now(),
+        order: baseList.length,
+        totalTimeSpentSeconds: 0,
+      };
+      updatedTasks = [...baseList, newTask];
+    }
+
+    // Bi-directionally synchronize child downstream tasks
+    updatedTasks = updatedTasks.map((t) => {
+      if (t.id === targetId) return t;
+      const isMarkedAsChild = selectedChildren.includes(t.id);
+      const currentlyHasAsDep = (t.dependencies || []).includes(targetId);
+
+      if (isMarkedAsChild && !currentlyHasAsDep) {
+        return { ...t, dependencies: [...(t.dependencies || []), targetId] };
+      } else if (!isMarkedAsChild && currentlyHasAsDep) {
+        return { ...t, dependencies: (t.dependencies || []).filter((d) => d !== targetId) };
+      }
+      return t;
+    });
+
+    saveTasks(updatedTasks);
+    setIsModalOpen(false);
+  };
+
+  const getTaskDurationDisplay = (t: Task): string | null => {
+    let totalSec = t.totalTimeSpentSeconds || 0;
+    if (t.manualStatus === 'progress' && t.startedAt) {
+      totalSec += Math.floor((now - t.startedAt) / 1000);
+    }
+    if (totalSec <= 0) return null;
+    return formatElapsed(totalSec);
+  };
+
+  const getUpstreamChain = (taskId: string, stack = new Set<string>()): Task[] => {
+    if (stack.has(taskId)) return [];
+    stack.add(taskId);
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return [];
+    const chain: Task[] = [];
+    (task.dependencies || []).forEach((dId) => {
+      const depTask = tasks.find((t) => t.id === dId);
+      if (depTask) {
+        chain.push(depTask);
+        chain.push(...getUpstreamChain(dId, new Set(stack)));
+      }
+    });
+    return chain;
+  };
+
+  // Topological DAG calculation with DYNAMIC BATCH PRIORITY & straight-lane sorting
+  const getAlignedLevels = () => {
+    const sourceTasks = filtered;
+    const byId = new Map(sourceTasks.map((t) => [t.id, t]));
+    const memo = new Map<string, number>();
+
+    function levelOf(task: Task, stack = new Set<string>()): number {
+      if (memo.has(task.id)) return memo.get(task.id)!;
+      if (stack.has(task.id)) return 0;
+
+      stack.add(task.id);
+      const validDeps = (task.dependencies || []).map((id) => byId.get(id)).filter(Boolean) as Task[];
+      let level = 0;
+      if (validDeps.length) {
+        level = 1 + Math.max(...validDeps.map((d) => levelOf(d, new Set(stack))));
+      }
+      memo.set(task.id, level);
+      return level;
+    }
+
+    const levels: Record<number, Task[]> = {};
+    sourceTasks.forEach((t) => {
+      const l = levelOf(t);
+      (levels[l] ||= []).push(t);
+    });
+
+    const orderedLevelKeys = Object.keys(levels).map(Number).sort((a, b) => a - b);
+    const laneMap = new Map<string, number>();
+
+    orderedLevelKeys.forEach((lvl) => {
+      const list = levels[lvl];
+
+      list.sort((a, b) => {
+        const bwA = getBatchWeight(a.batch);
+        const bwB = getBatchWeight(b.batch);
+        if (bwA !== bwB) return bwA - bwB;
+
+        const predA = (a.dependencies || [])[0];
+        const predB = (b.dependencies || [])[0];
+        const laneA = predA ? laneMap.get(predA) ?? 999 : 999;
+        const laneB = predB ? laneMap.get(predB) ?? 999 : 999;
+        return laneA - laneB;
+      });
+
+      list.forEach((t, i) => {
+        const pred = (t.dependencies || [])[0];
+        const inheritedLane = pred !== undefined ? laneMap.get(pred) : undefined;
+        laneMap.set(t.id, inheritedLane !== undefined ? inheritedLane : i);
+      });
+    });
+
+    return { levels, orderedLevels: orderedLevelKeys };
+  };
+
+  const { levels, orderedLevels } = getAlignedLevels();
 
   if (!mounted) return null;
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
-      {/* Top Navigation Bar */}
+      {/* Top Header */}
       <header className="h-11 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between gap-2 flex-shrink-0 z-20">
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[11px]">
@@ -639,14 +889,6 @@ export default function Page() {
               <LayoutGrid className="w-3 h-3" /> Board
             </button>
             <button
-              onClick={() => setView('interleaved')}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'interleaved' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400'
-              }`}
-            >
-              <RefreshCw className="w-3 h-3" /> Turn Rhythm
-            </button>
-            <button
               onClick={() => setView('dependency')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
                 view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
@@ -657,44 +899,47 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Turn-Based Rhythm Switcher Strip */}
+        {/* Compact, Zero-Overflow Batch Priority Strip */}
         <div className="flex-1 flex items-center justify-center min-w-0 px-2">
           <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-lg overflow-x-auto scrollbar-none max-w-full">
             <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
-              <RefreshCw className="w-3 h-3 text-indigo-400" /> Turn:
+              <Layers className="w-3 h-3 text-indigo-400" /> Order:
             </span>
-            {groups.map((g) => {
-              const { activeTasks, isTurnHandedOff, totalRemaining } = getGroupSlotData(g);
-              const isCurrentTurn = g.id === activeTurnGroupId;
-              const theme = getGroupTheme(g.color);
-
+            {batchPriorityOrder.map((b, idx) => {
+              const theme = getBatchTheme(b);
               return (
-                <button
-                  key={g.id}
-                  onClick={() => switchActiveTurn(g.id)}
-                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold transition flex-shrink-0 border ${
-                    isCurrentTurn
-                      ? `${theme.activePill} shadow-md border-transparent`
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                  }`}
+                <div
+                  key={b}
+                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition flex-shrink-0 ${theme.badge}`}
                 >
-                  <span>{g.name}</span>
-                  <span className="font-mono text-[9px] opacity-80">
-                    [{activeTasks.length}/{g.slotLimit}]
-                  </span>
-                  {isTurnHandedOff && activeTasks.length > 0 && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Ready to switch turn" />
-                  )}
-                </button>
+                  <button
+                    onClick={() => setTopBatchPriority(b)}
+                    title={`Set ${b} as #1 Priority`}
+                    className="hover:underline"
+                  >
+                    {theme.short || b}
+                  </button>
+                  <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
+                    <button
+                      disabled={idx === 0}
+                      onClick={() => shiftBatchPriority(b, 'left')}
+                      className="p-0.2 hover:text-white disabled:opacity-20"
+                      title="Shift Left"
+                    >
+                      <ArrowLeft className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      disabled={idx === batchPriorityOrder.length - 1}
+                      onClick={() => shiftBatchPriority(b, 'right')}
+                      className="p-0.2 hover:text-white disabled:opacity-20"
+                      title="Shift Right"
+                    >
+                      <ArrowRight className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
               );
             })}
-            <button
-              onClick={() => setIsGroupModalOpen(true)}
-              className="p-1 text-zinc-500 hover:text-zinc-300"
-              title="Configure Groups & Slot Limits"
-            >
-              <Sliders className="w-3 h-3" />
-            </button>
           </div>
         </div>
 
@@ -714,7 +959,7 @@ export default function Page() {
             <Upload className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => openTaskModal(null, activeTurnGroupId)}
+            onClick={() => openTaskModal()}
             className="px-2.5 py-1 rounded bg-indigo-600 font-semibold text-white text-[11px] shadow"
           >
             + Task
@@ -736,19 +981,6 @@ export default function Page() {
 
         <div className="flex items-center gap-1.5">
           <select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-medium"
-          >
-            <option value="">All Groups</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-
-          <select
             value={ownerFilter}
             onChange={(e) => setOwnerFilter(e.target.value)}
             className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none"
@@ -758,256 +990,30 @@ export default function Page() {
             <option value="AI">AI</option>
             <option value="Other">Other</option>
           </select>
+
+          {/* Batch Filter with All 12 Batches */}
+          <select
+            value={batchFilter}
+            onChange={(e) => setBatchFilter(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-medium"
+          >
+            <option value="">All Batches</option>
+            {ALL_BATCHES.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+            <option value="None">No Batch</option>
+          </select>
         </div>
       </div>
 
       {/* Main Content Area */}
       <main className="flex-1 p-2.5 overflow-hidden min-h-0">
-        {view === 'interleaved' ? (
-          /* Interleaved Turn-Based View */
-          <div className="h-full flex flex-col gap-3 overflow-y-auto">
-            {/* Active Turn Highlight Header */}
-            <div className="bg-indigo-950/40 border border-indigo-500/50 rounded-xl p-3 flex items-center justify-between shadow-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-white text-base">
-                  ⚡
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">
-                    Current Turn Focus
-                  </div>
-                  <div className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>{activeTurnGroup?.name}</span>
-                    <span className="text-xs text-zinc-400 font-normal">
-                      (Keep {activeTurnGroup?.slotLimit} active tasks running)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {groups.map((g, idx) => {
-                  const isNext = g.id !== activeTurnGroupId;
-                  if (!isNext) return null;
-                  return (
-                    <button
-                      key={g.id}
-                      onClick={() => switchActiveTurn(g.id)}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 hover:border-indigo-500 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition shadow"
-                    >
-                      <span>Switch Turn to {g.name}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-indigo-400" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Parallel Groups Lanes */}
-            <div className="grid grid-cols-3 gap-3 flex-1 min-h-0">
-              {groups.map((grp) => {
-                const { activeTasks, queuedTasks } = getGroupSlotData(grp);
-                const theme = getGroupTheme(grp.color);
-                const isCurrent = grp.id === activeTurnGroupId;
-
-                return (
-                  <div
-                    key={grp.id}
-                    className={`rounded-xl border flex flex-col min-h-0 overflow-hidden ${
-                      isCurrent ? 'bg-zinc-900/90 border-indigo-500/80 ring-1 ring-indigo-500/30' : 'bg-zinc-900/40 border-zinc-800/80 opacity-80'
-                    }`}
-                  >
-                    <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-950/80 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${theme.activePill}`} />
-                        <span className="font-bold text-xs text-zinc-100">{grp.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1 font-mono text-[10px]">
-                        <span className="text-emerald-400 font-bold">{activeTasks.length} Active</span>
-                        <span className="text-zinc-600">/</span>
-                        <span className="text-zinc-400">{grp.slotLimit} Slots</span>
-                      </div>
-                    </div>
-
-                    <div className="p-2 space-y-2 overflow-y-auto flex-1">
-                      {/* Active Slots Section */}
-                      <div>
-                        <div className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider mb-1.5 flex items-center justify-between">
-                          <span>Active Slots [{activeTasks.length}/{grp.slotLimit}]</span>
-                          {activeTasks.length < grp.slotLimit && (
-                            <span className="text-[9px] text-emerald-400">Empty Slot Available</span>
-                          )}
-                        </div>
-
-                        {activeTasks.length === 0 ? (
-                          <div className="py-6 text-center text-[10px] text-zinc-600 italic border border-dashed border-zinc-800 rounded-lg">
-                            No active tasks in slots. Add tasks below to start.
-                          </div>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {activeTasks.map((t) => {
-                              const durationDisplay = getTaskDurationDisplay(t);
-
-                              return (
-                                <div
-                                  key={t.id}
-                                  className={`p-2.5 rounded-lg border shadow-sm space-y-1.5 ${theme.cardBg}`}
-                                >
-                                  <div className="flex items-center justify-between gap-1">
-                                    <div className="flex items-center gap-1.5">
-                                      {t.type === 'ai_goal' ? (
-                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-                                          <Bot className="w-2.5 h-2.5" /> AI Goal
-                                        </span>
-                                      ) : (
-                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1">
-                                          <User className="w-2.5 h-2.5" /> Normal
-                                        </span>
-                                      )}
-                                      <span className="text-[9px] text-zinc-400 font-semibold">{t.owner}</span>
-                                    </div>
-
-                                    {durationDisplay && (
-                                      <div className="flex items-center gap-1 font-mono text-[9px] text-emerald-400 bg-black/40 px-1.5 py-0.2 rounded">
-                                        <Timer className="w-2.5 h-2.5" /> {durationDisplay}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div className="text-xs font-bold text-white leading-tight">
-                                    {t.name}
-                                  </div>
-
-                                  {t.description && (
-                                    <p className="text-[10px] text-zinc-400 line-clamp-2 leading-snug">
-                                      {t.description}
-                                    </p>
-                                  )}
-
-                                  {/* AI Task Workflow Controls */}
-                                  {t.type === 'ai_goal' && (
-                                    <div className="pt-1 border-t border-white/10 flex items-center justify-between gap-1">
-                                      {t.aiPhase === 'prompting' && (
-                                        <button
-                                          onClick={() => submitAiPrompt(t.id)}
-                                          className="w-full py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow"
-                                        >
-                                          <Bot className="w-3 h-3" /> Hand off to AI & Start
-                                        </button>
-                                      )}
-
-                                      {t.aiPhase === 'working' && (
-                                        <div className="w-full flex items-center justify-between gap-1">
-                                          <span className="text-[10px] font-mono text-purple-300 animate-pulse flex items-center gap-1">
-                                            <Timer className="w-3 h-3" /> AI Running...
-                                          </span>
-                                          <button
-                                            onClick={() => finishAiGeneration(t.id)}
-                                            className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-[10px]"
-                                          >
-                                            Done Generating
-                                          </button>
-                                        </div>
-                                      )}
-
-                                      {t.aiPhase === 'review' && (
-                                        <div className="w-full flex items-center justify-between gap-1">
-                                          <button
-                                            onClick={() => completeTask(t.id)}
-                                            className="flex-1 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow"
-                                          >
-                                            <Check className="w-3 h-3" /> Goal Reached (Done)
-                                          </button>
-                                          <button
-                                            onClick={() => rejectAndRepromptAi(t.id)}
-                                            className="px-2 py-0.5 rounded bg-rose-900/80 hover:bg-rose-800 text-rose-200 font-bold text-[10px]"
-                                            title="Need new prompt"
-                                          >
-                                            Re-Prompt
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Normal Task Controls */}
-                                  {t.type === 'normal' && (
-                                    <div className="pt-1 border-t border-white/10 flex items-center justify-end gap-1">
-                                      {t.manualStatus === 'todo' && (
-                                        <button
-                                          onClick={() => startNormalTask(t.id)}
-                                          className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-[10px]"
-                                        >
-                                          Start
-                                        </button>
-                                      )}
-                                      {t.manualStatus === 'progress' && (
-                                        <button
-                                          onClick={() => completeTask(t.id)}
-                                          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
-                                        >
-                                          Complete (Done)
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Waiting Queue Section (Refills empty slots) */}
-                      <div className="pt-2 border-t border-zinc-800">
-                        <div className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider mb-1 flex items-center justify-between">
-                          <span>Queue (Refills slots on completion)</span>
-                          <span className="font-mono text-[9px]">{queuedTasks.length} queued</span>
-                        </div>
-
-                        {queuedTasks.length === 0 ? (
-                          <div className="py-3 text-center text-[10px] text-zinc-600 italic">
-                            Queue is empty.
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            {queuedTasks.map((t, qIdx) => (
-                              <div
-                                key={t.id}
-                                className="p-1.5 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between text-zinc-300"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span className="font-mono text-[9px] text-zinc-600">#{qIdx + 1}</span>
-                                  <span className="text-[11px] font-medium truncate">{t.name}</span>
-                                </div>
-                                <span className="text-[9px] px-1 rounded bg-zinc-900 text-zinc-400 flex-shrink-0">
-                                  {t.owner}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-2 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between">
-                      <button
-                        onClick={() => openTaskModal(null, grp.id)}
-                        className="w-full py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-[11px] transition text-center"
-                      >
-                        + Add Task to {grp.name}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : view === 'board' ? (
-          /* Kanban Board View */
+        {view === 'board' ? (
           <div className="h-full grid grid-cols-4 gap-2 min-h-0">
             {(['blocked', 'ready', 'progress', 'done'] as const).map((colKey) => {
-              const list = groupsObj[colKey];
+              const list = groups[colKey];
               const headerMeta = {
                 blocked: { title: 'Blocked', color: 'text-rose-400', countBg: 'bg-rose-500/10 text-rose-400' },
                 ready: { title: 'Ready', color: 'text-emerald-400', countBg: 'bg-emerald-500/10 text-emerald-400' },
@@ -1039,39 +1045,117 @@ export default function Page() {
                           .filter(Boolean) as Task[];
                         const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
                         const durationDisplay = getTaskDurationDisplay(t);
-                        const taskGroup = groups.find((g) => g.id === t.groupId);
-                        const theme = getGroupTheme(taskGroup?.color || 'sky');
+                        const batchTheme = getBatchTheme(t.batch);
+
+                        const batchSiblings = list.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
+                        const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
+                        const isFirstInBatch = posInBatch === 0;
+                        const isLastInBatch = posInBatch === batchSiblings.length - 1;
 
                         return (
                           <div
                             key={t.id}
-                            className={`p-2 rounded-md border shadow-sm space-y-1 ${theme.cardBg}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, t.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDropOnTask(t.id)}
+                            className={`p-2 rounded-md border shadow-sm space-y-1 ${batchTheme.cardBg} ${
+                              draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1">
-                                <span className={`text-[9px] px-1 rounded font-semibold ${theme.badge}`}>
-                                  {taskGroup?.name || 'Group'}
-                                </span>
+                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
                                 <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
                                   {t.owner}
                                 </span>
                               </div>
 
-                              {t.type === 'ai_goal' && (
-                                <span className="text-[9px] px-1 rounded font-bold bg-purple-500/20 text-purple-300">
-                                  AI Goal
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-0.5 mr-1">
+                                  <button
+                                    disabled={isFirstInBatch}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveTaskWithinBatch(t.id, list, 'up');
+                                    }}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Up Within Batch"
+                                  >
+                                    <ArrowUp className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button
+                                    disabled={isLastInBatch}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveTaskWithinBatch(t.id, list, 'down');
+                                    }}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Down Within Batch"
+                                  >
+                                    <ArrowDown className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+
+                                <select
+                                  value={t.batch || 'None'}
+                                  onChange={(e) =>
+                                    handleBatchChange(t.id, e.target.value as BatchTag)
+                                  }
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
+                                >
+                                  <option value="None" className="bg-zinc-900 text-zinc-400">
+                                    No Batch
+                                  </option>
+                                  {ALL_BATCHES.map((b) => (
+                                    <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
+                                      {b}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             </div>
 
-                            <div className="text-xs font-bold leading-snug line-clamp-2 text-white">
+                            <div className={`text-xs font-bold leading-snug line-clamp-2 ${batchTheme.cardTitle}`}>
                               {t.name}
                             </div>
 
                             {t.description && (
-                              <p className="text-[11px] line-clamp-2 leading-relaxed p-1 rounded border bg-black/30 border-white/10 text-zinc-300">
+                              <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
                                 {t.description}
                               </p>
+                            )}
+
+                            {/* Optional In-Progress Parallel Sub-Workflow Items */}
+                            {t.subWorkflows && t.subWorkflows.length > 0 && (
+                              <div className="pt-1 space-y-1">
+                                <div className="text-[9px] font-bold uppercase text-zinc-400 flex items-center justify-between">
+                                  <span>Parallel Steps ({t.subWorkflows.filter((s) => s.status === 'done').length}/{t.subWorkflows.length})</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {t.subWorkflows.map((sub) => (
+                                    <div
+                                      key={sub.id}
+                                      onClick={() => toggleSubWorkflowStatus(t.id, sub.id)}
+                                      className={`p-1 rounded text-[10px] flex items-center justify-between cursor-pointer border transition ${
+                                        sub.status === 'done'
+                                          ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300 line-through opacity-70'
+                                          : sub.status === 'progress'
+                                          ? 'bg-blue-950/60 border-blue-500 text-blue-200'
+                                          : 'bg-zinc-900/90 border-zinc-800 text-zinc-300'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                        <span className="truncate">{sub.title}</span>
+                                      </div>
+                                      <span className="text-[8px] font-mono opacity-80 uppercase px-1 rounded bg-black/40">
+                                        {sub.assignee} : {sub.status}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             )}
 
                             {waiting.length > 0 && (
@@ -1083,7 +1167,13 @@ export default function Page() {
 
                             <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
                               {durationDisplay ? (
-                                <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 border border-blue-400/50">
+                                <div
+                                  className={`flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    colKey === 'progress'
+                                      ? 'bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50'
+                                      : 'bg-black/40 text-emerald-300 border border-emerald-500/30'
+                                  }`}
+                                >
                                   <Timer className="w-2.5 h-2.5" />
                                   <span>{durationDisplay}</span>
                                 </div>
@@ -1094,12 +1184,16 @@ export default function Page() {
                               ) : (
                                 <span />
                               )}
+
+                              {t.estimate && durationDisplay && (
+                                <span className="text-[9px] text-zinc-400 font-mono">est: {t.estimate}</span>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
                               {colKey === 'ready' && (
                                 <button
-                                  onClick={() => (t.type === 'ai_goal' ? submitAiPrompt(t.id) : startNormalTask(t.id))}
+                                  onClick={() => startInProgress(t.id)}
                                   className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold shadow"
                                 >
                                   Start
@@ -1107,7 +1201,7 @@ export default function Page() {
                               )}
                               {colKey === 'progress' && (
                                 <button
-                                  onClick={() => completeTask(t.id)}
+                                  onClick={() => finishTask(t.id)}
                                   className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
                                 >
                                   Done
@@ -1181,52 +1275,60 @@ export default function Page() {
               </svg>
 
               <div className="grid grid-flow-col auto-cols-[220px] gap-16 items-start relative z-20">
-                {groupsObj.ready.concat(groupsObj.progress, groupsObj.blocked).map((t) => {
-                  const status = computedStatus(t);
-                  const durationDisplay = getTaskDurationDisplay(t);
-                  const taskGroup = groups.find((g) => g.id === t.groupId);
-                  const theme = getGroupTheme(taskGroup?.color || 'sky');
-
-                  return (
-                    <div
-                      key={t.id}
-                      data-node-id={t.id}
-                      className={`p-2.5 rounded-lg border-2 shadow space-y-1 ${theme.cardBg}`}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="text-xs font-bold line-clamp-2 leading-tight flex-1 text-white">
-                          {t.name}
-                        </div>
-                        <span className={`text-[8px] font-bold px-1 rounded ${theme.badge}`}>
-                          {taskGroup?.name || 'Group'}
-                        </span>
-                      </div>
-                      {t.description && (
-                        <p className="text-[10px] line-clamp-2 leading-snug opacity-80 text-zinc-300">
-                          {t.description}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-white/10">
-                        <span>{t.owner}</span>
-                        <div className="flex items-center gap-1">
-                          {durationDisplay && (
-                            <span className="font-mono text-emerald-400 font-bold">
-                              {durationDisplay}
-                            </span>
-                          )}
-                          <span className="font-semibold uppercase text-[9px]">{status}</span>
-                        </div>
-                      </div>
+                {orderedLevels.map((level, index) => (
+                  <div key={level} className="flex flex-col gap-4">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+                      {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
                     </div>
-                  );
-                })}
+                    {levels[level].map((t) => {
+                      const status = computedStatus(t);
+                      const durationDisplay = getTaskDurationDisplay(t);
+                      const batchTheme = getBatchTheme(t.batch);
+
+                      return (
+                        <div
+                          key={t.id}
+                          data-node-id={t.id}
+                          className={`p-2.5 rounded-lg border-2 shadow space-y-1 ${batchTheme.dagNode}`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="text-xs font-bold line-clamp-2 leading-tight flex-1">
+                              {t.name}
+                            </div>
+                            {t.batch && t.batch !== 'None' && (
+                              <span className={`text-[8px] font-bold px-1 rounded ${batchTheme.badge}`}>
+                                {t.batch}
+                              </span>
+                            )}
+                          </div>
+                          {t.description && (
+                            <p className="text-[10px] line-clamp-2 leading-snug opacity-80">
+                              {t.description}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-white/10">
+                            <span>{t.owner}</span>
+                            <div className="flex items-center gap-1">
+                              {durationDisplay && (
+                                <span className="font-mono text-emerald-400 font-bold">
+                                  {durationDisplay}
+                                </span>
+                              )}
+                              <span className="font-semibold uppercase text-[9px]">{status}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* Task Edit/Create Modal */}
+      {/* Task Edit/Create Modal (With Optional In-Progress Parallel Workflows) */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1245,6 +1347,7 @@ export default function Page() {
               </button>
             </div>
 
+            {/* Task Name & Target Belonging Status */}
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2">
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
@@ -1253,49 +1356,58 @@ export default function Page() {
                 <input
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  placeholder="e.g. Build API endpoints"
+                  placeholder="e.g. Develop AI feature"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                  Task Type
+                  Task State / Belonging
                 </label>
                 <select
-                  value={taskType}
-                  onChange={(e) => {
-                    const newType = e.target.value as TaskType;
-                    setTaskType(newType);
-                    if (newType === 'ai_goal') setTaskOwner('AI');
-                    else setTaskOwner('Me');
-                  }}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1.5 text-xs font-bold text-zinc-200"
+                  value={taskManualStatus}
+                  onChange={(e) => setTaskManualStatus(e.target.value as any)}
+                  className={`w-full border rounded px-2 py-1.5 text-xs font-bold focus:outline-none ${
+                    taskManualStatus === 'blocked'
+                      ? 'bg-rose-950/60 border-rose-600 text-rose-300'
+                      : taskManualStatus === 'ready'
+                      ? 'bg-emerald-950/60 border-emerald-600 text-emerald-300'
+                      : taskManualStatus === 'progress'
+                      ? 'bg-blue-950/60 border-blue-600 text-blue-300'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                  }`}
                 >
-                  <option value="normal">Normal (Human)</option>
-                  <option value="ai_goal">AI Goal (Loop)</option>
+                  <option value="blocked" className="bg-zinc-900 text-rose-400">
+                    BLOCKED
+                  </option>
+                  <option value="ready" className="bg-zinc-900 text-emerald-400">
+                    READY
+                  </option>
+                  <option value="progress" className="bg-zinc-900 text-blue-400">
+                    IN PROGRESS
+                  </option>
+                  <option value="done" className="bg-zinc-900 text-zinc-300">
+                    DONE
+                  </option>
                 </select>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                  Parallel Task Group
-                </label>
-                <select
-                  value={taskGroupId}
-                  onChange={(e) => setTaskGroupId(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
-                >
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} [{g.slotLimit} slots]
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
+                Description / Context
+              </label>
+              <textarea
+                rows={2}
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="Add task details or specifications..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"
+              />
+            </div>
 
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
                   Assignee
@@ -1310,36 +1422,313 @@ export default function Page() {
                   <option value="Other">Other Person</option>
                 </select>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
-                Description / Context
-              </label>
-              <textarea
-                rows={2}
-                value={taskDescription}
-                onChange={(e) => setTaskDescription(e.target.value)}
-                placeholder="Add task specifications or details..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"
-              />
-            </div>
-
-            {/* AI Goal Task Prompt Input */}
-            {taskType === 'ai_goal' && (
-              <div className="p-2.5 bg-purple-950/30 border border-purple-500/40 rounded-lg space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-purple-300 flex items-center gap-1">
-                  <Bot className="w-3 h-3" /> Initial AI Prompt / Goal Instructions
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-indigo-400" /> Batch
                 </label>
-                <textarea
-                  rows={2}
-                  value={taskAiPrompt}
-                  onChange={(e) => setTaskAiPrompt(e.target.value)}
-                  placeholder="Give exact prompt or task instruction for AI..."
-                  className="w-full bg-zinc-950 border border-purple-900/60 rounded px-2.5 py-1 text-xs text-purple-200 focus:outline-none resize-none"
-                />
+                <select
+                  value={taskBatch}
+                  onChange={(e) => setTaskBatch(e.target.value as BatchTag)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
+                >
+                  <option value="None">No Batch</option>
+                  {ALL_BATCHES.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
+            </div>
+
+            {/* OPTIONAL PARALLEL SUB-WORKFLOW STEPS */}
+            <div className="p-2.5 bg-indigo-950/20 border border-indigo-500/30 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase text-indigo-400 flex items-center gap-1">
+                  <Bot className="w-3 h-3" /> Optional Parallel Sub-Steps / AI Prompts
+                </span>
+                <span className="text-[9px] text-zinc-500">Run parallel steps inside this task</span>
+              </div>
+
+              {subWorkflows.length > 0 && (
+                <div className="space-y-1">
+                  {subWorkflows.map((sub, sIdx) => (
+                    <div
+                      key={sub.id}
+                      className="p-1 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-1 text-[11px]"
+                    >
+                      <span className="truncate flex-1 text-zinc-200">{sub.title}</span>
+                      <div className="flex items-center gap-1 text-[9px]">
+                        <span className="px-1 rounded bg-zinc-900 text-zinc-400">{sub.assignee}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSubWorkflows(subWorkflows.filter((_, i) => i !== sIdx))}
+                          className="p-0.5 text-zinc-500 hover:text-rose-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  placeholder="e.g. Prompt 1: Build database schema"
+                  value={newSubTitle}
+                  onChange={(e) => setNewSubTitle(e.target.value)}
+                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                />
+                <select
+                  value={newSubAssignee}
+                  onChange={(e) => setNewSubAssignee(e.target.value as any)}
+                  className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                >
+                  <option value="AI">AI</option>
+                  <option value="Me">Me</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddSubWorkflow}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded"
+                >
+                  + Add
+                </button>
+              </div>
+            </div>
+
+            {/* SECTION 1: BLOCKED BY (Parent Prerequisites) */}
+            <div className="space-y-1 pt-1 border-t border-zinc-800">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-rose-400 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> 1. Blocked By (Parents — Tasks that must finish BEFORE this task)
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddParent(!showAddParent)}
+                  className="text-[10px] text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1 underline"
+                >
+                  {showAddParent ? 'Cancel Parent' : '+ Create Blocking Parent'}
+                </button>
+              </div>
+
+              {/* Inline Parent Task Creator */}
+              {showAddParent && (
+                <div className="p-2 bg-rose-950/30 border border-rose-500/40 rounded-lg space-y-2 mb-2">
+                  <div className="text-[10px] font-bold text-rose-300">
+                    Create New Parent Blocker (e.g. Waiting for syllabus / API approval)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      placeholder="Parent task name..."
+                      value={newParentName}
+                      onChange={(e) => setNewParentName(e.target.value)}
+                      className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                    />
+                    <select
+                      value={newParentOwner}
+                      onChange={(e) => setNewParentOwner(e.target.value as any)}
+                      className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                    >
+                      <option value="Other">Other</option>
+                      <option value="Me">Me</option>
+                      <option value="AI">AI</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                      <span>Initial State:</span>
+                      <select
+                        value={newParentStatus}
+                        onChange={(e) => setNewParentStatus(e.target.value as any)}
+                        className="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-[10px] text-zinc-200"
+                      >
+                        <option value="progress">In Progress (Blocking)</option>
+                        <option value="ready">Ready (Unfinished)</option>
+                        <option value="done">Done (Completed)</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCreateParentTask}
+                      className="px-2.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded text-[10px]"
+                    >
+                      Add & Attach Parent
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of Parent Candidates */}
+              <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
+                {tasks.filter((t) => t.id !== editId).length === 0 ? (
+                  <div className="text-[10px] text-zinc-600 italic py-1 text-center">
+                    No existing tasks to select as parent.
+                  </div>
+                ) : (
+                  tasks
+                    .filter((t) => t.id !== editId)
+                    .map((candidate) => {
+                      const isDirectChecked = selectedParents.includes(candidate.id);
+                      const currentCandidateStatus =
+                        parentStatusOverrides[candidate.id] || candidate.manualStatus;
+
+                      return (
+                        <div
+                          key={candidate.id}
+                          className={`p-1.5 rounded border ${
+                            isDirectChecked
+                              ? 'bg-rose-950/40 border-rose-500 text-white'
+                              : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
+                              <input
+                                type="checkbox"
+                                checked={isDirectChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedParents([...selectedParents, candidate.id]);
+                                  else setSelectedParents(selectedParents.filter((id) => id !== candidate.id));
+                                }}
+                                className="rounded border-zinc-700 text-rose-600 focus:ring-0"
+                              />
+                              <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
+                            </label>
+
+                            <div className="flex items-center gap-1.5 text-[9px] font-mono flex-shrink-0">
+                              <span className="px-1 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                                {candidate.owner}
+                              </span>
+
+                              <select
+                                value={currentCandidateStatus}
+                                onChange={(e) => {
+                                  const newSt = e.target.value as 'todo' | 'progress' | 'done';
+                                  setParentStatusOverrides((prev) => ({
+                                    ...prev,
+                                    [candidate.id]: newSt,
+                                  }));
+                                }}
+                                className={`text-[9px] px-1 py-0.5 rounded font-bold border focus:outline-none ${
+                                  currentCandidateStatus === 'done'
+                                    ? 'bg-zinc-800 border-zinc-600 text-zinc-300'
+                                    : currentCandidateStatus === 'progress'
+                                    ? 'bg-blue-950 border-blue-600 text-blue-300'
+                                    : 'bg-emerald-950 border-emerald-600 text-emerald-300'
+                                }`}
+                              >
+                                <option value="todo">READY</option>
+                                <option value="progress">IN PROGRESS</option>
+                                <option value="done">DONE</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+
+            {/* SECTION 2: BLOCKS / UNLOCKS (Child Downstream Tasks) */}
+            <div className="space-y-1 pt-2 border-t border-zinc-800">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1">
+                  <ArrowRightCircle className="w-3 h-3" /> 2. Blocks / Unlocks (Children — Tasks that wait for this task)
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddChild(!showAddChild)}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 underline"
+                >
+                  {showAddChild ? 'Cancel Child' : '+ Create Child Task'}
+                </button>
+              </div>
+
+              {/* Inline Child Task Creator */}
+              {showAddChild && (
+                <div className="p-2 bg-emerald-950/30 border border-emerald-500/40 rounded-lg space-y-2 mb-2">
+                  <div className="text-[10px] font-bold text-emerald-300">
+                    Create New Downstream Child (Will automatically depend on this task)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      placeholder="Child task name..."
+                      value={newChildName}
+                      onChange={(e) => setNewChildName(e.target.value)}
+                      className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                    />
+                    <select
+                      value={newChildOwner}
+                      onChange={(e) => setNewChildOwner(e.target.value as any)}
+                      className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                    >
+                      <option value="AI">AI</option>
+                      <option value="Me">Me</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCreateChildTask}
+                      className="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[10px]"
+                    >
+                      Add & Attach Child
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of Child Candidates */}
+              <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
+                {tasks.filter((t) => t.id !== editId).length === 0 ? (
+                  <div className="text-[10px] text-zinc-600 italic py-1 text-center">
+                    No existing tasks to select as children. Click "+ Create Child Task" above.
+                  </div>
+                ) : (
+                  tasks
+                    .filter((t) => t.id !== editId)
+                    .map((candidate) => {
+                      const isChildChecked = selectedChildren.includes(candidate.id);
+                      return (
+                        <div
+                          key={candidate.id}
+                          className={`p-1.5 rounded border ${
+                            isChildChecked
+                              ? 'bg-emerald-950/40 border-emerald-500 text-white'
+                              : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                          }`}
+                        >
+                          <label className="flex items-center justify-between gap-2 cursor-pointer">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChildChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedChildren([...selectedChildren, candidate.id]);
+                                  else setSelectedChildren(selectedChildren.filter((id) => id !== candidate.id));
+                                }}
+                                className="rounded border-zinc-700 text-emerald-600 focus:ring-0"
+                              />
+                              <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
+                            </div>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                              {candidate.owner}
+                            </span>
+                          </label>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div>
@@ -1384,96 +1773,6 @@ export default function Page() {
         </div>
       )}
 
-      {/* Group Configuration Modal */}
-      {isGroupModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsGroupModalOpen(false);
-          }}
-        >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-                Configure Parallel Groups & Active Slots
-              </span>
-              <button onClick={() => setIsGroupModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {groups.map((grp) => (
-                <div
-                  key={grp.id}
-                  className="p-2 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${getGroupTheme(grp.color).activePill}`} />
-                    <span className="font-bold text-xs text-white">{grp.name}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-zinc-400">Active Slots:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={grp.slotLimit}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 1;
-                        saveGroups(groups.map((g) => (g.id === grp.id ? { ...g, slotLimit: val } : g)));
-                      }}
-                      className="w-14 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-center text-white font-bold"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Add New Group */}
-            <div className="pt-2 border-t border-zinc-800 space-y-2">
-              <span className="text-[10px] font-bold uppercase text-zinc-400">Add New Parallel Group</span>
-              <div className="grid grid-cols-3 gap-1.5">
-                <input
-                  placeholder="Group name (e.g. Research)"
-                  value={newGroupName}
-                  onChange={(e) => setNewGroupName(e.target.value)}
-                  className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={newGroupLimit}
-                  onChange={(e) => setNewGroupLimit(parseInt(e.target.value) || 1)}
-                  className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-center text-zinc-200 font-bold"
-                  title="Slot limit"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  const gName = newGroupName.trim();
-                  if (!gName) return;
-                  const newGrp: TaskGroup = {
-                    id: 'grp_' + uid(),
-                    name: gName,
-                    slotLimit: newGroupLimit,
-                    color: 'amber',
-                  };
-                  saveGroups([...groups, newGrp]);
-                  setNewGroupName('');
-                }}
-                className="w-full py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-xs"
-              >
-                + Add Group
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <input
         type="file"
         ref={fileInputRef}
@@ -1486,8 +1785,8 @@ export default function Page() {
           r.onload = () => {
             try {
               const data = JSON.parse(r.result as string);
-              if (data.tasks) saveTasks(data.tasks);
-              if (data.groups) saveGroups(data.groups);
+              if (!Array.isArray(data)) throw new Error();
+              saveTasks(data);
             } catch {
               alert('Invalid JSON file');
             }
