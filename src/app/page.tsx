@@ -28,8 +28,10 @@ import {
   ArrowRightCircle,
   FolderKanban,
   Sliders,
-  ChevronDown,
-  ChevronUp,
+  Target,
+  Bot,
+  User,
+  Check,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -58,7 +60,9 @@ interface Task {
   name: string;
   owner: 'Me' | 'AI' | 'Other';
   batch: BatchTag;
-  parallelGroup?: string; // Optional: "Development", "Study", etc.
+  parallelGroup?: string; // e.g. "Development", "Study", etc.
+  isGoal?: boolean; // true = Goal-oriented task, false/undefined = Normal task
+  goalTarget?: string; // target outcome criteria (e.g. "Pass Jest tests", "Derive formula")
   deadline: string;
   estimate: string;
   description?: string;
@@ -279,14 +283,24 @@ export default function Page() {
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
   const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
   const [taskParallelGroup, setTaskParallelGroup] = useState<string>('');
+  const [taskIsGoal, setTaskIsGoal] = useState(false);
+  const [taskGoalTarget, setTaskGoalTarget] = useState('');
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
 
-  // Parallel Group Config Modal
+  // Parallel Group Config Modal & In-Modal Task Queuing State
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupSlotLimit, setNewGroupSlotLimit] = useState(3);
+
+  // Per-Group Queue Form State inside Group Config Modal
+  const [queueTaskInputs, setQueueTaskInputs] = useState<
+    Record<
+      string,
+      { name: string; isGoal: boolean; goalTarget: string; owner: 'Me' | 'AI' | 'Other' }
+    >
+  >({});
 
   // Bi-directional dependency tracking
   const [selectedParents, setSelectedParents] = useState<string[]>([]);
@@ -347,15 +361,17 @@ export default function Page() {
             manualStatus: t.manualStatus === 'triage' ? 'todo' : t.manualStatus,
             totalTimeSpentSeconds: t.totalTimeSpentSeconds || 0,
             parallelGroup: t.parallelGroup || '',
+            isGoal: !!t.isGoal,
+            goalTarget: t.goalTarget || '',
           }))
         );
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
-          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives, formula derivations and steps', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
-          { id: b, name: 'Plan for micro lab report', description: 'Define microprocessor pin diagrams and instruction set specs', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
-          { id: c, name: 'Write algorithm report prompt', description: 'Write structured prompt template for AI report generation', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Development', deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
-          { id: d, name: 'Study for CT exam', description: 'Prepare sample problems and solve questions', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Study', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
+          { id: a, name: 'Plan for algorithm Lab report', description: 'Outline experiment objectives and formulas', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', isGoal: true, goalTarget: 'Complete structure with working math derivations', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now(), order: 0 },
+          { id: b, name: 'Plan for micro lab report', description: 'Define pin diagrams and specs', owner: 'Me', batch: 'Batch 1', parallelGroup: 'Development', isGoal: true, goalTarget: 'All pinout charts verified', deadline: '', estimate: '30m', notes: '', dependencies: [], manualStatus: 'todo', createdAt: Date.now() + 1, order: 1 },
+          { id: c, name: 'Write algorithm report prompt', description: 'Template for AI generation', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Development', isGoal: false, deadline: '', estimate: '45m', notes: '', dependencies: [a], manualStatus: 'todo', createdAt: Date.now() + 2, order: 2 },
+          { id: d, name: 'Study for CT exam', description: 'Solve practice problems', owner: 'Me', batch: 'Batch 2', parallelGroup: 'Study', isGoal: true, goalTarget: '100% correct score on Question 1-3', deadline: '', estimate: '45m', notes: '', dependencies: [b], manualStatus: 'todo', createdAt: Date.now() + 3, order: 3 },
         ];
         setTasks(initialTasks);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
@@ -488,7 +504,7 @@ export default function Page() {
   const q = search.toLowerCase();
   const filtered = tasks.filter(
     (t) =>
-      (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
+      (!q || (t.name + ' ' + (t.description || '') + ' ' + (t.goalTarget || '') + ' ' + (t.notes || '')).toLowerCase().includes(q)) &&
       (!ownerFilter || t.owner === ownerFilter) &&
       (!batchFilter || t.batch === batchFilter)
   );
@@ -641,6 +657,8 @@ export default function Page() {
     setTaskOwner(current?.owner || 'Me');
     setTaskBatch(current?.batch || 'None');
     setTaskParallelGroup(current?.parallelGroup || '');
+    setTaskIsGoal(!!current?.isGoal);
+    setTaskGoalTarget(current?.goalTarget || '');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
 
@@ -673,6 +691,7 @@ export default function Page() {
       owner: newParentOwner,
       batch: taskBatch,
       parallelGroup: taskParallelGroup,
+      isGoal: false,
       deadline: '',
       estimate: '',
       description: 'Blocking prerequisite parent task',
@@ -699,6 +718,7 @@ export default function Page() {
       owner: newChildOwner,
       batch: taskBatch,
       parallelGroup: taskParallelGroup,
+      isGoal: false,
       deadline: '',
       estimate: '',
       description: 'Downstream child task',
@@ -713,6 +733,36 @@ export default function Page() {
     setSelectedChildren((prev) => [...prev, childId]);
     setNewChildName('');
     setShowAddChild(false);
+  };
+
+  // Quick Queue Task Creator directly from inside Group Configuration Modal
+  const handleQueueTaskToGroup = (groupName: string) => {
+    const input = queueTaskInputs[groupName];
+    if (!input || !input.name.trim()) return;
+
+    const newTask: Task = {
+      id: uid(),
+      name: input.name.trim(),
+      owner: input.owner,
+      batch: 'Batch 1',
+      parallelGroup: groupName,
+      isGoal: input.isGoal,
+      goalTarget: input.isGoal ? input.goalTarget.trim() : '',
+      deadline: '',
+      estimate: '',
+      description: input.isGoal ? `Target: ${input.goalTarget}` : '',
+      dependencies: [],
+      manualStatus: 'progress', // directly queued into In-Progress for this group
+      createdAt: Date.now(),
+      order: tasks.length + 1,
+      totalTimeSpentSeconds: 0,
+    };
+
+    saveTasks([...tasks, newTask]);
+    setQueueTaskInputs((prev) => ({
+      ...prev,
+      [groupName]: { name: '', isGoal: false, goalTarget: '', owner: 'AI' },
+    }));
   };
 
   const saveTask = () => {
@@ -732,6 +782,8 @@ export default function Page() {
       owner: taskOwner,
       batch: taskBatch,
       parallelGroup: taskParallelGroup,
+      isGoal: taskIsGoal,
+      goalTarget: taskIsGoal ? taskGoalTarget.trim() : '',
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
       notes: '',
@@ -865,7 +917,6 @@ export default function Page() {
       return <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>;
     }
 
-    // Check if there are tasks with assigned parallel groups
     const groupedMap: Record<string, Task[]> = {};
     const ungroupedList: Task[] = [];
 
@@ -917,16 +968,21 @@ export default function Page() {
               {/* Internal Waiting Queue for this parallel group */}
               {queuedTasks.length > 0 && (
                 <div className="pt-1 border-t border-indigo-500/20 space-y-1">
-                  <span className="text-[9px] uppercase font-bold text-zinc-500 px-1">
-                    Waiting Queue (Auto-refills when slot opens)
+                  <span className="text-[9px] uppercase font-bold text-zinc-500 px-1 flex items-center gap-1">
+                    <span>Waiting Queue (Auto-refills when slot opens)</span>
                   </span>
                   {queuedTasks.map((t, qIdx) => (
                     <div
                       key={t.id}
-                      className="p-1.5 rounded bg-zinc-950/80 border border-zinc-800 text-[10px] text-zinc-400 flex items-center justify-between"
+                      className="p-1.5 rounded bg-zinc-950/80 border border-zinc-800 text-[10px] text-zinc-400 flex items-center justify-between gap-1"
                     >
-                      <div className="flex items-center gap-1.5 truncate">
+                      <div className="flex items-center gap-1.5 truncate flex-1">
                         <span className="font-mono text-[9px] text-zinc-600">#{qIdx + 1}</span>
+                        {t.isGoal && (
+                          <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                            <Target className="w-2 h-2" /> Goal
+                          </span>
+                        )}
                         <span className="truncate text-zinc-300">{t.name}</span>
                       </div>
                       <button
@@ -989,6 +1045,15 @@ export default function Page() {
             <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
               {t.owner}
             </span>
+            {t.isGoal ? (
+              <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                <Target className="w-2.5 h-2.5" /> Goal
+              </span>
+            ) : (
+              <span className="text-[8px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-400">
+                Normal
+              </span>
+            )}
             {t.parallelGroup && (
               <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 {t.parallelGroup}
@@ -1043,11 +1108,17 @@ export default function Page() {
           {t.name}
         </div>
 
-        {t.description && (
+        {/* Goal criteria or description */}
+        {t.isGoal && t.goalTarget ? (
+          <div className="p-1 rounded bg-amber-950/40 border border-amber-600/40 text-[10px] text-amber-200 flex items-start gap-1">
+            <Target className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+            <span className="line-clamp-2"><strong>Target:</strong> {t.goalTarget}</span>
+          </div>
+        ) : t.description ? (
           <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
             {t.description}
           </p>
-        )}
+        ) : null}
 
         {waiting.length > 0 && (
           <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
@@ -1089,7 +1160,7 @@ export default function Page() {
               onClick={() => finishTask(t.id)}
               className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-semibold shadow"
             >
-              Done
+              {t.isGoal ? 'Goal Reached (Done)' : 'Done'}
             </button>
           )}
           {colKey === 'done' && (
@@ -1196,10 +1267,10 @@ export default function Page() {
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             onClick={() => setIsGroupConfigOpen(true)}
-            className="p-1 rounded bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 transition"
-            title="Configure Parallel Group Slot Limits"
+            className="p-1 rounded bg-zinc-800/80 text-zinc-400 hover:text-zinc-200 transition flex items-center gap-1 text-[10px] px-2 font-semibold"
+            title="Configure Parallel Groups & Queues"
           >
-            <Sliders className="w-3.5 h-3.5" />
+            <Sliders className="w-3 h-3 text-indigo-400" /> Groups & Queues
           </button>
           <button
             onClick={exportData}
@@ -1459,6 +1530,48 @@ export default function Page() {
                   </option>
                 </select>
               </div>
+            </div>
+
+            {/* Task Type Option (Normal vs Goal-Oriented) */}
+            <div className="p-2 bg-zinc-950/80 border border-zinc-800 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1">
+                  <Target className="w-3 h-3 text-amber-400" /> Task Nature
+                </span>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="taskNature"
+                      checked={!taskIsGoal}
+                      onChange={() => setTaskIsGoal(false)}
+                      className="text-indigo-600"
+                    />
+                    <span className="text-zinc-300">Normal Task</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer text-xs">
+                    <input
+                      type="radio"
+                      name="taskNature"
+                      checked={taskIsGoal}
+                      onChange={() => setTaskIsGoal(true)}
+                      className="text-amber-500"
+                    />
+                    <span className="text-amber-300 font-semibold">Goal Task (Loop until reached)</span>
+                  </label>
+                </div>
+              </div>
+
+              {taskIsGoal && (
+                <div>
+                  <input
+                    placeholder="Specific target / outcome (e.g. Pass all unit tests, or 100% derivation accuracy)"
+                    value={taskGoalTarget}
+                    onChange={(e) => setTaskGoalTarget(e.target.value)}
+                    className="w-full bg-zinc-900 border border-amber-600/50 rounded px-2 py-1 text-xs text-amber-200 focus:outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -1800,7 +1913,7 @@ export default function Page() {
         </div>
       )}
 
-      {/* Parallel Group Configuration Modal */}
+      {/* Parallel Group Configuration & In-Modal Queue Management */}
       {isGroupConfigOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1808,44 +1921,151 @@ export default function Page() {
             if (e.target === e.currentTarget) setIsGroupConfigOpen(false);
           }}
         >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md p-4 space-y-3 shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-xl p-4 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-                Configure Parallel Groups (Active Slot Limits)
+                Configure Groups, Slot Limits & Task Queues
               </span>
               <button onClick={() => setIsGroupConfigOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2">
-              {parallelGroups.map((grp) => (
-                <div
-                  key={grp.id}
-                  className="p-2 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-2"
-                >
-                  <span className="font-bold text-xs text-white">{grp.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-zinc-400">Max Active Slots:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={grp.slotLimit}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 1;
-                        saveParallelGroups(
-                          parallelGroups.map((g) => (g.id === grp.id ? { ...g, slotLimit: val } : g))
-                        );
-                      }}
-                      className="w-14 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-center text-white font-bold"
-                    />
+            {/* Groups List with In-Place Task Queuers */}
+            <div className="space-y-3">
+              {parallelGroups.map((grp) => {
+                const grpTasks = tasks.filter((t) => t.parallelGroup === grp.name && computedStatus(t) !== 'done');
+                const formState = queueTaskInputs[grp.name] || { name: '', isGoal: false, goalTarget: '', owner: 'AI' };
+
+                return (
+                  <div
+                    key={grp.id}
+                    className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FolderKanban className="w-4 h-4 text-indigo-400" />
+                        <span className="font-bold text-xs text-white">{grp.name}</span>
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          ({grpTasks.length} active/queued)
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <span className="text-zinc-400">Max Running Slots:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={grp.slotLimit}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 1;
+                            saveParallelGroups(
+                              parallelGroups.map((g) => (g.id === grp.id ? { ...g, slotLimit: val } : g))
+                            );
+                          }}
+                          className="w-12 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-center text-white font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Queue Input for this group */}
+                    <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-indigo-300">+ Queue Task into {grp.name}</span>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`nature_${grp.name}`}
+                              checked={!formState.isGoal}
+                              onChange={() =>
+                                setQueueTaskInputs((prev) => ({
+                                  ...prev,
+                                  [grp.name]: { ...formState, isGoal: false },
+                                }))
+                              }
+                            />
+                            <span className="text-zinc-400">Normal</span>
+                          </label>
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`nature_${grp.name}`}
+                              checked={formState.isGoal}
+                              onChange={() =>
+                                setQueueTaskInputs((prev) => ({
+                                  ...prev,
+                                  [grp.name]: { ...formState, isGoal: true },
+                                }))
+                              }
+                            />
+                            <span className="text-amber-300 font-semibold flex items-center gap-0.5">
+                              <Target className="w-2.5 h-2.5" /> Goal
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <input
+                          placeholder="Task name / goal title..."
+                          value={formState.name}
+                          onChange={(e) =>
+                            setQueueTaskInputs((prev) => ({
+                              ...prev,
+                              [grp.name]: { ...formState, name: e.target.value },
+                            }))
+                          }
+                          className="col-span-3 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                        />
+                        <select
+                          value={formState.owner}
+                          onChange={(e) =>
+                            setQueueTaskInputs((prev) => ({
+                              ...prev,
+                              [grp.name]: { ...formState, owner: e.target.value as any },
+                            }))
+                          }
+                          className="bg-zinc-950 border border-zinc-800 rounded px-1 text-[10px] text-zinc-300"
+                        >
+                          <option value="AI">AI</option>
+                          <option value="Me">Me</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+
+                      {formState.isGoal && (
+                        <input
+                          placeholder="Target criteria (e.g. Pass Jest tests with JWT token rotation)"
+                          value={formState.goalTarget}
+                          onChange={(e) =>
+                            setQueueTaskInputs((prev) => ({
+                              ...prev,
+                              [grp.name]: { ...formState, goalTarget: e.target.value },
+                            }))
+                          }
+                          className="w-full bg-zinc-950 border border-amber-600/40 rounded px-2 py-0.5 text-xs text-amber-200"
+                        />
+                      )}
+
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleQueueTaskToGroup(grp.name)}
+                          className="px-3 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
+                        >
+                          Add to {grp.name} Queue
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
+            {/* Add Brand New Parallel Group */}
             <div className="pt-2 border-t border-zinc-800 space-y-2">
               <span className="text-[10px] font-bold uppercase text-zinc-400">Add New Parallel Group</span>
               <div className="grid grid-cols-3 gap-1.5">
