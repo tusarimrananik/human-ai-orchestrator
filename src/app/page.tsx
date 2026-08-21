@@ -25,6 +25,7 @@ import {
   CornerDownRight,
   Link2,
   AlertCircle,
+  ArrowRightCircle,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -262,13 +263,20 @@ export default function Page() {
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
-  const [selectedDeps, setSelectedDeps] = useState<string[]>([]);
 
-  // In-modal quick parent task creation state
+  // Bi-directional dependency tracking
+  const [selectedParents, setSelectedParents] = useState<string[]>([]); // Tasks that block this task
+  const [selectedChildren, setSelectedChildren] = useState<string[]>([]); // Tasks blocked by this task
+
+  // Inline Quick Creators
+  const [showAddParent, setShowAddParent] = useState(false);
   const [newParentName, setNewParentName] = useState('');
   const [newParentOwner, setNewParentOwner] = useState<'Me' | 'AI' | 'Other'>('Other');
   const [newParentStatus, setNewParentStatus] = useState<'ready' | 'progress' | 'done'>('progress');
-  const [showAddParent, setShowAddParent] = useState(false);
+
+  const [showAddChild, setShowAddChild] = useState(false);
+  const [newChildName, setNewChildName] = useState('');
+  const [newChildOwner, setNewChildOwner] = useState<'Me' | 'AI' | 'Other'>('AI');
 
   // Local map of status overrides for parent tasks edited inside the modal
   const [parentStatusOverrides, setParentStatusOverrides] = useState<Record<string, 'todo' | 'progress' | 'done'>>({});
@@ -599,10 +607,19 @@ export default function Page() {
     setTaskBatch(current?.batch || 'None');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
-    setSelectedDeps(current?.dependencies || []);
+
+    // Existing parents (tasks that block this current task)
+    setSelectedParents(current?.dependencies || []);
+
+    // Existing children (tasks that depend on this current task)
+    const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
+    setSelectedChildren(existingChildren);
+
     setParentStatusOverrides({});
     setShowAddParent(false);
     setNewParentName('');
+    setShowAddChild(false);
+    setNewChildName('');
 
     if (current) {
       const calcSt = computedStatus(current);
@@ -627,7 +644,7 @@ export default function Page() {
       batch: taskBatch,
       deadline: '',
       estimate: '',
-      description: 'Blocking prerequisite task',
+      description: 'Blocking prerequisite parent task',
       dependencies: [],
       manualStatus: pStatus,
       createdAt: Date.now() - 100,
@@ -637,9 +654,36 @@ export default function Page() {
 
     const updated = [newParent, ...tasks];
     saveTasks(updated);
-    setSelectedDeps((prev) => [...prev, parentId]);
+    setSelectedParents((prev) => [...prev, parentId]);
     setNewParentName('');
     setShowAddParent(false);
+  };
+
+  // Quick helper to add a brand new child downstream task right inside the modal
+  const handleCreateChildTask = () => {
+    const cName = newChildName.trim();
+    if (!cName) return;
+    const childId = uid();
+    const newChild: Task = {
+      id: childId,
+      name: cName,
+      owner: newChildOwner,
+      batch: taskBatch,
+      deadline: '',
+      estimate: '',
+      description: 'Downstream child task',
+      dependencies: editId ? [editId] : [],
+      manualStatus: 'todo',
+      createdAt: Date.now() + 100,
+      order: tasks.length + 1,
+      totalTimeSpentSeconds: 0,
+    };
+
+    const updated = [...tasks, newChild];
+    saveTasks(updated);
+    setSelectedChildren((prev) => [...prev, childId]);
+    setNewChildName('');
+    setShowAddChild(false);
   };
 
   const saveTask = () => {
@@ -651,14 +695,10 @@ export default function Page() {
     else if (taskManualStatus === 'progress') manualSt = 'progress';
     else manualSt = 'todo';
 
-    // If user explicitly marked it as Ready, ensure no blocking dependencies linger
-    let finalDeps = selectedDeps;
-    if (taskManualStatus === 'ready' && selectedDeps.length > 0) {
-      // If user forces Ready, resolve all attached dependencies or keep only finished ones
-      // or if they want it blocked, keep dependencies
-    }
+    const targetId = editId || uid();
 
     const data = {
+      id: targetId,
       name,
       description: taskDescription.trim(),
       owner: taskOwner,
@@ -666,30 +706,47 @@ export default function Page() {
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
       notes: '',
-      dependencies: finalDeps,
+      dependencies: selectedParents,
       manualStatus: manualSt,
     };
 
-    let updatedTasks = tasks.map((t) => {
+    let baseList = tasks.map((t) => {
       if (parentStatusOverrides[t.id]) {
         return { ...t, manualStatus: parentStatusOverrides[t.id] };
       }
       return t;
     });
 
+    // 1. Update/Add the main task
+    let updatedTasks: Task[];
     if (editId) {
-      updatedTasks = updatedTasks.map((t) => (t.id === editId ? { ...t, ...data } : t));
+      updatedTasks = baseList.map((t) => (t.id === editId ? { ...t, ...data } : t));
     } else {
-      const newId = uid();
       const newTask: Task = {
-        id: newId,
-        createdAt: Date.now(),
-        order: updatedTasks.length,
-        totalTimeSpentSeconds: 0,
         ...data,
+        createdAt: Date.now(),
+        order: baseList.length,
+        totalTimeSpentSeconds: 0,
       };
-      updatedTasks = [...updatedTasks, newTask];
+      updatedTasks = [...baseList, newTask];
     }
+
+    // 2. Bi-directionally synchronize child downstream tasks
+    updatedTasks = updatedTasks.map((t) => {
+      if (t.id === targetId) return t; // Skip self
+
+      const isMarkedAsChild = selectedChildren.includes(t.id);
+      const currentlyHasAsDep = (t.dependencies || []).includes(targetId);
+
+      if (isMarkedAsChild && !currentlyHasAsDep) {
+        // Add self to child's dependencies
+        return { ...t, dependencies: [...(t.dependencies || []), targetId] };
+      } else if (!isMarkedAsChild && currentlyHasAsDep) {
+        // Remove self from child's dependencies
+        return { ...t, dependencies: (t.dependencies || []).filter((d) => d !== targetId) };
+      }
+      return t;
+    });
 
     saveTasks(updatedTasks);
     setIsModalOpen(false);
@@ -806,7 +863,7 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Compact, Zero-Overflow Batch Priority Strip (Shows all 12 Batches in one row) */}
+        {/* Compact, Zero-Overflow Batch Priority Strip */}
         <div className="flex-1 flex items-center justify-center min-w-0 px-2">
           <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-lg overflow-x-auto scrollbar-none max-w-full">
             <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
@@ -898,7 +955,6 @@ export default function Page() {
             <option value="Other">Other</option>
           </select>
 
-          {/* Batch Filter with All 12 Batches */}
           <select
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
@@ -1203,7 +1259,7 @@ export default function Page() {
         )}
       </main>
 
-      {/* Task Edit/Create Modal */}
+      {/* Task Edit/Create Modal (Bi-Directional Parent & Child Management) */}
       {isModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1215,7 +1271,7 @@ export default function Page() {
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Link2 className="w-3.5 h-3.5 text-indigo-400" />
-                {editId ? 'Edit Task' : 'New Task'}
+                {editId ? 'Edit Task & Relationships' : 'New Task & Relationships'}
               </span>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
@@ -1231,7 +1287,7 @@ export default function Page() {
                 <input
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  placeholder="e.g. Study for CT exam"
+                  placeholder="e.g. Write prompt for homepage design"
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -1317,32 +1373,26 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Parent Task Selector & State Controls */}
+            {/* SECTION 1: BLOCKED BY (Parent Prerequisites) */}
             <div className="space-y-1 pt-1 border-t border-zinc-800">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1">
-                  {taskManualStatus === 'blocked' ? (
-                    <span className="text-rose-400 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> Why is this task blocked? (Select or create parent tasks)
-                    </span>
-                  ) : (
-                    <span>Prerequisite / Parent Dependencies</span>
-                  )}
+                <label className="text-[10px] uppercase font-bold text-rose-400 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> 1. Blocked By (Parents — Tasks that must finish BEFORE this task)
                 </label>
 
                 <button
                   type="button"
                   onClick={() => setShowAddParent(!showAddParent)}
-                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 underline"
+                  className="text-[10px] text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1 underline"
                 >
                   {showAddParent ? 'Cancel Parent' : '+ Create Blocking Parent'}
                 </button>
               </div>
 
-              {/* In-Modal Inline Parent Creator */}
+              {/* Inline Parent Task Creator */}
               {showAddParent && (
-                <div className="p-2 bg-indigo-950/30 border border-indigo-500/40 rounded-lg space-y-2 mb-2">
-                  <div className="text-[10px] font-bold text-indigo-300">
+                <div className="p-2 bg-rose-950/30 border border-rose-500/40 rounded-lg space-y-2 mb-2">
+                  <div className="text-[10px] font-bold text-rose-300">
                     Create New Parent Blocker (e.g. Waiting for syllabus / API approval)
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -1378,27 +1428,25 @@ export default function Page() {
                     <button
                       type="button"
                       onClick={handleCreateParentTask}
-                      className="px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
+                      className="px-2.5 py-0.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded text-[10px]"
                     >
-                      Add & Attach Blocker
+                      Add & Attach Parent
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* List of Existing Parent Candidates with In-Place State Selectors */}
-              <div className="max-h-40 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
+              {/* List of Parent Candidates */}
+              <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
                   <div className="text-[10px] text-zinc-600 italic py-1 text-center">
-                    No existing tasks to select as parent. Click "+ Create Blocking Parent" above.
+                    No existing tasks to select as parent.
                   </div>
                 ) : (
                   tasks
                     .filter((t) => t.id !== editId)
                     .map((candidate) => {
-                      const isDirectChecked = selectedDeps.includes(candidate.id);
-                      const upstreamSubDeps = getUpstreamChain(candidate.id);
-                      const candidateTheme = getBatchTheme(candidate.batch);
+                      const isDirectChecked = selectedParents.includes(candidate.id);
                       const currentCandidateStatus =
                         parentStatusOverrides[candidate.id] || candidate.manualStatus;
 
@@ -1407,7 +1455,7 @@ export default function Page() {
                           key={candidate.id}
                           className={`p-1.5 rounded border ${
                             isDirectChecked
-                              ? 'bg-indigo-950/40 border-indigo-500 text-white'
+                              ? 'bg-rose-950/40 border-rose-500 text-white'
                               : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
                           }`}
                         >
@@ -1417,10 +1465,10 @@ export default function Page() {
                                 type="checkbox"
                                 checked={isDirectChecked}
                                 onChange={(e) => {
-                                  if (e.target.checked) setSelectedDeps([...selectedDeps, candidate.id]);
-                                  else setSelectedDeps(selectedDeps.filter((id) => id !== candidate.id));
+                                  if (e.target.checked) setSelectedParents([...selectedParents, candidate.id]);
+                                  else setSelectedParents(selectedParents.filter((id) => id !== candidate.id));
                                 }}
-                                className="rounded border-zinc-700 text-indigo-600 focus:ring-0"
+                                className="rounded border-zinc-700 text-rose-600 focus:ring-0"
                               />
                               <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
                             </label>
@@ -1430,7 +1478,6 @@ export default function Page() {
                                 {candidate.owner}
                               </span>
 
-                              {/* In-Modal Parent Task State Selector */}
                               <select
                                 value={currentCandidateStatus}
                                 onChange={(e) => {
@@ -1447,35 +1494,13 @@ export default function Page() {
                                     ? 'bg-blue-950 border-blue-600 text-blue-300'
                                     : 'bg-emerald-950 border-emerald-600 text-emerald-300'
                                 }`}
-                                title="Set Parent Task State"
                               >
-                                <option value="todo">Parent: READY</option>
-                                <option value="progress">Parent: IN PROGRESS</option>
-                                <option value="done">Parent: DONE</option>
+                                <option value="todo">READY</option>
+                                <option value="progress">IN PROGRESS</option>
+                                <option value="done">DONE</option>
                               </select>
-
-                              {candidate.batch && candidate.batch !== 'None' && (
-                                <span className={`px-1 py-0.2 rounded font-bold ${candidateTheme.badge}`}>
-                                  {candidate.batch}
-                                </span>
-                              )}
                             </div>
                           </div>
-
-                          {isDirectChecked && upstreamSubDeps.length > 0 && (
-                            <div className="mt-1 pl-4 pt-1 border-t border-indigo-500/20 text-[10px] text-indigo-300 flex items-center gap-1.5 flex-wrap">
-                              <CornerDownRight className="w-3 h-3 text-indigo-400 flex-shrink-0" />
-                              <span className="font-mono text-zinc-400">Chained:</span>
-                              {upstreamSubDeps.map((sub, sIdx) => (
-                                <span
-                                  key={sub.id + sIdx}
-                                  className="px-1.5 py-0.2 rounded bg-zinc-800/80 text-zinc-300 border border-zinc-700"
-                                >
-                                  {sub.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       );
                     })
@@ -1483,7 +1508,102 @@ export default function Page() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            {/* SECTION 2: BLOCKS / UNLOCKS (Child Downstream Tasks) */}
+            <div className="space-y-1 pt-2 border-t border-zinc-800">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1">
+                  <ArrowRightCircle className="w-3 h-3" /> 2. Blocks / Unlocks (Children — Tasks that wait for this task)
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddChild(!showAddChild)}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 underline"
+                >
+                  {showAddChild ? 'Cancel Child' : '+ Create Child Task'}
+                </button>
+              </div>
+
+              {/* Inline Child Task Creator */}
+              {showAddChild && (
+                <div className="p-2 bg-emerald-950/30 border border-emerald-500/40 rounded-lg space-y-2 mb-2">
+                  <div className="text-[10px] font-bold text-emerald-300">
+                    Create New Downstream Child (Will automatically depend on this task)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <input
+                      placeholder="Child task name..."
+                      value={newChildName}
+                      onChange={(e) => setNewChildName(e.target.value)}
+                      className="col-span-2 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                    />
+                    <select
+                      value={newChildOwner}
+                      onChange={(e) => setNewChildOwner(e.target.value as any)}
+                      className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-[11px] text-zinc-300"
+                    >
+                      <option value="AI">AI</option>
+                      <option value="Me">Me</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCreateChildTask}
+                      className="px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[10px]"
+                    >
+                      Add & Attach Child
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* List of Child Candidates */}
+              <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
+                {tasks.filter((t) => t.id !== editId).length === 0 ? (
+                  <div className="text-[10px] text-zinc-600 italic py-1 text-center">
+                    No existing tasks to select as children. Click "+ Create Child Task" above.
+                  </div>
+                ) : (
+                  tasks
+                    .filter((t) => t.id !== editId)
+                    .map((candidate) => {
+                      const isChildChecked = selectedChildren.includes(candidate.id);
+                      return (
+                        <div
+                          key={candidate.id}
+                          className={`p-1.5 rounded border ${
+                            isChildChecked
+                              ? 'bg-emerald-950/40 border-emerald-500 text-white'
+                              : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                          }`}
+                        >
+                          <label className="flex items-center justify-between gap-2 cursor-pointer">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChildChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedChildren([...selectedChildren, candidate.id]);
+                                  else setSelectedChildren(selectedChildren.filter((id) => id !== candidate.id));
+                                }}
+                                className="rounded border-zinc-700 text-emerald-600 focus:ring-0"
+                              />
+                              <span className="font-semibold text-[11px] truncate">{candidate.name}</span>
+                            </div>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-300">
+                              {candidate.owner}
+                            </span>
+                          </label>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-zinc-400 mb-1">
                   Estimate
@@ -1517,7 +1637,7 @@ export default function Page() {
               </button>
               <button
                 onClick={saveTask}
-                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs"
+                className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 font-bold text-white rounded text-xs shadow"
               >
                 Save Task
               </button>
