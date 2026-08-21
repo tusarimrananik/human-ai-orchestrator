@@ -478,7 +478,19 @@ export default function Page() {
     return blocked ? 'blocked' : 'ready';
   };
 
-  // Master Action: "Start Parallel Work" - Automatically activates top N tasks for each parallel group
+  // Helper to sort ready tasks strictly in exact board priority order (Batch Priority Rank -> Card Position Order)
+  const sortReadyTasksInBoardOrder = (taskList: Task[]): Task[] => {
+    return [...taskList].sort((a, b) => {
+      const bwA = getBatchWeight(a.batch);
+      const bwB = getBatchWeight(b.batch);
+      if (bwA !== bwB) return bwA - bwB;
+      const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+      const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+      return ordA - ordB;
+    });
+  };
+
+  // Master Action: "Start Parallel Work" - Automatically activates top N tasks from Ready state in exact board order
   const handleStartParallelWork = () => {
     let updated = [...tasks];
 
@@ -487,8 +499,11 @@ export default function Page() {
       const grpCandidates = updated.filter(
         (t) => t.isParallel && t.parallelGroup === grp.name && computedStatus(t) === 'ready'
       );
+      // Sort strictly by Ready column priority order: Batch priority -> Card order
+      const sortedCandidates = sortReadyTasksInBoardOrder(grpCandidates);
+
       // Take up to slotLimit
-      const toStart = grpCandidates.slice(0, grp.slotLimit);
+      const toStart = sortedCandidates.slice(0, grp.slotLimit);
       const toStartIds = toStart.map((t) => t.id);
 
       updated = updated.map((t) => {
@@ -764,10 +779,14 @@ export default function Page() {
       ).length;
 
       if (currentRunningCount < slotCap) {
-        // Find next queued/ready task to promote into active running slot
-        const nextInLine = updated.find(
+        // Find all ready/unblocked tasks belonging to this group
+        const readyCandidates = updated.filter(
           (t) => t.isParallel && t.parallelGroup === target.parallelGroup && computedStatus(t) === 'ready'
         );
+        // Sort strictly by Ready column priority order: Batch priority -> Card order
+        const sortedCandidates = sortReadyTasksInBoardOrder(readyCandidates);
+        const nextInLine = sortedCandidates[0];
+
         if (nextInLine) {
           updated = updated.map((t) =>
             t.id === nextInLine.id ? { ...t, manualStatus: 'progress' as const, startedAt: Date.now() } : t
