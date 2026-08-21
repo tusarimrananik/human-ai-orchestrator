@@ -70,6 +70,7 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
+// Full element background, border, text & badge styling with high contrast readability
 export function getBatchTheme(batch: BatchTag = 'None') {
   switch (batch) {
     case 'Batch 1':
@@ -235,6 +236,7 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
+  // Change batch tag on task
   const handleBatchChange = (taskId: string, newBatch: BatchTag) => {
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, batch: newBatch } : t));
     saveTasks(updated);
@@ -280,9 +282,20 @@ export default function Page() {
     done: [],
   };
 
+  // Group and sort tasks by Batch (Batch 1 -> Batch 2 -> Batch 3 -> Batch 4 -> Batch 5 -> None)
   filtered.forEach((t) => {
     const st = computedStatus(t);
     groups[st].push(t);
+  });
+
+  // Enforce batch-based sorting in each Board column
+  (['blocked', 'ready', 'progress', 'done'] as const).forEach((key) => {
+    groups[key].sort((a, b) => {
+      const bwA = batchWeight(a.batch);
+      const bwB = batchWeight(b.batch);
+      if (bwA !== bwB) return bwA - bwB;
+      return a.createdAt - b.createdAt;
+    });
   });
 
   // Straight horizontal dependency lines calculation for DAG
@@ -507,7 +520,7 @@ export default function Page() {
       const list = levels[lvl];
 
       // 1. Sort primarily by Batch (Batch 1 -> Batch 2 -> Batch 3 -> Batch 4 -> Batch 5 -> None)
-      // 2. If same batch or root, sort by predecessor's lane so connected paths stay straight!
+      // 2. If same batch, sort by predecessor's lane so connected paths stay straight!
       list.sort((a, b) => {
         const bwA = batchWeight(a.batch);
         const bwB = batchWeight(b.batch);
@@ -520,7 +533,6 @@ export default function Page() {
         return laneA - laneB;
       });
 
-      // Assign horizontal row lane indices
       list.forEach((t, i) => {
         const pred = (t.dependencies || [])[0];
         const inheritedLane = pred !== undefined ? laneMap.get(pred) : undefined;
