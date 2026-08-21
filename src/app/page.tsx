@@ -32,6 +32,7 @@ import {
   Bot,
   User,
   Check,
+  ListPlus,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -293,6 +294,9 @@ export default function Page() {
   const [isGroupConfigOpen, setIsGroupConfigOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupSlotLimit, setNewGroupSlotLimit] = useState(3);
+
+  // Selector for attaching an EXISTING task to a group in the modal
+  const [selectedExistingTaskId, setSelectedExistingTaskId] = useState<Record<string, string>>({});
 
   // Per-Group Queue Form State inside Group Config Modal
   const [queueTaskInputs, setQueueTaskInputs] = useState<
@@ -735,8 +739,8 @@ export default function Page() {
     setShowAddChild(false);
   };
 
-  // Quick Queue Task Creator directly from inside Group Configuration Modal
-  const handleQueueTaskToGroup = (groupName: string) => {
+  // Quick Queue: Add BRAND NEW Task directly into group queue
+  const handleQueueNewTaskToGroup = (groupName: string) => {
     const input = queueTaskInputs[groupName];
     if (!input || !input.name.trim()) return;
 
@@ -752,7 +756,7 @@ export default function Page() {
       estimate: '',
       description: input.isGoal ? `Target: ${input.goalTarget}` : '',
       dependencies: [],
-      manualStatus: 'progress', // directly queued into In-Progress for this group
+      manualStatus: 'progress', // directly placed in this group's active/queue list
       createdAt: Date.now(),
       order: tasks.length + 1,
       totalTimeSpentSeconds: 0,
@@ -763,6 +767,28 @@ export default function Page() {
       ...prev,
       [groupName]: { name: '', isGoal: false, goalTarget: '', owner: 'AI' },
     }));
+  };
+
+  // Quick Queue: Attach an EXISTING task to this parallel group
+  const handleAssignExistingTaskToGroup = (groupName: string) => {
+    const targetTaskId = selectedExistingTaskId[groupName];
+    if (!targetTaskId) return;
+
+    const updated = tasks.map((t) => {
+      if (t.id === targetTaskId) {
+        return { ...t, parallelGroup: groupName, manualStatus: 'progress' as const };
+      }
+      return t;
+    });
+
+    saveTasks(updated);
+    setSelectedExistingTaskId((prev) => ({ ...prev, [groupName]: '' }));
+  };
+
+  // Remove a task from a parallel group
+  const handleRemoveTaskFromGroup = (taskId: string) => {
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, parallelGroup: '' } : t));
+    saveTasks(updated);
   };
 
   const saveTask = () => {
@@ -1532,7 +1558,7 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Task Type Option (Normal vs Goal-Oriented) */}
+            {/* Task Nature Option (Normal vs Goal-Oriented) */}
             <div className="p-2 bg-zinc-950/80 border border-zinc-800 rounded-lg space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1">
@@ -1565,7 +1591,7 @@ export default function Page() {
               {taskIsGoal && (
                 <div>
                   <input
-                    placeholder="Specific target / outcome (e.g. Pass all unit tests, or 100% derivation accuracy)"
+                    placeholder="Specific target outcome (e.g. Pass all unit tests with JWT refresh rotation)"
                     value={taskGoalTarget}
                     onChange={(e) => setTaskGoalTarget(e.target.value)}
                     className="w-full bg-zinc-900 border border-amber-600/50 rounded px-2 py-1 text-xs text-amber-200 focus:outline-none"
@@ -1913,7 +1939,7 @@ export default function Page() {
         </div>
       )}
 
-      {/* Parallel Group Configuration & In-Modal Queue Management */}
+      {/* Parallel Group Configuration & In-Modal Queue Management (Supports BOTH Selecting Existing & Creating New Tasks) */}
       {isGroupConfigOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3"
@@ -1921,7 +1947,7 @@ export default function Page() {
             if (e.target === e.currentTarget) setIsGroupConfigOpen(false);
           }}
         >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-xl p-4 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl p-4 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-bold text-xs text-zinc-100 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-indigo-400" />
@@ -1932,11 +1958,12 @@ export default function Page() {
               </button>
             </div>
 
-            {/* Groups List with In-Place Task Queuers */}
+            {/* Groups List with In-Place Task Queuers & Existing Task Selectors */}
             <div className="space-y-3">
               {parallelGroups.map((grp) => {
                 const grpTasks = tasks.filter((t) => t.parallelGroup === grp.name && computedStatus(t) !== 'done');
                 const formState = queueTaskInputs[grp.name] || { name: '', isGoal: false, goalTarget: '', owner: 'AI' };
+                const otherTasks = tasks.filter((t) => t.parallelGroup !== grp.name && computedStatus(t) !== 'done');
 
                 return (
                   <div
@@ -1948,7 +1975,7 @@ export default function Page() {
                         <FolderKanban className="w-4 h-4 text-indigo-400" />
                         <span className="font-bold text-xs text-white">{grp.name}</span>
                         <span className="text-[10px] text-zinc-500 font-mono">
-                          ({grpTasks.length} active/queued)
+                          ({grpTasks.length} in group)
                         </span>
                       </div>
 
@@ -1970,10 +1997,85 @@ export default function Page() {
                       </div>
                     </div>
 
-                    {/* Quick Queue Input for this group */}
+                    {/* Current Tasks inside this group */}
+                    {grpTasks.length > 0 && (
+                      <div className="space-y-1 bg-zinc-900/40 p-2 rounded border border-zinc-800/80">
+                        <div className="text-[9px] uppercase font-bold text-zinc-500 mb-1">
+                          Current Tasks in {grp.name} ({grpTasks.length})
+                        </div>
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {grpTasks.map((t, idx) => (
+                            <div
+                              key={t.id}
+                              className="flex items-center justify-between p-1.5 bg-zinc-950 rounded border border-zinc-800/80 text-[11px]"
+                            >
+                              <div className="flex items-center gap-1.5 truncate flex-1">
+                                <span className="font-mono text-[9px] text-zinc-600">#{idx + 1}</span>
+                                {t.isGoal && (
+                                  <span className="text-[8px] font-bold px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                                    <Target className="w-2 h-2" /> Goal
+                                  </span>
+                                )}
+                                <span className="truncate text-zinc-200">{t.name}</span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] px-1 rounded bg-zinc-900 text-zinc-400 font-mono">
+                                  {t.owner}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTaskFromGroup(t.id)}
+                                  className="text-zinc-500 hover:text-rose-400 p-0.5"
+                                  title="Remove from group"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Option 1: Attach an EXISTING task to this group */}
+                    <div className="p-2 bg-indigo-950/20 border border-indigo-500/30 rounded-md space-y-1.5">
+                      <div className="text-[10px] font-bold text-indigo-300 flex items-center gap-1">
+                        <ListPlus className="w-3 h-3 text-indigo-400" /> Select & Attach Existing Task to {grp.name}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={selectedExistingTaskId[grp.name] || ''}
+                          onChange={(e) =>
+                            setSelectedExistingTaskId((prev) => ({
+                              ...prev,
+                              [grp.name]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200"
+                        >
+                          <option value="">-- Choose an existing task to queue --</option>
+                          {otherTasks.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.owner}) [{t.batch}]
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedExistingTaskId[grp.name]}
+                          onClick={() => handleAssignExistingTaskToGroup(grp.name)}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white font-bold rounded text-[10px]"
+                        >
+                          Add to {grp.name}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Option 2: Quick Queue a BRAND NEW Task into this group */}
                     <div className="p-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md space-y-1.5">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-indigo-300">+ Queue Task into {grp.name}</span>
+                        <span className="font-bold text-indigo-300">+ Or Create & Queue New Task</span>
                         <div className="flex items-center gap-2">
                           <label className="flex items-center gap-1 cursor-pointer">
                             <input
@@ -2038,7 +2140,7 @@ export default function Page() {
 
                       {formState.isGoal && (
                         <input
-                          placeholder="Target criteria (e.g. Pass Jest tests with JWT token rotation)"
+                          placeholder="Target outcome (e.g. Pass all unit tests with JWT refresh rotation)"
                           value={formState.goalTarget}
                           onChange={(e) =>
                             setQueueTaskInputs((prev) => ({
@@ -2053,10 +2155,10 @@ export default function Page() {
                       <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => handleQueueTaskToGroup(grp.name)}
+                          onClick={() => handleQueueNewTaskToGroup(grp.name)}
                           className="px-3 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-[10px]"
                         >
-                          Add to {grp.name} Queue
+                          Create & Queue
                         </button>
                       </div>
                     </div>
