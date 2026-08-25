@@ -584,6 +584,35 @@ export default function Page() {
     saveTasks(newTasks);
   };
 
+  // Reorder task positions strictly within the same batch inside a DAG stage
+  const moveTaskWithinDagStage = (taskId: string, stageTasks: Task[], direction: 'up' | 'down') => {
+    const currentTask = tasks.find((t) => t.id === taskId);
+    if (!currentTask) return;
+
+    const batchTasks = stageTasks.filter((t) => (t.batch || 'None') === (currentTask.batch || 'None'));
+    const batchIdx = batchTasks.findIndex((t) => t.id === taskId);
+    if (batchIdx === -1) return;
+
+    const targetBatchIdx = direction === 'up' ? batchIdx - 1 : batchIdx + 1;
+    if (targetBatchIdx < 0 || targetBatchIdx >= batchTasks.length) return;
+
+    const targetTask = batchTasks[targetBatchIdx];
+    const idxA = tasks.findIndex((t) => t.id === taskId);
+    const idxB = tasks.findIndex((t) => t.id === targetTask.id);
+    if (idxA === -1 || idxB === -1) return;
+
+    const newTasks = [...tasks];
+    const temp = newTasks[idxA];
+    newTasks[idxA] = newTasks[idxB];
+    newTasks[idxB] = temp;
+
+    newTasks.forEach((t, i) => {
+      t.order = i;
+    });
+
+    saveTasks(newTasks);
+  };
+
   // Reorder tasks within a parallel group in the Groups & Queues modal
   const moveTaskWithinGroup = (groupName: string, taskId: string, direction: 'up' | 'down') => {
     const grpTasks = tasks.filter((t) => t.isParallel && t.parallelGroup === groupName && computedStatus(t) !== 'done');
@@ -1054,14 +1083,19 @@ export default function Page() {
     URL.revokeObjectURL(a.href);
   };
 
-  const openTaskModal = (id: string | null = null, defaultState?: 'blocked' | 'ready' | 'progress' | 'done') => {
+  const openTaskModal = (
+    id: string | null = null,
+    defaultState?: 'blocked' | 'ready' | 'progress' | 'done',
+    initialParentIds?: string[],
+    initialBatch?: BatchTag
+  ) => {
     setEditId(id);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
     setTaskType(current?.taskType || 'normal');
     setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
-    setTaskBatch(current?.batch || 'None');
+    setTaskBatch(current?.batch || initialBatch || 'None');
     setTaskIsParallel(typeof current?.isParallel === 'boolean' ? current.isParallel : !!current?.parallelGroup);
     setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
     setTaskSubTasks(current?.subTasks || []);
@@ -1069,7 +1103,7 @@ export default function Page() {
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
 
-    setSelectedParents(current?.dependencies || []);
+    setSelectedParents(current?.dependencies || initialParentIds || []);
     const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
     setSelectedChildren(existingChildren);
 
@@ -1349,6 +1383,10 @@ export default function Page() {
         const bwA = getBatchWeight(a.batch);
         const bwB = getBatchWeight(b.batch);
         if (bwA !== bwB) return bwA - bwB;
+
+        const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+        const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+        if (ordA !== ordB) return ordA - ordB;
 
         const predA = (a.dependencies || [])[0];
         const predB = (b.dependencies || [])[0];
@@ -2002,54 +2040,278 @@ export default function Page() {
                 ))}
               </svg>
 
-              <div className="grid grid-flow-col auto-cols-[220px] gap-16 items-start relative z-20">
-                {orderedLevels.map((level, index) => (
-                  <div key={level} className="flex flex-col gap-4">
-                    <div className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
-                      {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
-                    </div>
-                    {levels[level].map((t) => {
-                      const status = computedStatus(t);
-                      const durationDisplay = getTaskDurationDisplay(t);
-                      const batchTheme = getBatchTheme(t.batch);
-
-                      return (
-                        <div
-                          key={t.id}
-                          data-node-id={t.id}
-                          className={`p-2.5 rounded-lg border-2 shadow space-y-1 ${batchTheme.dagNode}`}
+              <div className="grid grid-flow-col auto-cols-[260px] gap-16 items-start relative z-20">
+                {orderedLevels.map((level, index) => {
+                  const stageTasks = levels[level] || [];
+                  return (
+                    <div key={level} className="flex flex-col gap-3">
+                      {/* Stage Header with Stage name, task count & + Add Task button */}
+                      <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 py-1.5 shadow-sm">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
+                            {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
+                          </span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                            {stageTasks.length}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked')}
+                          className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
+                          title={`Add new task to ${index === 0 ? 'Root' : `Stage ${index + 1}`}`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="text-xs font-bold line-clamp-2 leading-tight flex-1">
+                          <Plus className="w-2.5 h-2.5" /> Add
+                        </button>
+                      </div>
+
+                      {stageTasks.map((t) => {
+                        const status = computedStatus(t);
+                        const durationDisplay = getTaskDurationDisplay(t);
+                        const batchTheme = getBatchTheme(t.batch);
+
+                        const batchSiblings = stageTasks.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
+                        const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
+                        const isFirstInBatch = posInBatch === 0;
+                        const isLastInBatch = posInBatch === batchSiblings.length - 1;
+
+                        const depNames = (t.dependencies || [])
+                          .map((id) => tasks.find((x) => x.id === id))
+                          .filter(Boolean) as Task[];
+                        const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+
+                        const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
+                        const totalSubsCount = (t.subTasks || []).length;
+
+                        return (
+                          <div
+                            key={t.id}
+                            data-node-id={t.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, t.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDropOnTask(t.id)}
+                            className={`p-2.5 rounded-lg border-2 shadow space-y-1.5 transition-all ${batchTheme.dagNode} ${
+                              draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
+                            }`}
+                          >
+                            {/* Card Top: Grip, Owner, Goal/Parallel Tags, Up/Down reorder within batch, Batch Dropdown */}
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1">
+                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
+                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
+                                  {t.owner}
+                                </span>
+                                {t.taskType === 'goal' && (
+                                  <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                                    <Target className="w-2.5 h-2.5" /> Goal
+                                  </span>
+                                )}
+                                {t.isParallel && t.parallelGroup && (
+                                  <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
+                                    <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-0.5 mr-0.5">
+                                  <button
+                                    disabled={isFirstInBatch}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveTaskWithinDagStage(t.id, stageTasks, 'up');
+                                    }}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Up Within Batch"
+                                  >
+                                    <ArrowUp className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button
+                                    disabled={isLastInBatch}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      moveTaskWithinDagStage(t.id, stageTasks, 'down');
+                                    }}
+                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Down Within Batch"
+                                  >
+                                    <ArrowDown className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+
+                                <select
+                                  value={t.batch || 'None'}
+                                  onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
+                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
+                                >
+                                  <option value="None" className="bg-zinc-900 text-zinc-400">
+                                    No Batch
+                                  </option>
+                                  {ALL_BATCHES.map((b) => (
+                                    <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
+                                      {b}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* Task Name (Click to edit/plan) */}
+                            <div
+                              onClick={() => openTaskModal(t.id)}
+                              className={`text-xs font-bold leading-snug line-clamp-2 cursor-pointer hover:underline ${batchTheme.cardTitle}`}
+                              title="Click to edit/plan task"
+                            >
                               {t.name}
                             </div>
-                            {t.batch && t.batch !== 'None' && (
-                              <span className={`text-[8px] font-bold px-1 rounded ${batchTheme.badge}`}>
-                                {t.batch}
-                              </span>
+
+                            {/* Description if present */}
+                            {t.description && (
+                              <p className={`text-[10px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
+                                {t.description}
+                              </p>
                             )}
-                          </div>
-                          {t.description && (
-                            <p className="text-[10px] line-clamp-2 leading-snug opacity-80">
-                              {t.description}
-                            </p>
-                          )}
-                          <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-white/10">
-                            <span>{t.owner}</span>
-                            <div className="flex items-center gap-1">
-                              {durationDisplay && (
-                                <span className="font-mono text-emerald-400 font-bold">
-                                  {durationDisplay}
+
+                            {/* Sub-Tasks Checklist Breakdown in DAG */}
+                            {t.subTasks && t.subTasks.length > 0 && (
+                              <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
+                                <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
+                                  <span className="flex items-center gap-1">
+                                    <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
+                                  </span>
+                                  <span className="font-mono text-[8px] text-emerald-400">
+                                    {completedSubsCount}/{totalSubsCount} Done
+                                  </span>
+                                </div>
+                                <div className="space-y-0.5">
+                                  {t.subTasks.map((st) => (
+                                    <div
+                                      key={st.id}
+                                      onClick={() => toggleSubTask(t.id, st.id)}
+                                      className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
+                                    >
+                                      {st.status === 'done' ? (
+                                        <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                      ) : (
+                                        <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+                                      )}
+                                      <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
+                                        {st.name}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Waiting Prerequisite Lock */}
+                            {waiting.length > 0 && (
+                              <div className="text-[9px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
+                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
+                              </div>
+                            )}
+
+                            {/* Bottom row: Duration / Status on left, Planning + Action buttons on right */}
+                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10">
+                              <div className="flex items-center gap-1">
+                                {durationDisplay ? (
+                                  <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+                                    <Timer className="w-2.5 h-2.5" />
+                                    <span>{durationDisplay}</span>
+                                  </div>
+                                ) : t.estimate ? (
+                                  <div className="text-zinc-400 flex items-center gap-1 text-[9px]">
+                                    <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                                  </div>
+                                ) : null}
+                                <span className="font-semibold uppercase text-[9px] px-1 py-0.2 rounded bg-black/40 text-zinc-300 border border-white/10">
+                                  {status}
                                 </span>
-                              )}
-                              <span className="font-semibold uppercase text-[9px]">{status}</span>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                {/* Quick Plan Next Child Step */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openTaskModal(null, 'blocked', [t.id], t.batch);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-indigo-950/90 border border-indigo-500/60 hover:bg-indigo-900 text-indigo-200 text-[9px] font-bold flex items-center gap-0.5 shadow transition-colors"
+                                  title="Plan & add child task depending on this"
+                                >
+                                  <Plus className="w-2.5 h-2.5" /> Step
+                                </button>
+
+                                {/* Task Action Buttons (Start / Review / Done / Reopen) */}
+                                {status === 'ready' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startInProgress(t.id);
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-semibold shadow"
+                                  >
+                                    Start
+                                  </button>
+                                )}
+
+                                {status === 'progress' && t.taskType === 'goal' ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setReviewingTaskId(t.id);
+                                      setIsBlockPickerOpen(false);
+                                      setBlockParentId('');
+                                      setBlockNewParentName('');
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold shadow flex items-center gap-1"
+                                  >
+                                    <Eye className="w-2.5 h-2.5" /> Review
+                                  </button>
+                                ) : status === 'progress' && t.taskType !== 'goal' ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      finishTask(t.id);
+                                    }}
+                                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-semibold shadow"
+                                  >
+                                    Done
+                                  </button>
+                                ) : null}
+
+                                {status === 'done' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      reopenTask(t.id);
+                                    }}
+                                    className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[9px]"
+                                  >
+                                    Reopen
+                                  </button>
+                                )}
+
+                                {/* Edit Icon */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openTaskModal(t.id);
+                                  }}
+                                  className="p-0.5 text-zinc-400 hover:text-white"
+                                  title="Edit & Plan Task"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                        );
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
