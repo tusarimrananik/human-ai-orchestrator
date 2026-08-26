@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { alignDagLevels } from '@/lib/dag-layout';
 import {
   Play,
   CheckCircle2,
@@ -1347,62 +1348,10 @@ export default function Page() {
     return chain;
   };
 
-  // Topological DAG calculation with DYNAMIC BATCH PRIORITY & straight-lane sorting
+  // Sort roots by the selected batch order, then align every later stage with
+  // its earliest parent lane so a complete chain moves together when sorted.
   const getAlignedLevels = () => {
-    const sourceTasks = filtered;
-    const byId = new Map(sourceTasks.map((t) => [t.id, t]));
-    const memo = new Map<string, number>();
-
-    function levelOf(task: Task, stack = new Set<string>()): number {
-      if (memo.has(task.id)) return memo.get(task.id)!;
-      if (stack.has(task.id)) return 0;
-
-      stack.add(task.id);
-      const validDeps = (task.dependencies || []).map((id) => byId.get(id)).filter(Boolean) as Task[];
-      let level = 0;
-      if (validDeps.length) {
-        level = 1 + Math.max(...validDeps.map((d) => levelOf(d, new Set(stack))));
-      }
-      memo.set(task.id, level);
-      return level;
-    }
-
-    const levels: Record<number, Task[]> = {};
-    sourceTasks.forEach((t) => {
-      const l = levelOf(t);
-      (levels[l] ||= []).push(t);
-    });
-
-    const orderedLevelKeys = Object.keys(levels).map(Number).sort((a, b) => a - b);
-    const laneMap = new Map<string, number>();
-
-    orderedLevelKeys.forEach((lvl) => {
-      const list = levels[lvl];
-
-      list.sort((a, b) => {
-        const bwA = getBatchWeight(a.batch);
-        const bwB = getBatchWeight(b.batch);
-        if (bwA !== bwB) return bwA - bwB;
-
-        const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
-        const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
-        if (ordA !== ordB) return ordA - ordB;
-
-        const predA = (a.dependencies || [])[0];
-        const predB = (b.dependencies || [])[0];
-        const laneA = predA ? laneMap.get(predA) ?? 999 : 999;
-        const laneB = predB ? laneMap.get(predB) ?? 999 : 999;
-        return laneA - laneB;
-      });
-
-      list.forEach((t, i) => {
-        const pred = (t.dependencies || [])[0];
-        const inheritedLane = pred !== undefined ? laneMap.get(pred) : undefined;
-        laneMap.set(t.id, inheritedLane !== undefined ? inheritedLane : i);
-      });
-    });
-
-    return { levels, orderedLevels: orderedLevelKeys };
+    return alignDagLevels(filtered, (batch) => getBatchWeight((batch || 'None') as BatchTag));
   };
 
   const { levels, orderedLevels } = getAlignedLevels();
