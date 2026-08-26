@@ -92,6 +92,8 @@ interface Task {
   totalTimeSpentSeconds?: number;
 }
 
+type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
+
 const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
 const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
@@ -283,6 +285,7 @@ export default function Page() {
   const [ownerFilter, setOwnerFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
+  const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -1348,13 +1351,28 @@ export default function Page() {
     return chain;
   };
 
-  // Sort roots by the selected batch order, then align every later stage with
+  // Sort roots by the selected DAG rule, then align every later stage with
   // its earliest parent lane so a complete chain moves together when sorted.
   const getAlignedLevels = () => {
-    return alignDagLevels(filtered, (batch) => getBatchWeight((batch || 'None') as BatchTag));
+    const manualOrder = (task: Task) => task.order ?? task.createdAt;
+    const compareTasks = (a: Task, b: Task): number => {
+      switch (dagSortMode) {
+        case 'batch':
+          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || manualOrder(a) - manualOrder(b);
+        case 'name':
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || manualOrder(a) - manualOrder(b);
+        case 'owner':
+          return a.owner.localeCompare(b.owner) || manualOrder(a) - manualOrder(b);
+        case 'status':
+          return computedStatus(a).localeCompare(computedStatus(b)) || manualOrder(a) - manualOrder(b);
+        default:
+          return manualOrder(a) - manualOrder(b);
+      }
+    };
+    return alignDagLevels(filtered, compareTasks);
   };
 
-  const { levels, orderedLevels } = getAlignedLevels();
+  const { levels, orderedLevels, lanes, laneCount } = getAlignedLevels();
 
   // Helper to partition In Progress items: Single unified list when parallel mode is OFF, or parallel group slots when ON
   const renderInProgressColumn = () => {
@@ -1958,6 +1976,26 @@ export default function Page() {
           /* DAG View */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             <div className="relative min-w-max pb-6" ref={stageRef}>
+              <div className="sticky left-0 z-30 mb-3 flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950/95 px-2.5 py-1.5 shadow-lg">
+                <label htmlFor="dag-sort" className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                  <Layers className="h-3 w-3 text-indigo-400" /> Sort by
+                </label>
+                <select
+                  id="dag-sort"
+                  aria-label="Sort DAG tasks"
+                  value={dagSortMode}
+                  onChange={(e) => setDagSortMode(e.target.value as DagSortMode)}
+                  className="min-w-32 rounded border border-indigo-500/60 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 outline-none focus:border-indigo-400"
+                >
+                  <option value="manual">Manual order</option>
+                  <option value="batch">Batch priority</option>
+                  <option value="name">Task name A–Z</option>
+                  <option value="owner">Owner A–Z</option>
+                  <option value="status">Status A–Z</option>
+                </select>
+                <span className="text-[9px] text-zinc-500">Children follow parent rows</span>
+              </div>
+
               <svg
                 className="absolute inset-0 pointer-events-none z-10"
                 width={svgContent.width}
@@ -1989,13 +2027,24 @@ export default function Page() {
                 ))}
               </svg>
 
-              <div className="grid grid-flow-col auto-cols-[260px] gap-16 items-start relative z-20">
+              <div
+                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-3 items-stretch relative z-20"
+                style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, auto)` }}
+              >
                 {orderedLevels.map((level, index) => {
                   const stageTasks = levels[level] || [];
                   return (
-                    <div key={level} className="flex flex-col gap-3">
+                    <div
+                      key={level}
+                      className="grid gap-y-3"
+                      style={{
+                        gridColumn: index + 1,
+                        gridRow: `1 / span ${Math.max(laneCount, 1) + 1}`,
+                        gridTemplateRows: 'subgrid',
+                      }}
+                    >
                       {/* Stage Header with Stage name, task count & + Add Task button */}
-                      <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 py-1.5 shadow-sm">
+                      <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 py-1.5 shadow-sm" style={{ gridRow: 1 }}>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
                             {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
@@ -2039,6 +2088,7 @@ export default function Page() {
                             onDragStart={(e) => handleDragStart(e, t.id)}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
+                            style={{ gridRow: (lanes.get(t.id) ?? 0) + 2 }}
                             className={`p-2.5 rounded-lg border-2 shadow space-y-1.5 transition-all ${batchTheme.dagNode} ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}

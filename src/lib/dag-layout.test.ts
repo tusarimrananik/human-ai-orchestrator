@@ -16,7 +16,7 @@ test('sorts roots by the selected batch order and keeps every later stage groupe
     { id: 'a-3', batch: 'B3', order: 5, dependencies: ['a-2'] },
   ];
 
-  const result = alignDagLevels(tasks, weight);
+  const result = alignDagLevels(tasks, (a, b) => weight(a.batch) - weight(b.batch));
   deepEqual(result.levels[0].map((task) => task.id), ['root-a', 'root-b']);
   deepEqual(result.levels[1].map((task) => task.id), ['a-2', 'b-2']);
   deepEqual(result.levels[2].map((task) => task.id), ['a-3', 'b-3']);
@@ -31,7 +31,7 @@ test('uses the earliest aligned parent for a task with multiple parents', () => 
     { id: 'shared', batch: 'B3', order: 4, dependencies: ['b-2', 'a-2'] },
   ];
 
-  const result = alignDagLevels(tasks, weight);
+  const result = alignDagLevels(tasks, (a, b) => weight(a.batch) - weight(b.batch));
   equal(result.lanes.get('shared'), result.lanes.get('a-2'));
 });
 
@@ -41,6 +41,33 @@ test('does not mutate the task array', () => {
     { id: 'a', batch: 'B1', order: 1, dependencies: [] },
   ];
   const original = tasks.map((task) => task.id);
-  alignDagLevels(tasks, weight);
+  alignDagLevels(tasks, (a, b) => weight(a.batch) - weight(b.batch));
   deepEqual(tasks.map((task) => task.id), original);
+});
+
+test('accepts a separate root comparator such as task name sorting', () => {
+  const tasks: T[] = [
+    { id: 'zebra', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'alpha', batch: 'B2', order: 1, dependencies: [] },
+    { id: 'zebra-child', batch: 'B1', order: 2, dependencies: ['zebra'] },
+    { id: 'alpha-child', batch: 'B2', order: 3, dependencies: ['alpha'] },
+  ];
+
+  const result = alignDagLevels(tasks, (a, b) => a.id.localeCompare(b.id));
+  deepEqual(result.levels[0].map((task) => task.id), ['alpha', 'zebra']);
+  deepEqual(result.levels[1].map((task) => task.id), ['alpha-child', 'zebra-child']);
+});
+
+test('assigns unique shared rows inside a stage while preserving parent alignment where available', () => {
+  const tasks: T[] = [
+    { id: 'root-a', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'root-b', batch: 'B2', order: 1, dependencies: [] },
+    { id: 'a-first', batch: 'B1', order: 2, dependencies: ['root-a'] },
+    { id: 'a-second', batch: 'B1', order: 3, dependencies: ['root-a'] },
+    { id: 'b-first', batch: 'B2', order: 4, dependencies: ['root-b'] },
+  ];
+
+  const result = alignDagLevels(tasks, (a, b) => weight(a.batch) - weight(b.batch));
+  equal(result.lanes.get('a-first'), result.lanes.get('root-a'));
+  deepEqual(new Set(result.levels[1].map((task) => result.lanes.get(task.id))).size, 3);
 });
