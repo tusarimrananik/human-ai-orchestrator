@@ -14,6 +14,34 @@ export interface AlignedDag<T extends DagTask> {
 }
 
 /**
+ * Creates a DAG-only projection with hidden nodes removed. Dependencies pass
+ * through hidden nodes to their nearest visible ancestors, so completing a
+ * task shifts every later visible stage left without changing stored data.
+ */
+export function collapseHiddenDagTasks<T extends DagTask>(
+  tasks: readonly T[],
+  isHidden: (task: T) => boolean
+): T[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+
+  function visibleAncestors(id: string, visited = new Set<string>()): string[] {
+    if (visited.has(id)) return [];
+    visited.add(id);
+    const task = byId.get(id);
+    if (!task) return [];
+    if (!isHidden(task)) return [task.id];
+    return (task.dependencies || []).flatMap((parentId) => visibleAncestors(parentId, new Set(visited)));
+  }
+
+  return tasks
+    .filter((task) => !isHidden(task))
+    .map((task) => ({
+      ...task,
+      dependencies: [...new Set((task.dependencies || []).flatMap((id) => visibleAncestors(id)))],
+    }));
+}
+
+/**
  * Topologically groups tasks into stages. Root tasks use the selected sort,
  * while later stages inherit parent lanes before applying their own tie-break.
  * Lanes are unique within each stage so they can be rendered as shared CSS-grid

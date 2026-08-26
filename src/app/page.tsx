@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { alignDagLevels } from '@/lib/dag-layout';
+import { alignDagLevels, collapseHiddenDagTasks } from '@/lib/dag-layout';
 import {
   Play,
   CheckCircle2,
@@ -731,6 +731,7 @@ export default function Page() {
 
     return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
   });
+  const visibleDagTasks = collapseHiddenDagTasks(filtered, (task) => task.manualStatus === 'done');
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
     blocked: [],
@@ -765,7 +766,7 @@ export default function Page() {
 
   // Straight horizontal dependency lines calculation for DAG
   useLayoutEffect(() => {
-    if (view !== 'dependency' || !stageRef.current || !filtered.length) return;
+    if (view !== 'dependency' || !stageRef.current || !visibleDagTasks.length) return;
 
     const timer = setTimeout(() => {
       const stage = stageRef.current;
@@ -776,7 +777,7 @@ export default function Page() {
       const height = stage.scrollHeight;
       const paths: string[] = [];
 
-      filtered.forEach((targetTask) => {
+      visibleDagTasks.forEach((targetTask) => {
         (targetTask.dependencies || []).forEach((depId) => {
           const source = stage.querySelector(`[data-node-id="${depId}"]`);
           const target = stage.querySelector(`[data-node-id="${targetTask.id}"]`);
@@ -806,7 +807,7 @@ export default function Page() {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, filtered, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder]);
+  }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, dagSortMode]);
 
   const startInProgress = (id: string) => {
     const maxOrder = Math.max(
@@ -1369,7 +1370,7 @@ export default function Page() {
           return manualOrder(a) - manualOrder(b);
       }
     };
-    return alignDagLevels(filtered, compareTasks);
+    return alignDagLevels(visibleDagTasks, compareTasks);
   };
 
   const { levels, orderedLevels, lanes, laneCount } = getAlignedLevels();

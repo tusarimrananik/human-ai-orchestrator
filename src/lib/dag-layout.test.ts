@@ -1,6 +1,6 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
-import { alignDagLevels } from './dag-layout';
+import { alignDagLevels, collapseHiddenDagTasks } from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
 
@@ -70,4 +70,21 @@ test('assigns unique shared rows inside a stage while preserving parent alignmen
   const result = alignDagLevels(tasks, (a, b) => weight(a.batch) - weight(b.batch));
   equal(result.lanes.get('a-first'), result.lanes.get('root-a'));
   deepEqual(new Set(result.levels[1].map((task) => result.lanes.get(task.id))).size, 3);
+});
+
+test('hides completed DAG nodes and shifts each next visible stage left', () => {
+  const tasks = [
+    { id: 'root', batch: 'B1', order: 0, dependencies: [], done: true },
+    { id: 'stage-2', batch: 'B2', order: 1, dependencies: ['root'], done: false },
+    { id: 'stage-3', batch: 'B3', order: 2, dependencies: ['stage-2'], done: false },
+  ];
+
+  const visible = collapseHiddenDagTasks(tasks, (task) => task.done);
+  deepEqual(visible.map((task) => task.id), ['stage-2', 'stage-3']);
+  deepEqual(visible.find((task) => task.id === 'stage-2')?.dependencies, []);
+  deepEqual(visible.find((task) => task.id === 'stage-3')?.dependencies, ['stage-2']);
+
+  const result = alignDagLevels(visible, (a, b) => a.order - b.order);
+  deepEqual(result.levels[0].map((task) => task.id), ['stage-2']);
+  deepEqual(result.levels[1].map((task) => task.id), ['stage-3']);
 });
