@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { alignDagLevels, collapseHiddenDagTasks } from '@/lib/dag-layout';
+import { alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator } from '@/lib/dag-layout';
 import {
   Play,
   CheckCircle2,
@@ -1356,6 +1356,7 @@ export default function Page() {
   // its earliest parent lane so a complete chain moves together when sorted.
   const getAlignedLevels = () => {
     const manualOrder = (task: Task) => task.order ?? task.createdAt;
+    const compareSourceOrder = createSourceOrderComparator(visibleDagTasks);
     const compareTasks = (a: Task, b: Task): number => {
       switch (dagSortMode) {
         case 'batch':
@@ -1367,7 +1368,7 @@ export default function Page() {
         case 'status':
           return computedStatus(a).localeCompare(computedStatus(b)) || manualOrder(a) - manualOrder(b);
         default:
-          return manualOrder(a) - manualOrder(b);
+          return compareSourceOrder(a, b);
       }
     };
     return alignDagLevels(visibleDagTasks, compareTasks);

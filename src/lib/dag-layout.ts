@@ -13,6 +13,12 @@ export interface AlignedDag<T extends DagTask> {
   laneCount: number;
 }
 
+/** Keeps DAG manual order tied to stable source-array position, not Board execution order. */
+export function createSourceOrderComparator<T extends DagTask>(tasks: readonly T[]): (a: T, b: T) => number {
+  const positions = new Map(tasks.map((task, index) => [task.id, index]));
+  return (a, b) => (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+}
+
 /**
  * Creates a DAG-only projection with hidden nodes removed. Dependencies pass
  * through hidden nodes to their nearest visible ancestors, so completing a

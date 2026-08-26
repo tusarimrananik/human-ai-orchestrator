@@ -1,6 +1,6 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
-import { alignDagLevels, collapseHiddenDagTasks } from './dag-layout';
+import { alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator } from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
 
@@ -87,4 +87,15 @@ test('hides completed DAG nodes and shifts each next visible stage left', () => 
   const result = alignDagLevels(visible, (a, b) => a.order - b.order);
   deepEqual(result.levels[0].map((task) => task.id), ['stage-2']);
   deepEqual(result.levels[1].map((task) => task.id), ['stage-3']);
+});
+
+test('starting a task does not change its manual DAG position when Board execution order changes', () => {
+  const tasks: T[] = [
+    { id: 'first', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'started', batch: 'B1', order: 999, dependencies: [] },
+    { id: 'third', batch: 'B1', order: 2, dependencies: [] },
+  ];
+
+  const result = alignDagLevels(tasks, createSourceOrderComparator(tasks));
+  deepEqual(result.levels[0].map((task) => task.id), ['first', 'started', 'third']);
 });
