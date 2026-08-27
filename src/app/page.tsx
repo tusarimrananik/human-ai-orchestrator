@@ -250,7 +250,8 @@ const BATCH_THEME_PALETTE = [
   },
 ];
 
-function getBatchTheme(batch: string = 'Batch 1') {
+function getBatchTheme(rawBatch: string = 'Batch 1') {
+  const batch = (!rawBatch || rawBatch === 'None') ? 'Batch 1' : rawBatch;
   const match = batch.match(/^Batch\s+(\d+)$/i);
   let index = 0;
   if (match) {
