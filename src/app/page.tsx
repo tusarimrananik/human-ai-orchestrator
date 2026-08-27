@@ -870,24 +870,19 @@ function OrchestratorPage({ userId }: { userId: string }) {
     e.preventDefault();
   };
 
-  const handleDropOnTask = (targetTaskId: string) => {
+  const handleDropOnTask = (targetTaskId: string, targetBatch?: BatchTag) => {
     if (!draggedTaskId || draggedTaskId === targetTaskId) return;
-
-    const sourceTask = tasks.find((t) => t.id === draggedTaskId);
-    const targetTask = tasks.find((t) => t.id === targetTaskId);
-    if (!sourceTask || !targetTask) return;
-
-    if ((sourceTask.batch || 'None') !== (targetTask.batch || 'None')) {
-      setDraggedTaskId(null);
-      return;
-    }
 
     const idxA = tasks.findIndex((t) => t.id === draggedTaskId);
     const idxB = tasks.findIndex((t) => t.id === targetTaskId);
     if (idxA === -1 || idxB === -1) return;
 
+    const targetTask = tasks[idxB];
     const newTasks = [...tasks];
     const [moved] = newTasks.splice(idxA, 1);
+
+    // Update batch to target batch if moved across batches!
+    moved.batch = targetBatch || targetTask.batch || 'Batch 1';
     newTasks.splice(idxB, 0, moved);
 
     newTasks.forEach((t, i) => {
@@ -895,6 +890,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
     });
 
     saveTasks(newTasks);
+    setDraggedTaskId(null);
+  };
+
+  const handleDropOnBatchColumn = (targetBatch: BatchTag) => {
+    if (!draggedTaskId) return;
+    const currentTask = tasks.find((t) => t.id === draggedTaskId);
+    if (!currentTask || currentTask.batch === targetBatch) return;
+
+    const updated = tasks.map((t) => (t.id === draggedTaskId ? { ...t, batch: targetBatch } : t));
+    saveTasks(updated);
     setDraggedTaskId(null);
   };
 
@@ -2840,9 +2845,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
                       </div>
 
                       {/* Batch Task List */}
-                      <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
+                      <div
+                        onDragOver={handleDragOver}
+                        onDrop={() => handleDropOnBatchColumn(batchTag)}
+                        className="p-1.5 space-y-1.5 overflow-y-auto flex-1 min-h-[80px]"
+                      >
                         {batchTasks.length === 0 ? (
-                          <div className="py-8 text-center text-[10px] text-zinc-600 italic">No tasks in this batch</div>
+                          <div className="py-8 text-center text-[10px] text-zinc-600 italic">
+                            Drop tasks here or click + Add
+                          </div>
                         ) : (
                           batchTasks.map((t) => {
                             const status = computedStatus(t);
@@ -2865,7 +2876,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, t.id)}
                                 onDragOver={handleDragOver}
-                                onDrop={() => handleDropOnTask(t.id)}
+                                onDrop={(e) => {
+                                  e.stopPropagation();
+                                  handleDropOnTask(t.id, batchTag);
+                                }}
                                 className={`p-2 rounded-md border shadow-sm space-y-1 ${theme.cardBg} ${
                                   draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                                 }`}
