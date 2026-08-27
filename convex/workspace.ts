@@ -69,3 +69,21 @@ export const adminClearTasks = mutation({
     return { ok: false as const, message: "Workspace not found" };
   },
 });
+
+export const adminSetWorkspace = mutation({
+  args: {
+    key: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query("workspaces").withIndex("by_key", (q) => q.eq("key", args.key)).unique();
+    const revision = (existing?.revision ?? 0) + 1;
+    const updatedAt = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { payload: args.payload, revision, updatedAt });
+    } else {
+      await ctx.db.insert("workspaces", { key: args.key, payload: args.payload, revision, updatedAt });
+    }
+    return { ok: true as const, revision, taskCount: args.payload.tasks.length };
+  },
+});
