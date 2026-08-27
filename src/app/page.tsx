@@ -435,6 +435,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const batchContainerRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<{ width: number; height: number; paths: string[] }>({
     width: 0,
     height: 0,
@@ -2603,7 +2604,26 @@ function OrchestratorPage({ userId }: { userId: string }) {
             </div>
 
             {/* Batch Columns */}
-            <div className="flex-1 flex gap-2.5 overflow-x-auto min-h-0 pb-2">
+            <div
+              ref={batchContainerRef}
+              onWheel={(e) => {
+                if (batchContainerRef.current) {
+                  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                    const target = e.target as HTMLElement | null;
+                    const scrollableChild = target?.closest('.overflow-y-auto');
+                    if (scrollableChild) {
+                      const canScrollUp = scrollableChild.scrollTop > 0 && e.deltaY < 0;
+                      const canScrollDown = scrollableChild.scrollTop + scrollableChild.clientHeight < scrollableChild.scrollHeight - 1 && e.deltaY > 0;
+                      if (canScrollUp || canScrollDown) {
+                        return; // allow inner task list to scroll vertically when needed
+                      }
+                    }
+                    batchContainerRef.current.scrollLeft += e.deltaY;
+                  }
+                }
+              }}
+              className="flex-1 flex gap-2.5 overflow-x-auto min-h-0 pb-2"
+            >
               {['None' as BatchTag, ...batchPriorityOrder]
                 .filter((bTag) => {
                   if (showEmptyBatches) return true;
