@@ -53,6 +53,7 @@ import {
   Eye,
   Boxes,
   Filter,
+  ArrowUpDown,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -105,6 +106,7 @@ interface Task {
 }
 
 type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
+type BatchSortMode = 'manual' | 'name' | 'owner' | 'status' | 'estimate' | 'created';
 
 const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
@@ -350,6 +352,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
   const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
+  const [batchSortMode, setBatchSortMode] = useState<BatchSortMode>('manual');
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
   const remoteWorkspace = useQuery(api.workspace.get, {});
   const saveRemoteWorkspace = useMutation(api.workspace.save);
@@ -2588,6 +2591,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
+                  <label htmlFor="batch-sort" className="text-[9px] font-bold uppercase text-zinc-400 flex items-center gap-0.5">
+                    <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" /> Sort:
+                  </label>
+                  <select
+                    id="batch-sort"
+                    value={batchSortMode}
+                    onChange={(e) => setBatchSortMode(e.target.value as BatchSortMode)}
+                    className="bg-transparent text-[10px] font-semibold text-zinc-200 focus:outline-none cursor-pointer"
+                  >
+                    <option value="manual" className="bg-zinc-900 text-zinc-200">Manual Order</option>
+                    <option value="name" className="bg-zinc-900 text-zinc-200">Task Name (A–Z)</option>
+                    <option value="owner" className="bg-zinc-900 text-zinc-200">Owner (A–Z)</option>
+                    <option value="status" className="bg-zinc-900 text-zinc-200">Status (Ready → Done)</option>
+                    <option value="created" className="bg-zinc-900 text-zinc-200">Newest Created</option>
+                  </select>
+                </div>
+
                 <button
                   onClick={() => setShowEmptyBatches(!showEmptyBatches)}
                   className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition flex items-center gap-1 ${
@@ -2598,7 +2619,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   title="Toggle displaying batches with 0 tasks"
                 >
                   <Filter className="w-2.5 h-2.5" />
-                  <span>{showEmptyBatches ? 'Hide empty batches' : 'Show all batches'}</span>
+                  <span>{showEmptyBatches ? 'Hide empty' : 'Show all'}</span>
                 </button>
               </div>
             </div>
@@ -2637,11 +2658,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   });
                   const theme = getBatchTheme(batchTag);
 
-                  // Sort batch tasks by position order within this batch
+                  // Sort batch tasks according to batchSortMode
                   batchTasks.sort((a, b) => {
                     const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
                     const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
-                    return ordA - ordB;
+                    switch (batchSortMode) {
+                      case 'name':
+                        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || ordA - ordB;
+                      case 'owner':
+                        return a.owner.localeCompare(b.owner) || ordA - ordB;
+                      case 'status': {
+                        const statusWeight = (st: string) => ({ ready: 0, progress: 1, blocked: 2, done: 3 }[st] ?? 9);
+                        return statusWeight(computedStatus(a)) - statusWeight(computedStatus(b)) || ordA - ordB;
+                      }
+                      case 'created':
+                        return b.createdAt - a.createdAt;
+                      default:
+                        return ordA - ordB;
+                    }
                   });
 
                   return (
