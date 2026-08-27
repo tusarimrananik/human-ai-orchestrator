@@ -1,6 +1,13 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
-import { addDagTaskAfter, alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator, insertDagTaskBefore } from './dag-layout';
+import {
+  addDagTaskAfter,
+  addDagTaskSibling,
+  alignDagLevels,
+  collapseHiddenDagTasks,
+  createSourceOrderComparator,
+  insertDagTaskBefore,
+} from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
 
@@ -117,4 +124,24 @@ test('adds multiple children as independent parallel branches', () => {
   const result = addDagTaskAfter(first, 'a', { id: 'c', batch: 'B2', order: 2, dependencies: [] });
   deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['a']);
   deepEqual(result.find((task) => task.id === 'c')?.dependencies, ['a']);
+});
+
+test('adds a parallel sibling above target with identical parent dependencies', () => {
+  const root: T = { id: 'p', batch: 'B1', order: 0, dependencies: [] };
+  const b: T = { id: 'b', batch: 'B2', order: 1, dependencies: ['p'] };
+  const a: T = { id: 'a', batch: 'B2', order: 2, dependencies: [] };
+
+  const result = addDagTaskSibling([root, b], 'b', a, 'top');
+  deepEqual(result.map((t) => t.id), ['p', 'a', 'b']);
+  deepEqual(result.find((t) => t.id === 'a')?.dependencies, ['p']);
+});
+
+test('adds a parallel sibling below target with identical parent dependencies', () => {
+  const root: T = { id: 'p', batch: 'B1', order: 0, dependencies: [] };
+  const b: T = { id: 'b', batch: 'B2', order: 1, dependencies: ['p'] };
+  const c: T = { id: 'c', batch: 'B2', order: 2, dependencies: [] };
+
+  const result = addDagTaskSibling([root, b], 'b', c, 'bottom');
+  deepEqual(result.map((t) => t.id), ['p', 'b', 'c']);
+  deepEqual(result.find((t) => t.id === 'c')?.dependencies, ['p']);
 });

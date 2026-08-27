@@ -25,6 +25,26 @@ export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], parentId
   return [...tasks, { ...childTask, dependencies: [parentId] }];
 }
 
+export function addDagTaskSibling<T extends DagTask>(
+  tasks: readonly T[],
+  siblingId: string,
+  newTask: T,
+  position: 'top' | 'bottom'
+): T[] {
+  const siblingIndex = tasks.findIndex((task) => task.id === siblingId);
+  if (siblingIndex === -1 || tasks.some((task) => task.id === newTask.id)) return [...tasks];
+  const sibling = tasks[siblingIndex];
+  const taskWithDeps = {
+    ...newTask,
+    dependencies: [...new Set(sibling.dependencies || [])],
+  };
+
+  const copy = [...tasks];
+  const insertIndex = position === 'top' ? siblingIndex : siblingIndex + 1;
+  copy.splice(insertIndex, 0, taskWithDeps);
+  return copy;
+}
+
 /** Keeps DAG manual order tied to stable source-array position, not Board execution order. */
 export function createSourceOrderComparator<T extends DagTask>(tasks: readonly T[]): (a: T, b: T) => number {
   const positions = new Map(tasks.map((task, index) => [task.id, index]));

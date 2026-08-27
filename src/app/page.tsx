@@ -6,6 +6,7 @@ import { useAuthActions } from '@convex-dev/auth/react';
 import { api } from '../../convex/_generated/api';
 import {
   addDagTaskAfter,
+  addDagTaskSibling,
   alignDagLevels,
   collapseHiddenDagTasks,
   createSourceOrderComparator,
@@ -373,7 +374,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [dagInsert, setDagInsert] = useState<{ taskId: string; position: 'before' | 'after' } | null>(null);
+  const [dagInsert, setDagInsert] = useState<{ taskId: string; position: 'before' | 'after' | 'top' | 'bottom' } | null>(null);
   const [taskName, setTaskName] = useState('');
   const [taskType, setTaskType] = useState<'normal' | 'goal'>('normal');
   const [taskDescription, setTaskDescription] = useState('');
@@ -1249,7 +1250,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     defaultState?: 'blocked' | 'ready' | 'progress' | 'done',
     initialParentIds?: string[],
     initialBatch?: BatchTag,
-    insertion?: { taskId: string; position: 'before' | 'after' }
+    insertion?: { taskId: string; position: 'before' | 'after' | 'top' | 'bottom' }
   ) => {
     setEditId(id);
     setDagInsert(insertion || null);
@@ -1468,7 +1469,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
         ? insertDagTaskBefore(baseList, dagInsert.taskId, newTask)
         : dagInsert?.position === 'after'
           ? addDagTaskAfter(baseList, dagInsert.taskId, newTask)
-          : [...baseList, newTask];
+          : dagInsert?.position === 'top' || dagInsert?.position === 'bottom'
+            ? addDagTaskSibling(baseList, dagInsert.taskId, newTask, dagInsert.position)
+            : [...baseList, newTask];
     }
 
     // Bi-directionally synchronize child downstream tasks
@@ -2204,7 +2207,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </svg>
 
               <div
-                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-3 items-stretch relative z-20"
+                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-4 items-stretch relative z-20 pt-1"
                 style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, auto)` }}
               >
                 {orderedLevels.map((level, index) => {
@@ -2212,7 +2215,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   return (
                     <div
                       key={level}
-                      className="grid gap-y-3"
+                      className="grid gap-y-4"
                       style={{
                         gridColumn: index + 1,
                         gridRow: `1 / span ${Math.max(laneCount, 1) + 1}`,
@@ -2269,6 +2272,30 @@ function OrchestratorPage({ userId }: { userId: string }) {
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTaskModal(null, (t.dependencies || []).length > 0 ? 'blocked' : 'ready', t.dependencies, t.batch, { taskId: t.id, position: 'top' });
+                              }}
+                              className="absolute -top-3 left-1/2 z-30 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              title={`Add parallel task above ${t.name} (same stage)`}
+                              aria-label={`Add parallel task above ${t.name}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTaskModal(null, (t.dependencies || []).length > 0 ? 'blocked' : 'ready', t.dependencies, t.batch, { taskId: t.id, position: 'bottom' });
+                              }}
+                              className="absolute -bottom-3 left-1/2 z-30 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              title={`Add parallel task below ${t.name} (same stage)`}
+                              aria-label={`Add parallel task below ${t.name}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
