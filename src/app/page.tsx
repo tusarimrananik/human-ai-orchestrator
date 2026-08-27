@@ -363,7 +363,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [taskType, setTaskType] = useState<'normal' | 'goal'>('normal');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskOwner, setTaskOwner] = useState<'Me' | 'AI' | 'Other'>('Me');
-  const [taskBatch, setTaskBatch] = useState<BatchTag>('None');
+  const [taskBatch, setTaskBatch] = useState<BatchTag>('Batch 1');
   const [taskIsParallel, setTaskIsParallel] = useState(false);
   const [taskParallelGroup, setTaskParallelGroup] = useState<string>('Development');
   const [taskSubTasks, setTaskSubTasks] = useState<SubTask[]>([]);
@@ -1291,7 +1291,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setTaskType(current?.taskType || 'normal');
     setTaskDescription(current?.description || current?.notes || '');
     setTaskOwner(current?.owner || 'Me');
-    setTaskBatch(current?.batch || initialBatch || 'None');
+    const defaultBatch = current?.batch || initialBatch || batchPriorityOrder[0] || 'Batch 1';
+    setTaskBatch(defaultBatch === 'None' ? (batchPriorityOrder[0] || 'Batch 1') : defaultBatch);
     setTaskIsParallel(typeof current?.isParallel === 'boolean' ? current.isParallel : !!current?.parallelGroup);
     setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
     setTaskSubTasks(current?.subTasks || []);
@@ -1469,7 +1470,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       taskType,
       description: taskDescription.trim(),
       owner: taskOwner,
-      batch: taskBatch,
+      batch: taskBatch && taskBatch !== 'None' ? taskBatch : (batchPriorityOrder[0] || 'Batch 1'),
       isParallel: taskIsParallel,
       parallelGroup: taskIsParallel ? taskParallelGroup : '',
       subTasks: taskSubTasks,
@@ -2325,7 +2326,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                           </span>
                         </div>
                         <button
-                          onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked')}
+                          onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked', undefined, batchPriorityOrder[0] || 'Batch 1')}
                           className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
                           title={`Add new task to ${index === 0 ? 'Root' : `Stage ${index + 1}`}`}
                         >
