@@ -56,20 +56,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 
-export type BatchTag =
-  | 'None'
-  | 'Batch 1'
-  | 'Batch 2'
-  | 'Batch 3'
-  | 'Batch 4'
-  | 'Batch 5'
-  | 'Batch 6'
-  | 'Batch 7'
-  | 'Batch 8'
-  | 'Batch 9'
-  | 'Batch 10'
-  | 'Batch 11'
-  | 'Batch 12';
+export type BatchTag = string;
 
 export interface ParallelGroupConfig {
   id: string;
@@ -107,6 +94,7 @@ interface Task {
 
 type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
 type BatchSortMode = 'manual' | 'name' | 'owner' | 'status' | 'estimate' | 'created';
+type BatchSequenceSortMode = 'custom' | 'name-asc' | 'name-desc' | 'count-desc';
 
 const STORAGE_KEY = 'smart_task_manager_v1';
 const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
@@ -144,6 +132,11 @@ export const ALL_BATCHES: BatchTag[] = [
 
 const DEFAULT_BATCH_ORDER: BatchTag[] = [...ALL_BATCHES];
 
+// Natural alphanumeric batch sort comparator (e.g. B1 -> B2 -> ... -> B9 -> B10 -> B11)
+export function naturalBatchCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -158,140 +151,122 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-// 12 unique color themes for batches with high readability
-export function getBatchTheme(batch: BatchTag = 'None') {
-  switch (batch) {
-    case 'Batch 1':
-      return {
-        cardBg: 'bg-sky-950/40 border-sky-600/70 text-sky-100',
-        cardTitle: 'text-sky-100',
-        descBg: 'bg-sky-950/60 border-sky-800/60 text-sky-200/90',
-        badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
-        dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
-        dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
-        short: 'B1',
-      };
-    case 'Batch 2':
-      return {
-        cardBg: 'bg-purple-950/40 border-purple-600/70 text-purple-100',
-        cardTitle: 'text-purple-100',
-        descBg: 'bg-purple-950/60 border-purple-800/60 text-purple-200/90',
-        badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
-        dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
-        dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
-        short: 'B2',
-      };
-    case 'Batch 3':
-      return {
-        cardBg: 'bg-amber-950/40 border-amber-600/70 text-amber-100',
-        cardTitle: 'text-amber-100',
-        descBg: 'bg-amber-950/60 border-amber-800/60 text-amber-200/90',
-        badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
-        dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
-        dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
-        short: 'B3',
-      };
-    case 'Batch 4':
-      return {
-        cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
-        cardTitle: 'text-emerald-100',
-        descBg: 'bg-emerald-950/60 border-emerald-800/60 text-emerald-200/90',
-        badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
-        dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
-        dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
-        short: 'B4',
-      };
-    case 'Batch 5':
-      return {
-        cardBg: 'bg-rose-950/40 border-rose-600/70 text-rose-100',
-        cardTitle: 'text-rose-100',
-        descBg: 'bg-rose-950/60 border-rose-800/60 text-rose-200/90',
-        badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
-        dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
-        dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
-        short: 'B5',
-      };
-    case 'Batch 6':
-      return {
-        cardBg: 'bg-cyan-950/40 border-cyan-600/70 text-cyan-100',
-        cardTitle: 'text-cyan-100',
-        descBg: 'bg-cyan-950/60 border-cyan-800/60 text-cyan-200/90',
-        badge: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50',
-        dropdown: 'bg-cyan-950 text-cyan-300 border-cyan-700/80',
-        dagNode: 'bg-cyan-950/60 border-cyan-500 text-cyan-100',
-        short: 'B6',
-      };
-    case 'Batch 7':
-      return {
-        cardBg: 'bg-fuchsia-950/40 border-fuchsia-600/70 text-fuchsia-100',
-        cardTitle: 'text-fuchsia-100',
-        descBg: 'bg-fuchsia-950/60 border-fuchsia-800/60 text-fuchsia-200/90',
-        badge: 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/50',
-        dropdown: 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-700/80',
-        dagNode: 'bg-fuchsia-950/60 border-fuchsia-500 text-fuchsia-100',
-        short: 'B7',
-      };
-    case 'Batch 8':
-      return {
-        cardBg: 'bg-lime-950/40 border-lime-600/70 text-lime-100',
-        cardTitle: 'text-lime-100',
-        descBg: 'bg-lime-950/60 border-lime-800/60 text-lime-200/90',
-        badge: 'bg-lime-500/20 text-lime-300 border border-lime-500/50',
-        dropdown: 'bg-lime-950 text-lime-300 border-lime-700/80',
-        dagNode: 'bg-lime-950/60 border-lime-500 text-lime-100',
-        short: 'B8',
-      };
-    case 'Batch 9':
-      return {
-        cardBg: 'bg-indigo-950/40 border-indigo-600/70 text-indigo-100',
-        cardTitle: 'text-indigo-100',
-        descBg: 'bg-indigo-950/60 border-indigo-800/60 text-indigo-200/90',
-        badge: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50',
-        dropdown: 'bg-indigo-950 text-indigo-300 border-indigo-700/80',
-        dagNode: 'bg-indigo-950/60 border-indigo-500 text-indigo-100',
-        short: 'B9',
-      };
-    case 'Batch 10':
-      return {
-        cardBg: 'bg-orange-950/40 border-orange-600/70 text-orange-100',
-        cardTitle: 'text-orange-100',
-        descBg: 'bg-orange-950/60 border-orange-800/60 text-orange-200/90',
-        badge: 'bg-orange-500/20 text-orange-300 border border-orange-500/50',
-        dropdown: 'bg-orange-950 text-orange-300 border-orange-700/80',
-        dagNode: 'bg-orange-950/60 border-orange-500 text-orange-100',
-        short: 'B10',
-      };
-    case 'Batch 11':
-      return {
-        cardBg: 'bg-teal-950/40 border-teal-600/70 text-teal-100',
-        cardTitle: 'text-teal-100',
-        descBg: 'bg-teal-950/60 border-teal-800/60 text-teal-200/90',
-        badge: 'bg-teal-500/20 text-teal-300 border border-teal-500/50',
-        dropdown: 'bg-teal-950 text-teal-300 border-teal-700/80',
-        dagNode: 'bg-teal-950/60 border-teal-500 text-teal-100',
-        short: 'B11',
-      };
-    case 'Batch 12':
-      return {
-        cardBg: 'bg-violet-950/40 border-violet-600/70 text-violet-100',
-        cardTitle: 'text-violet-100',
-        descBg: 'bg-violet-950/60 border-violet-800/60 text-violet-200/90',
-        badge: 'bg-violet-500/20 text-violet-300 border border-violet-500/50',
-        dropdown: 'bg-violet-950 text-violet-300 border-violet-700/80',
-        dagNode: 'bg-violet-950/60 border-violet-500 text-violet-100',
-        short: 'B12',
-      };
-    default:
-      return {
-        cardBg: 'bg-zinc-950 border-zinc-800 text-zinc-200',
-        cardTitle: 'text-zinc-100',
-        descBg: 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400',
-        badge: 'bg-zinc-800 text-zinc-400 border border-zinc-700',
-        dropdown: 'bg-zinc-900 text-zinc-400 border-zinc-700',
-        dagNode: 'bg-zinc-900 border-zinc-700 text-zinc-200',
-        short: 'None',
-      };
+const BATCH_THEME_PALETTE = [
+  {
+    cardBg: 'bg-sky-950/40 border-sky-600/70 text-sky-100',
+    cardTitle: 'text-sky-100',
+    descBg: 'bg-sky-950/60 border-sky-800/60 text-sky-200/90',
+    badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
+    dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
+    dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
+  },
+  {
+    cardBg: 'bg-purple-950/40 border-purple-600/70 text-purple-100',
+    cardTitle: 'text-purple-100',
+    descBg: 'bg-purple-950/60 border-purple-800/60 text-purple-200/90',
+    badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
+    dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
+    dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
+  },
+  {
+    cardBg: 'bg-amber-950/40 border-amber-600/70 text-amber-100',
+    cardTitle: 'text-amber-100',
+    descBg: 'bg-amber-950/60 border-amber-800/60 text-amber-200/90',
+    badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
+    dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
+    dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
+  },
+  {
+    cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
+    cardTitle: 'text-emerald-100',
+    descBg: 'bg-emerald-950/60 border-emerald-800/60 text-emerald-200/90',
+    badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
+    dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
+    dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
+  },
+  {
+    cardBg: 'bg-rose-950/40 border-rose-600/70 text-rose-100',
+    cardTitle: 'text-rose-100',
+    descBg: 'bg-rose-950/60 border-rose-800/60 text-rose-200/90',
+    badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
+    dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
+    dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
+  },
+  {
+    cardBg: 'bg-pink-950/40 border-pink-600/70 text-pink-100',
+    cardTitle: 'text-pink-100',
+    descBg: 'bg-pink-950/60 border-pink-800/60 text-pink-200/90',
+    badge: 'bg-pink-500/20 text-pink-300 border border-pink-500/50',
+    dropdown: 'bg-pink-950 text-pink-300 border-pink-700/80',
+    dagNode: 'bg-pink-950/60 border-pink-500 text-pink-100',
+  },
+  {
+    cardBg: 'bg-cyan-950/40 border-cyan-600/70 text-cyan-100',
+    cardTitle: 'text-cyan-100',
+    descBg: 'bg-cyan-950/60 border-cyan-800/60 text-cyan-200/90',
+    badge: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50',
+    dropdown: 'bg-cyan-950 text-cyan-300 border-cyan-700/80',
+    dagNode: 'bg-cyan-950/60 border-cyan-500 text-cyan-100',
+  },
+  {
+    cardBg: 'bg-lime-950/40 border-lime-600/70 text-lime-100',
+    cardTitle: 'text-lime-100',
+    descBg: 'bg-lime-950/60 border-lime-800/60 text-lime-200/90',
+    badge: 'bg-lime-500/20 text-lime-300 border border-lime-500/50',
+    dropdown: 'bg-lime-950 text-lime-300 border-lime-700/80',
+    dagNode: 'bg-lime-950/60 border-lime-500 text-lime-100',
+  },
+  {
+    cardBg: 'bg-indigo-950/40 border-indigo-600/70 text-indigo-100',
+    cardTitle: 'text-indigo-100',
+    descBg: 'bg-indigo-950/60 border-indigo-800/60 text-indigo-200/90',
+    badge: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50',
+    dropdown: 'bg-indigo-950 text-indigo-300 border-indigo-700/80',
+    dagNode: 'bg-indigo-950/60 border-indigo-500 text-indigo-100',
+  },
+  {
+    cardBg: 'bg-orange-950/40 border-orange-600/70 text-orange-100',
+    cardTitle: 'text-orange-100',
+    descBg: 'bg-orange-950/60 border-orange-800/60 text-orange-200/90',
+    badge: 'bg-orange-500/20 text-orange-300 border border-orange-500/50',
+    dropdown: 'bg-orange-950 text-orange-300 border-orange-700/80',
+    dagNode: 'bg-orange-950/60 border-orange-500 text-orange-100',
+  },
+  {
+    cardBg: 'bg-teal-950/40 border-teal-600/70 text-teal-100',
+    cardTitle: 'text-teal-100',
+    descBg: 'bg-teal-950/60 border-teal-800/60 text-teal-200/90',
+    badge: 'bg-teal-500/20 text-teal-300 border border-teal-500/50',
+    dropdown: 'bg-teal-950 text-teal-300 border-teal-700/80',
+    dagNode: 'bg-teal-950/60 border-teal-500 text-teal-100',
+  },
+  {
+    cardBg: 'bg-violet-950/40 border-violet-600/70 text-violet-100',
+    cardTitle: 'text-violet-100',
+    descBg: 'bg-violet-950/60 border-violet-800/60 text-violet-200/90',
+    badge: 'bg-violet-500/20 text-violet-300 border border-violet-500/50',
+    dropdown: 'bg-violet-950 text-violet-300 border-violet-700/80',
+    dagNode: 'bg-violet-950/60 border-violet-500 text-violet-100',
+  },
+];
+
+export function getBatchTheme(batch: string = 'Batch 1') {
+  const match = batch.match(/^Batch\s+(\d+)$/i);
+  let index = 0;
+  if (match) {
+    index = (parseInt(match[1], 10) - 1) % BATCH_THEME_PALETTE.length;
+  } else {
+    let hash = 0;
+    for (let i = 0; i < batch.length; i++) {
+      hash = (hash << 5) - hash + batch.charCodeAt(i);
+      hash |= 0;
+    }
+    index = Math.abs(hash) % BATCH_THEME_PALETTE.length;
   }
+
+  const base = BATCH_THEME_PALETTE[index] || BATCH_THEME_PALETTE[0];
+  const short = match ? `B${match[1]}` : batch.length > 5 ? batch.slice(0, 4) : batch;
+  return { ...base, short };
 }
 
 export default function Page() {
@@ -353,7 +328,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
   const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
   const [batchSortMode, setBatchSortMode] = useState<BatchSortMode>('manual');
+  const [batchSequenceSortMode, setBatchSequenceSortMode] = useState<BatchSequenceSortMode>('custom');
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
+  const [isNewBatchInputOpen, setIsNewBatchInputOpen] = useState<boolean>(false);
+  const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
   const remoteWorkspace = useQuery(api.workspace.get, {});
   const saveRemoteWorkspace = useMutation(api.workspace.save);
   const remoteRevisionRef = useRef(0);
@@ -654,7 +632,49 @@ function OrchestratorPage({ userId }: { userId: string }) {
     saveBatchOrder(newOrder);
   };
 
+  const sortBatchSequence = (mode: BatchSequenceSortMode) => {
+    setBatchSequenceSortMode(mode);
+    const next = [...batchPriorityOrder];
+    if (mode === 'name-asc') {
+      next.sort(naturalBatchCompare);
+    } else if (mode === 'name-desc') {
+      next.sort((a, b) => naturalBatchCompare(b, a));
+    } else if (mode === 'count-desc') {
+      next.sort((a, b) => {
+        const cntA = tasks.filter((t) => (t.batch || 'Batch 1') === a).length;
+        const cntB = tasks.filter((t) => (t.batch || 'Batch 1') === b).length;
+        return cntB - cntA || naturalBatchCompare(a, b);
+      });
+    }
+    saveBatchOrder(next);
+  };
+
+  const handleAddNewBatch = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (batchPriorityOrder.includes(trimmed)) return;
+    const next = [...batchPriorityOrder, trimmed];
+    if (batchSequenceSortMode === 'name-asc') {
+      next.sort(naturalBatchCompare);
+    } else if (batchSequenceSortMode === 'name-desc') {
+      next.sort((a, b) => naturalBatchCompare(b, a));
+    }
+    saveBatchOrder(next);
+    setNewBatchNameInput('');
+    setIsNewBatchInputOpen(false);
+  };
+
+  const handleDeleteBatch = (batchToDelete: string) => {
+    if (batchPriorityOrder.length <= 1) return;
+    const next = batchPriorityOrder.filter((b) => b !== batchToDelete);
+    const fallback = next[0] || 'Batch 1';
+    const updatedTasks = tasks.map((t) => ((t.batch || 'Batch 1') === batchToDelete ? { ...t, batch: fallback } : t));
+    saveTasks(updatedTasks);
+    saveBatchOrder(next);
+  };
+
   const setTopBatchPriority = (batch: BatchTag) => {
+    setBatchSequenceSortMode('custom');
     const remaining = batchPriorityOrder.filter((b) => b !== batch);
     saveBatchOrder([batch, ...remaining]);
   };
@@ -1777,14 +1797,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
             </div>
 
             <select
-              value={t.batch || 'None'}
+              value={t.batch || 'Batch 1'}
               onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
               className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
             >
-              <option value="None" className="bg-zinc-900 text-zinc-400">
-                No Batch
-              </option>
-              {ALL_BATCHES.map((b) => (
+              {batchPriorityOrder.map((b) => (
                 <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
                   {b}
                 </option>
@@ -1962,14 +1979,31 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
         </div>
 
-        {/* Compact, Zero-Overflow Batch Priority Strip */}
+        {/* Compact, Zero-Overflow Batch Priority Strip with Sort Selector & + Add Batch */}
         <div className="flex-1 flex items-center justify-center min-w-0 px-2">
-          <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-lg overflow-x-auto scrollbar-none max-w-full">
-            <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
-              <Layers className="w-3 h-3 text-indigo-400" /> Order:
-            </span>
+          <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800/90 px-2 py-0.5 rounded-lg overflow-x-auto scrollbar-none max-w-full">
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1">
+                <Layers className="w-3 h-3 text-indigo-400" /> Order:
+              </span>
+              <select
+                value={batchSequenceSortMode}
+                onChange={(e) => sortBatchSequence(e.target.value as BatchSequenceSortMode)}
+                className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-1 py-0.2 text-[9px] font-bold focus:outline-none cursor-pointer"
+                title="Sort Batch Priority Order"
+              >
+                <option value="custom">Custom</option>
+                <option value="name-asc">B1 → B12 (A–Z)</option>
+                <option value="name-desc">B12 → B1 (Z–A)</option>
+                <option value="count-desc">Most Tasks</option>
+              </select>
+            </div>
+
+            <div className="h-3 w-[1px] bg-zinc-800 flex-shrink-0" />
+
             {batchPriorityOrder.map((b, idx) => {
               const theme = getBatchTheme(b);
+              const count = tasks.filter((t) => (t.batch || 'Batch 1') === b).length;
               return (
                 <div
                   key={b}
@@ -1978,9 +2012,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   <button
                     onClick={() => setTopBatchPriority(b)}
                     title={`Set ${b} as #1 Priority`}
-                    className="hover:underline"
+                    className="hover:underline flex items-center gap-0.5"
                   >
-                    {theme.short || b}
+                    <span>{theme.short || b}</span>
+                    <span className="text-[8px] opacity-70 font-mono">({count})</span>
                   </button>
                   <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
                     <button
@@ -2003,6 +2038,44 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 </div>
               );
             })}
+
+            {isNewBatchInputOpen ? (
+              <div className="flex items-center gap-1 bg-zinc-900 border border-indigo-500/60 rounded px-1 py-0.5 flex-shrink-0">
+                <input
+                  autoFocus
+                  placeholder="Batch name (e.g. B13)"
+                  value={newBatchNameInput}
+                  onChange={(e) => setNewBatchNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddNewBatch(newBatchNameInput);
+                    if (e.key === 'Escape') setIsNewBatchInputOpen(false);
+                  }}
+                  className="bg-transparent text-[10px] font-bold text-zinc-100 w-24 outline-none px-0.5"
+                />
+                <button
+                  onClick={() => handleAddNewBatch(newBatchNameInput)}
+                  className="text-emerald-400 hover:text-emerald-300 text-[10px]"
+                  title="Add"
+                >
+                  <Check className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={() => setIsNewBatchInputOpen(false)}
+                  className="text-zinc-500 hover:text-zinc-300 text-[10px]"
+                  title="Cancel"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsNewBatchInputOpen(true)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-dashed border-zinc-700 hover:border-indigo-500 text-zinc-400 hover:text-indigo-300 text-[9px] font-bold transition flex-shrink-0"
+                title="Create a new custom batch"
+              >
+                <Plus className="w-2.5 h-2.5" /> Batch
+              </button>
+            )}
           </div>
         </div>
 
@@ -2108,19 +2181,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <option value="Other">Other</option>
           </select>
 
-          {/* Batch Filter with All 12 Batches */}
+          {/* Batch Filter with dynamic configured Batches */}
           <select
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
             className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-medium"
           >
             <option value="">All Batches</option>
-            {ALL_BATCHES.map((b) => (
+            {batchPriorityOrder.map((b) => (
               <option key={b} value={b}>
                 {b}
               </option>
             ))}
-            <option value="None">No Batch</option>
           </select>
         </div>
       </div>
@@ -2382,14 +2454,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 </div>
 
                                 <select
-                                  value={t.batch || 'None'}
+                                  value={t.batch || 'Batch 1'}
                                   onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
                                   className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
                                 >
-                                  <option value="None" className="bg-zinc-900 text-zinc-400">
-                                    No Batch
-                                  </option>
-                                  {ALL_BATCHES.map((b) => (
+                                  {batchPriorityOrder.map((b) => (
                                     <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
                                       {b}
                                     </option>
@@ -2560,14 +2629,32 @@ function OrchestratorPage({ userId }: { userId: string }) {
         ) : (
           /* Batch Task View (Grouped/Sorted by Batch Priority, Not Tree Structure) */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-2.5 flex flex-col min-h-0 overflow-hidden select-none">
-            {/* Batch View Sub-header with quick jump and empty batch toggle */}
+            {/* Batch View Sub-header with batch sequence sorting, quick jump, and task sorting */}
             <div className="mb-2 flex items-center justify-between gap-2 flex-shrink-0 bg-zinc-950/80 border border-zinc-800/90 rounded-lg px-2.5 py-1.5 shadow-sm">
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
                 <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
                   <Boxes className="w-3 h-3 text-indigo-400" /> Batches:
                 </span>
-                {['None' as BatchTag, ...batchPriorityOrder].map((bTag) => {
-                  const count = filtered.filter((t) => (t.batch || 'None') === bTag).length;
+
+                <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 flex-shrink-0 mr-1">
+                  <label htmlFor="batch-sequence-sort" className="text-[9px] font-bold uppercase text-zinc-400">
+                    Sort Batches:
+                  </label>
+                  <select
+                    id="batch-sequence-sort"
+                    value={batchSequenceSortMode}
+                    onChange={(e) => sortBatchSequence(e.target.value as BatchSequenceSortMode)}
+                    className="bg-transparent text-[10px] font-bold text-indigo-300 focus:outline-none cursor-pointer"
+                  >
+                    <option value="custom" className="bg-zinc-900 text-zinc-200">Custom Order</option>
+                    <option value="name-asc" className="bg-zinc-900 text-zinc-200">B1 → B12 (A–Z)</option>
+                    <option value="name-desc" className="bg-zinc-900 text-zinc-200">B12 → B1 (Z–A)</option>
+                    <option value="count-desc" className="bg-zinc-900 text-zinc-200">Most Tasks First</option>
+                  </select>
+                </div>
+
+                {batchPriorityOrder.map((bTag) => {
+                  const count = filtered.filter((t) => (t.batch || 'Batch 1') === bTag).length;
                   const theme = getBatchTheme(bTag);
                   return (
                     <button
@@ -2576,24 +2663,58 @@ function OrchestratorPage({ userId }: { userId: string }) {
                         const col = document.getElementById(`batch-col-${bTag}`);
                         col?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
                       }}
-                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 ${
-                        bTag === 'None'
-                          ? 'border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
-                          : `${theme.badge} hover:brightness-125`
-                      }`}
-                      title={`Jump to ${bTag === 'None' ? 'No Batch' : bTag}`}
+                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 ${theme.badge} hover:brightness-125`}
+                      title={`Jump to ${bTag}`}
                     >
-                      <span>{bTag === 'None' ? 'No Batch' : (theme.short || bTag)}</span>
+                      <span>{theme.short || bTag}</span>
                       <span className="px-1 py-0.2 rounded-full bg-black/40 text-[8px]">{count}</span>
                     </button>
                   );
                 })}
+
+                {isNewBatchInputOpen ? (
+                  <div className="flex items-center gap-1 bg-zinc-900 border border-indigo-500/60 rounded px-1.5 py-0.5 flex-shrink-0">
+                    <input
+                      autoFocus
+                      placeholder="e.g. B13"
+                      value={newBatchNameInput}
+                      onChange={(e) => setNewBatchNameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddNewBatch(newBatchNameInput);
+                        if (e.key === 'Escape') setIsNewBatchInputOpen(false);
+                      }}
+                      className="bg-transparent text-[10px] font-bold text-zinc-100 w-20 outline-none px-0.5"
+                    />
+                    <button
+                      onClick={() => handleAddNewBatch(newBatchNameInput)}
+                      className="text-emerald-400 hover:text-emerald-300 text-[10px]"
+                      title="Add Batch"
+                    >
+                      <Check className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      onClick={() => setIsNewBatchInputOpen(false)}
+                      className="text-zinc-500 hover:text-zinc-300 text-[10px]"
+                      title="Cancel"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsNewBatchInputOpen(true)}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-dashed border-zinc-700 hover:border-indigo-500 text-zinc-400 hover:text-indigo-300 text-[9px] font-bold transition flex-shrink-0"
+                    title="Create a new custom batch"
+                  >
+                    <Plus className="w-2.5 h-2.5" /> Batch
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
                   <label htmlFor="batch-sort" className="text-[9px] font-bold uppercase text-zinc-400 flex items-center gap-0.5">
-                    <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" /> Sort:
+                    <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" /> Sort Tasks:
                   </label>
                   <select
                     id="batch-sort"
@@ -2645,17 +2766,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
               }}
               className="flex-1 flex gap-2.5 overflow-x-auto min-h-0 pb-2"
             >
-              {['None' as BatchTag, ...batchPriorityOrder]
+              {batchPriorityOrder
                 .filter((bTag) => {
                   if (showEmptyBatches) return true;
-                  const count = filtered.filter((t) => (t.batch || 'None') === bTag).length;
-                  return count > 0 || bTag === 'None';
+                  const count = filtered.filter((t) => (t.batch || 'Batch 1') === bTag).length;
+                  return count > 0;
                 })
                 .map((batchTag) => {
-                  const batchTasks = filtered.filter((t) => {
-                    const b = t.batch || 'None';
-                    return b === batchTag || (batchTag === 'None' && (!t.batch || t.batch === 'None'));
-                  });
+                  const batchTasks = filtered.filter((t) => (t.batch || 'Batch 1') === batchTag);
                   const theme = getBatchTheme(batchTag);
 
                   // Sort batch tasks according to batchSortMode
@@ -2682,34 +2800,43 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <div
                       key={batchTag}
                       id={`batch-col-${batchTag}`}
-                      className={`w-72 flex-shrink-0 border rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm ${
-                        batchTag === 'None'
-                          ? 'bg-zinc-950/80 border-zinc-700/80 ring-1 ring-zinc-700/40'
-                          : 'bg-zinc-900/60 border-zinc-800/90'
-                      }`}
+                      className="w-72 flex-shrink-0 border rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm bg-zinc-900/60 border-zinc-800/90"
                     >
                       {/* Batch Column Header */}
-                      <div className={`px-2.5 py-1.5 border-b flex items-center justify-between flex-shrink-0 ${
-                        batchTag === 'None' ? 'border-zinc-800 bg-zinc-900/90' : 'border-zinc-800/80 bg-zinc-950/80'
-                      }`}>
+                      <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-1.5">
                           <span className={`text-[10px] font-mono uppercase font-bold px-1.5 py-0.2 rounded border ${theme.badge}`}>
-                            {batchTag === 'None' ? 'No Batch' : (theme.short || batchTag)}
+                            {theme.short || batchTag}
                           </span>
                           <span className="text-[11px] font-bold text-zinc-200">
-                            {batchTag === 'None' ? 'No Batch (Unassigned)' : batchTag}
+                            {batchTag}
                           </span>
                           <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
                             {batchTasks.length}
                           </span>
                         </div>
-                        <button
-                          onClick={() => openTaskModal(null, 'ready', undefined, batchTag)}
-                          className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition"
-                          title={`Add task directly to ${batchTag === 'None' ? 'No Batch' : batchTag}`}
-                        >
-                          <Plus className="w-2.5 h-2.5" /> Add
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openTaskModal(null, 'ready', undefined, batchTag)}
+                            className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition"
+                            title={`Add task directly to ${batchTag}`}
+                          >
+                            <Plus className="w-2.5 h-2.5" /> Add
+                          </button>
+                          {batchPriorityOrder.length > 1 && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete ${batchTag}? Any tasks in it will be moved to ${batchPriorityOrder.find((b) => b !== batchTag) || 'Batch 1'}.`)) {
+                                  handleDeleteBatch(batchTag);
+                                }
+                              }}
+                              className="p-1 text-zinc-500 hover:text-rose-400 rounded hover:bg-zinc-800"
+                              title={`Delete ${batchTag}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Batch Task List */}
@@ -2788,14 +2915,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                     </div>
 
                                     <select
-                                      value={t.batch || 'None'}
+                                      value={t.batch || 'Batch 1'}
                                       onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
                                       className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${theme.dropdown}`}
                                     >
-                                      <option value="None" className="bg-zinc-900 text-zinc-400">
-                                        No Batch
-                                      </option>
-                                      {ALL_BATCHES.map((b) => (
+                                      {batchPriorityOrder.map((b) => (
                                         <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
                                           {b}
                                         </option>
@@ -3332,8 +3456,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   onChange={(e) => setTaskBatch(e.target.value as BatchTag)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
                 >
-                  <option value="None">No Batch</option>
-                  {ALL_BATCHES.map((b) => (
+                  {batchPriorityOrder.map((b) => (
                     <option key={b} value={b}>
                       {b}
                     </option>
