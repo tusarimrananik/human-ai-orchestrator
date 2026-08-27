@@ -124,106 +124,92 @@ export function alignDagLevels<T extends DagTask>(
     levels[0] = [...levels[0]].sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
   }
 
-  // Find primary root ancestor for every task
-  const primaryRootMemo = new Map<string, string>();
-  const rootOrderMap = new Map((levels[0] || []).map((r, i) => [r.id, i]));
+  // Children mapping: For each task, which child tasks directly depend on it?
+  const childrenMap = new Map<string, T[]>();
+  tasks.forEach((t) => {
+    (t.dependencies || []).forEach((pId) => {
+      if (byId.has(pId)) {
+        const list = childrenMap.get(pId) || [];
+        list.push(t);
+        childrenMap.set(pId, list);
+      }
+    });
+  });
 
-  function getPrimaryRoot(taskId: string, stack = new Set<string>()): string | null {
-    if (primaryRootMemo.has(taskId)) return primaryRootMemo.get(taskId)!;
-    if (stack.has(taskId)) return null;
+  // Sort children deterministically by comparator
+  childrenMap.forEach((list, pId) => {
+    list.sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
+  });
+
+  // Calculate recursive subtree vertical span (number of parallel rows needed)
+  const spanMemo = new Map<string, number>();
+  function getSubtreeSpan(taskId: string, stack = new Set<string>()): number {
+    if (spanMemo.has(taskId)) return spanMemo.get(taskId)!;
+    if (stack.has(taskId)) return 1;
     stack.add(taskId);
 
-    const task = byId.get(taskId);
-    if (!task) return null;
-    if (!task.dependencies || task.dependencies.length === 0) {
-      primaryRootMemo.set(taskId, taskId);
-      return taskId;
+    const children = childrenMap.get(taskId) || [];
+    if (children.length === 0) {
+      spanMemo.set(taskId, 1);
+      return 1;
     }
 
-    // Pick parent that belongs to earliest root
-    const parentRoots = task.dependencies
-      .map((pId) => getPrimaryRoot(pId, new Set(stack)))
-      .filter((r): r is string => r !== null);
+    // Sum of child spans (children at the next stage occupy consecutive vertical rows)
+    const childrenSpanSum = children
+      .map((c) => getSubtreeSpan(c.id, new Set(stack)))
+      .reduce((sum, s) => sum + s, 0);
 
-    if (parentRoots.length === 0) return null;
-
-    parentRoots.sort((a, b) => (rootOrderMap.get(a) ?? 9999) - (rootOrderMap.get(b) ?? 9999));
-    const chosen = parentRoots[0];
-    primaryRootMemo.set(taskId, chosen);
-    return chosen;
+    const span = Math.max(1, childrenSpanSum);
+    spanMemo.set(taskId, span);
+    return span;
   }
 
-  // Calculate the vertical span (max nodes in any single stage) for each root tree
-  const rootSpanMap = new Map<string, number>();
-  (levels[0] || []).forEach((r) => {
-    const countsPerLevel: Record<number, number> = {};
-    tasks.forEach((t) => {
-      if (getPrimaryRoot(t.id) === r.id) {
-        const lvl = levelOf(t);
-        countsPerLevel[lvl] = (countsPerLevel[lvl] || 0) + 1;
-      }
-    });
-    const maxInLevel = Math.max(1, ...Object.values(countsPerLevel));
-    rootSpanMap.set(r.id, maxInLevel);
-  });
-
-  // Assign starting base lane for each root
-  const rootBaseLane = new Map<string, number>();
-  let currentBase = 0;
-  (levels[0] || []).forEach((r) => {
-    rootBaseLane.set(r.id, currentBase);
-    currentBase += rootSpanMap.get(r.id) || 1;
-  });
-
   const lanes = new Map<string, number>();
-  let laneCount = currentBase;
+  let laneCount = 0;
 
+  // Allocate lane offsets recursively starting from Root tasks
+  let currentRootLane = 0;
+  const assigned = new Set<string>();
+
+  function allocateTreeLanes(taskId: string, startLane: number) {
+    if (assigned.has(taskId)) return;
+    assigned.add(taskId);
+    lanes.set(taskId, startLane);
+    laneCount = Math.max(laneCount, startLane + 1);
+
+    let childLane = startLane;
+    const children = childrenMap.get(taskId) || [];
+    children.forEach((child) => {
+      const childSpan = getSubtreeSpan(child.id);
+      allocateTreeLanes(child.id, childLane);
+      childLane += childSpan;
+    });
+  }
+
+  (levels[0] || []).forEach((rootTask) => {
+    const rootSpan = getSubtreeSpan(rootTask.id);
+    allocateTreeLanes(rootTask.id, currentRootLane);
+    currentRootLane += rootSpan;
+  });
+
+  // Handle any disconnected or cyclic tasks that weren't assigned through roots
+  tasks.forEach((t) => {
+    if (!lanes.has(t.id)) {
+      lanes.set(t.id, currentRootLane);
+      currentRootLane += 1;
+      laneCount = Math.max(laneCount, currentRootLane);
+    }
+  });
+
+  // Sort each level's array so CSS grid subgrid renders tasks in lane order
   orderedLevels.forEach((level) => {
     levels[level] = [...levels[level]].sort((a, b) => {
-      if (level > 0) {
-        const laneA = earliestParentLane(a, lanes, rootBaseLane, getPrimaryRoot);
-        const laneB = earliestParentLane(b, lanes, rootBaseLane, getPrimaryRoot);
-        if (laneA !== laneB) return laneA - laneB;
-      }
+      const laneA = lanes.get(a.id) ?? 0;
+      const laneB = lanes.get(b.id) ?? 0;
+      if (laneA !== laneB) return laneA - laneB;
       return compareTasks(a, b) || a.id.localeCompare(b.id);
-    });
-
-    const occupied = new Set<number>();
-    levels[level].forEach((task) => {
-      const preferredLane = earliestParentLane(task, lanes, rootBaseLane, getPrimaryRoot);
-      const rootId = getPrimaryRoot(task.id);
-      const baseMin = rootId !== null && rootBaseLane.has(rootId) ? rootBaseLane.get(rootId)! : 0;
-      const start = Number.isFinite(preferredLane) ? Math.max(preferredLane, baseMin) : baseMin;
-      let lane = firstFreeLane(occupied, start);
-      occupied.add(lane);
-      lanes.set(task.id, lane);
-      laneCount = Math.max(laneCount, lane + 1);
     });
   });
 
   return { levels, orderedLevels, lanes, laneCount };
-}
-
-function earliestParentLane(
-  task: DagTask,
-  lanes: Map<string, number>,
-  rootBaseLane: Map<string, number>,
-  getPrimaryRoot: (id: string) => string | null
-): number {
-  const parentLanes = (task.dependencies || [])
-    .map((id) => lanes.get(id))
-    .filter((lane): lane is number => lane !== undefined);
-  if (parentLanes.length) return Math.min(...parentLanes);
-
-  const rootId = getPrimaryRoot(task.id);
-  if (rootId && rootBaseLane.has(rootId)) {
-    return rootBaseLane.get(rootId)!;
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-function firstFreeLane(occupied: Set<number>, start: number): number {
-  let lane = start;
-  while (occupied.has(lane)) lane += 1;
-  return lane;
 }

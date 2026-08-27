@@ -136,21 +136,53 @@ test('adds a parallel sibling above target with identical parent dependencies', 
   deepEqual(result.find((t) => t.id === 'a')?.dependencies, ['p']);
 });
 
-test('allocates vertical lane footprint so second root starts below first root subtree', () => {
+test('pushes subsequent siblings and roots down based on downstream subtree height', () => {
   const tasks: T[] = [
+    // Root 1
     { id: 'task-1', batch: 'B1', order: 0, dependencies: [] },
+    // Root 2
     { id: 'dfgdfgd', batch: 'B1', order: 1, dependencies: [] },
-    { id: 'sfsdfs', batch: 'B2', order: 2, dependencies: ['task-1'] },
-    { id: 'another-task', batch: 'B2', order: 3, dependencies: ['task-1'] },
-    { id: 'dfsdfsdfsdfs', batch: 'B2', order: 4, dependencies: ['task-1'] },
-    { id: 'task-3', batch: 'B2', order: 5, dependencies: ['another-task'] },
+
+    // Stage 2 (Children of Root 1)
+    { id: 'child-1', batch: 'B2', order: 2, dependencies: ['task-1'] },
+    { id: 'another-task', batch: 'B2', order: 3, dependencies: ['task-1'] }, // has 3 children in Stage 3
+    { id: 'dfsdfsdfsdfs', batch: 'B2', order: 4, dependencies: ['task-1'] }, // has 1 child in Stage 3
+
+    // Stage 2 (Children of Root 2)
+    { id: 'this-should-work', batch: 'B2', order: 5, dependencies: ['dfgdfgd'] },
+    { id: 'hi-there', batch: 'B2', order: 6, dependencies: ['dfgdfgd'] },
+
+    // Stage 3 (Children of another-task)
+    { id: 'sub-1', batch: 'B3', order: 7, dependencies: ['another-task'] },
+    { id: 'sub-2', batch: 'B3', order: 8, dependencies: ['another-task'] },
+    { id: 'task-3', batch: 'B3', order: 9, dependencies: ['another-task'] },
+
+    // Stage 3 (Child of dfsdfsdfsdfs)
+    { id: 'dfsfsfs', batch: 'B3', order: 10, dependencies: ['dfsdfsdfsdfs'] },
+
+    // Stage 4 (Child of task-3)
+    { id: 'stage4-task', batch: 'B4', order: 11, dependencies: ['task-3'] },
   ];
 
   const result = alignDagLevels(tasks, (a, b) => a.order - b.order);
+
+  // Root 1 starts at 0
   equal(result.lanes.get('task-1'), 0);
-  equal(result.lanes.get('sfsdfs'), 0);
+  equal(result.lanes.get('child-1'), 0);
+
+  // another-task is at lane 1, its 3 children occupy lanes 1, 2, 3
   equal(result.lanes.get('another-task'), 1);
-  equal(result.lanes.get('dfsdfsdfsdfs'), 2);
-  // dfgdfgd must be at lane 3 (row 4 in 1-based display), not lane 1
-  equal(result.lanes.get('dfgdfgd'), 3);
+  equal(result.lanes.get('sub-1'), 1);
+  equal(result.lanes.get('sub-2'), 2);
+  equal(result.lanes.get('task-3'), 3);
+  equal(result.lanes.get('stage4-task'), 3);
+
+  // dfsdfsdfsdfs must be pushed down to lane 4 (after the 3 lanes of another-task)
+  equal(result.lanes.get('dfsdfsdfsdfs'), 4);
+  equal(result.lanes.get('dfsfsfs'), 4);
+
+  // dfgdfgd (Root 2) and its subtree must start at lane 5 (below Root 1's 5 total lanes: 0, 1, 2, 3, 4)
+  equal(result.lanes.get('dfgdfgd'), 5);
+  equal(result.lanes.get('this-should-work'), 5);
+  equal(result.lanes.get('hi-there'), 6);
 });
