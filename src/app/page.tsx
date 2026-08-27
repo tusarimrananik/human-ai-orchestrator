@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useAuthActions } from '@convex-dev/auth/react';
+import { api } from '../../convex/_generated/api';
 import {
   addDagTaskAfter,
   alignDagLevels,
@@ -105,6 +108,14 @@ const BATCH_ORDER_KEY = 'smart_task_batch_order_v1';
 const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
 const ACTIVE_TURN_KEY = 'smart_task_active_turn_v1';
 const PARALLEL_MODE_KEY = 'smart_task_parallel_mode_v1';
+type WorkspacePayload = {
+  schemaVersion: 1;
+  tasks: Task[];
+  batchPriorityOrder: BatchTag[];
+  parallelGroups: ParallelGroupConfig[];
+  isParallelModeActive: boolean;
+  activeTurnGroupName: string;
+};
 
 const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
   { id: 'pgrp_dev', name: 'Development', slotLimit: 3 },
@@ -279,6 +290,50 @@ export function getBatchTheme(batch: BatchTag = 'None') {
 }
 
 export default function Page() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { signIn } = useAuthActions();
+
+  if (isLoading) {
+    return <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-sm text-zinc-400">Connecting securely…</main>;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-4 text-zinc-100">
+        <section className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-center shadow-2xl">
+          <div className="mb-2 text-2xl">⚡</div>
+          <h1 className="text-base font-bold">Human + AI Work Orchestrator</h1>
+          <p className="mt-1 text-xs text-zinc-400">Sign in to securely sync your task graph across devices.</p>
+          <button
+            onClick={() => void signIn('google', { redirectTo: '/' })}
+            className="mt-4 w-full rounded-lg bg-white px-4 py-2 text-sm font-bold text-zinc-900 hover:bg-zinc-200"
+          >
+            Continue with Google
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  return <AuthenticatedOrchestrator />;
+}
+
+function AuthenticatedOrchestrator() {
+  const me = useQuery(api.workspace.me, {});
+  if (me === undefined || me === null) {
+    return <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-sm text-zinc-400">Loading private workspace…</main>;
+  }
+  return <OrchestratorPage userId={me.id} />;
+}
+
+function OrchestratorPage({ userId }: { userId: string }) {
+  const storageKey = `${STORAGE_KEY}:${userId}`;
+  const batchOrderKey = `${BATCH_ORDER_KEY}:${userId}`;
+  const parallelGroupsKey = `${PARALLEL_GROUPS_KEY}:${userId}`;
+  const activeTurnKey = `${ACTIVE_TURN_KEY}:${userId}`;
+  const parallelModeKey = `${PARALLEL_MODE_KEY}:${userId}`;
+  const syncEnvelopeKey = `smart_task_sync_v1:${userId}`;
+  const legacyOwnerKey = 'smart_task_legacy_owner_v1';
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
@@ -292,6 +347,15 @@ export default function Page() {
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
   const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
+  const remoteWorkspace = useQuery(api.workspace.get, {});
+  const saveRemoteWorkspace = useMutation(api.workspace.save);
+  const remoteRevisionRef = useRef(0);
+  const syncReadyRef = useRef(false);
+  const lastRemoteHashRef = useRef('');
+  const saveInFlightRef = useRef(false);
+  const pendingPayloadRef = useRef<WorkspacePayload | null>(null);
+  const [syncRetry, setSyncRetry] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<'connecting' | 'saved' | 'saving' | 'offline' | 'conflict'>('connecting');
 
   // Live timer tick for active in-progress tasks
   const [now, setNow] = useState<number>(Date.now());
@@ -382,16 +446,18 @@ export default function Page() {
   // Initial Load from LocalStorage
   useEffect(() => {
     try {
-      const storedGroups = localStorage.getItem(PARALLEL_GROUPS_KEY);
+      const canClaimLegacy = !localStorage.getItem(legacyOwnerKey) || localStorage.getItem(legacyOwnerKey) === userId;
+      if (canClaimLegacy && !localStorage.getItem(legacyOwnerKey)) localStorage.setItem(legacyOwnerKey, userId);
+      const storedGroups = localStorage.getItem(parallelGroupsKey) || (canClaimLegacy ? localStorage.getItem(PARALLEL_GROUPS_KEY) : null);
       if (storedGroups) setParallelGroups(JSON.parse(storedGroups));
 
-      const storedMode = localStorage.getItem(PARALLEL_MODE_KEY);
+      const storedMode = localStorage.getItem(parallelModeKey) || (canClaimLegacy ? localStorage.getItem(PARALLEL_MODE_KEY) : null);
       if (storedMode) setIsParallelModeActive(storedMode === 'true');
 
-      const storedTurn = localStorage.getItem(ACTIVE_TURN_KEY);
+      const storedTurn = localStorage.getItem(activeTurnKey) || (canClaimLegacy ? localStorage.getItem(ACTIVE_TURN_KEY) : null);
       if (storedTurn) setActiveTurnGroupName(storedTurn);
 
-      const storedOrder = localStorage.getItem(BATCH_ORDER_KEY);
+      const storedOrder = localStorage.getItem(batchOrderKey) || (canClaimLegacy ? localStorage.getItem(BATCH_ORDER_KEY) : null);
       if (storedOrder) {
         const parsed = JSON.parse(storedOrder);
         const fullList = [...parsed];
@@ -401,7 +467,7 @@ export default function Page() {
         setBatchPriorityOrder(fullList);
       }
 
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey) || (canClaimLegacy ? localStorage.getItem(STORAGE_KEY) : null);
       if (stored) {
         const parsed = JSON.parse(stored);
         setTasks(
@@ -448,39 +514,122 @@ export default function Page() {
           },
         ];
         setTasks(initialTasks);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTasks));
+        localStorage.setItem(storageKey, JSON.stringify(initialTasks));
       }
     } catch (err) {
       console.warn('LocalStorage access error:', err);
     }
     setMounted(true);
-  }, []);
+  }, [userId]);
+
+  // Convex is the durable cross-device source; this user-scoped envelope protects offline edits.
+  useEffect(() => {
+    if (!mounted || remoteWorkspace === undefined || syncReadyRef.current) return;
+    const envelope = JSON.parse(localStorage.getItem(syncEnvelopeKey) || 'null') as
+      | { payload: WorkspacePayload; baseRevision: number; dirty: boolean }
+      | null;
+
+    if (envelope?.dirty) {
+      remoteRevisionRef.current = envelope.baseRevision;
+      pendingPayloadRef.current = envelope.payload;
+      setSyncStatus(remoteWorkspace && remoteWorkspace.revision !== envelope.baseRevision ? 'conflict' : 'offline');
+    } else if (remoteWorkspace) {
+      const payload = remoteWorkspace.payload as WorkspacePayload;
+      remoteRevisionRef.current = remoteWorkspace.revision;
+      lastRemoteHashRef.current = JSON.stringify(payload);
+      setTasks(payload.tasks);
+      setBatchPriorityOrder(payload.batchPriorityOrder as BatchTag[]);
+      setParallelGroups(payload.parallelGroups);
+      setIsParallelModeActive(payload.isParallelModeActive);
+      setActiveTurnGroupName(payload.activeTurnGroupName);
+      localStorage.setItem(storageKey, JSON.stringify(payload.tasks));
+      localStorage.setItem(batchOrderKey, JSON.stringify(payload.batchPriorityOrder));
+      localStorage.setItem(parallelGroupsKey, JSON.stringify(payload.parallelGroups));
+      localStorage.setItem(parallelModeKey, String(payload.isParallelModeActive));
+      localStorage.setItem(activeTurnKey, payload.activeTurnGroupName);
+      localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteWorkspace.revision, dirty: false }));
+      setSyncStatus('saved');
+    } else {
+      remoteRevisionRef.current = 0;
+      setSyncStatus('offline');
+    }
+    syncReadyRef.current = true;
+  }, [mounted, remoteWorkspace, userId]);
+
+  useEffect(() => {
+    if (!mounted || !syncReadyRef.current) return;
+    const payload: WorkspacePayload = {
+      schemaVersion: 1,
+      tasks,
+      batchPriorityOrder,
+      parallelGroups,
+      isParallelModeActive,
+      activeTurnGroupName,
+    };
+    const hash = JSON.stringify(payload);
+    if (hash === lastRemoteHashRef.current) return;
+    pendingPayloadRef.current = payload;
+    localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteRevisionRef.current, dirty: true }));
+    setSyncStatus('saving');
+
+    const timer = window.setTimeout(async () => {
+      if (saveInFlightRef.current || !pendingPayloadRef.current) return;
+      saveInFlightRef.current = true;
+      const sending = pendingPayloadRef.current;
+      const sendingHash = JSON.stringify(sending);
+      try {
+        const result = await saveRemoteWorkspace({ payload: sending, expectedRevision: remoteRevisionRef.current });
+        if (!result.ok) {
+          remoteRevisionRef.current = result.revision;
+          setSyncStatus('conflict');
+          return;
+        }
+        remoteRevisionRef.current = result.revision;
+        lastRemoteHashRef.current = sendingHash;
+        if (JSON.stringify(pendingPayloadRef.current) === sendingHash) {
+          pendingPayloadRef.current = null;
+          localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: sending, baseRevision: result.revision, dirty: false }));
+          setSyncStatus('saved');
+        }
+      } catch (error) {
+        console.warn('Convex sync deferred:', error);
+        setSyncStatus('offline');
+        window.setTimeout(() => setSyncRetry((value) => value + 1), 2000);
+      } finally {
+        saveInFlightRef.current = false;
+        if (pendingPayloadRef.current && JSON.stringify(pendingPayloadRef.current) !== sendingHash) {
+          setSyncRetry((value) => value + 1);
+        }
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [mounted, tasks, batchPriorityOrder, parallelGroups, isParallelModeActive, activeTurnGroupName, saveRemoteWorkspace, syncRetry]);
 
   const saveTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newTasks));
+      localStorage.setItem(storageKey, JSON.stringify(newTasks));
     }
   };
 
   const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
     setParallelGroups(newGroups);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(PARALLEL_GROUPS_KEY, JSON.stringify(newGroups));
+      localStorage.setItem(parallelGroupsKey, JSON.stringify(newGroups));
     }
   };
 
   const saveBatchOrder = (newOrder: BatchTag[]) => {
     setBatchPriorityOrder(newOrder);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(BATCH_ORDER_KEY, JSON.stringify(newOrder));
+      localStorage.setItem(batchOrderKey, JSON.stringify(newOrder));
     }
   };
 
   const switchActiveTurn = (groupName: string) => {
     setActiveTurnGroupName(groupName);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(ACTIVE_TURN_KEY, groupName);
+      localStorage.setItem(activeTurnKey, groupName);
     }
   };
 
@@ -526,7 +675,7 @@ export default function Page() {
   const handleStartParallelWork = () => {
     setIsParallelModeActive(true);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(PARALLEL_MODE_KEY, 'true');
+      localStorage.setItem(parallelModeKey, 'true');
     }
 
     let updated = [...tasks];
@@ -562,7 +711,7 @@ export default function Page() {
   const handleStopParallelWork = () => {
     setIsParallelModeActive(false);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(PARALLEL_MODE_KEY, 'false');
+      localStorage.setItem(parallelModeKey, 'false');
     }
   };
 
@@ -1840,6 +1989,18 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase ${
+              syncStatus === 'saved'
+                ? 'border-emerald-700/60 bg-emerald-950/60 text-emerald-300'
+                : syncStatus === 'conflict'
+                  ? 'border-rose-700/60 bg-rose-950/60 text-rose-300'
+                  : 'border-amber-700/60 bg-amber-950/60 text-amber-300'
+            }`}
+            title={syncStatus === 'conflict' ? 'Local changes are preserved; another device changed the remote workspace.' : 'Convex database synchronization status'}
+          >
+            {syncStatus}
+          </span>
           {/* Master Action: Start / Stop Parallel Work Toggle */}
           {isParallelModeActive ? (
             <button
