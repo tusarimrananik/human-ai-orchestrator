@@ -115,14 +115,74 @@ export function alignDagLevels<T extends DagTask>(
   });
 
   const orderedLevels = Object.keys(levels).map(Number).sort((a, b) => a - b);
+  if (orderedLevels.length === 0) {
+    return { levels, orderedLevels: [], lanes: new Map(), laneCount: 0 };
+  }
+
+  // Sort roots by comparator
+  if (levels[0]) {
+    levels[0] = [...levels[0]].sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
+  }
+
+  // Find primary root ancestor for every task
+  const primaryRootMemo = new Map<string, string>();
+  const rootOrderMap = new Map((levels[0] || []).map((r, i) => [r.id, i]));
+
+  function getPrimaryRoot(taskId: string, stack = new Set<string>()): string | null {
+    if (primaryRootMemo.has(taskId)) return primaryRootMemo.get(taskId)!;
+    if (stack.has(taskId)) return null;
+    stack.add(taskId);
+
+    const task = byId.get(taskId);
+    if (!task) return null;
+    if (!task.dependencies || task.dependencies.length === 0) {
+      primaryRootMemo.set(taskId, taskId);
+      return taskId;
+    }
+
+    // Pick parent that belongs to earliest root
+    const parentRoots = task.dependencies
+      .map((pId) => getPrimaryRoot(pId, new Set(stack)))
+      .filter((r): r is string => r !== null);
+
+    if (parentRoots.length === 0) return null;
+
+    parentRoots.sort((a, b) => (rootOrderMap.get(a) ?? 9999) - (rootOrderMap.get(b) ?? 9999));
+    const chosen = parentRoots[0];
+    primaryRootMemo.set(taskId, chosen);
+    return chosen;
+  }
+
+  // Calculate the vertical span (max nodes in any single stage) for each root tree
+  const rootSpanMap = new Map<string, number>();
+  (levels[0] || []).forEach((r) => {
+    const countsPerLevel: Record<number, number> = {};
+    tasks.forEach((t) => {
+      if (getPrimaryRoot(t.id) === r.id) {
+        const lvl = levelOf(t);
+        countsPerLevel[lvl] = (countsPerLevel[lvl] || 0) + 1;
+      }
+    });
+    const maxInLevel = Math.max(1, ...Object.values(countsPerLevel));
+    rootSpanMap.set(r.id, maxInLevel);
+  });
+
+  // Assign starting base lane for each root
+  const rootBaseLane = new Map<string, number>();
+  let currentBase = 0;
+  (levels[0] || []).forEach((r) => {
+    rootBaseLane.set(r.id, currentBase);
+    currentBase += rootSpanMap.get(r.id) || 1;
+  });
+
   const lanes = new Map<string, number>();
-  let laneCount = 0;
+  let laneCount = currentBase;
 
   orderedLevels.forEach((level) => {
     levels[level] = [...levels[level]].sort((a, b) => {
       if (level > 0) {
-        const laneA = earliestParentLane(a, lanes);
-        const laneB = earliestParentLane(b, lanes);
+        const laneA = earliestParentLane(a, lanes, rootBaseLane, getPrimaryRoot);
+        const laneB = earliestParentLane(b, lanes, rootBaseLane, getPrimaryRoot);
         if (laneA !== laneB) return laneA - laneB;
       }
       return compareTasks(a, b) || a.id.localeCompare(b.id);
@@ -130,9 +190,11 @@ export function alignDagLevels<T extends DagTask>(
 
     const occupied = new Set<number>();
     levels[level].forEach((task) => {
-      const preferredLane = earliestParentLane(task, lanes);
-      let lane = Number.isFinite(preferredLane) ? preferredLane : firstFreeLane(occupied, 0);
-      while (occupied.has(lane)) lane += 1;
+      const preferredLane = earliestParentLane(task, lanes, rootBaseLane, getPrimaryRoot);
+      const rootId = getPrimaryRoot(task.id);
+      const baseMin = rootId !== null && rootBaseLane.has(rootId) ? rootBaseLane.get(rootId)! : 0;
+      const start = Number.isFinite(preferredLane) ? Math.max(preferredLane, baseMin) : baseMin;
+      let lane = firstFreeLane(occupied, start);
       occupied.add(lane);
       lanes.set(task.id, lane);
       laneCount = Math.max(laneCount, lane + 1);
@@ -142,11 +204,22 @@ export function alignDagLevels<T extends DagTask>(
   return { levels, orderedLevels, lanes, laneCount };
 }
 
-function earliestParentLane(task: DagTask, lanes: Map<string, number>): number {
+function earliestParentLane(
+  task: DagTask,
+  lanes: Map<string, number>,
+  rootBaseLane: Map<string, number>,
+  getPrimaryRoot: (id: string) => string | null
+): number {
   const parentLanes = (task.dependencies || [])
     .map((id) => lanes.get(id))
     .filter((lane): lane is number => lane !== undefined);
-  return parentLanes.length ? Math.min(...parentLanes) : Number.POSITIVE_INFINITY;
+  if (parentLanes.length) return Math.min(...parentLanes);
+
+  const rootId = getPrimaryRoot(task.id);
+  if (rootId && rootBaseLane.has(rootId)) {
+    return rootBaseLane.get(rootId)!;
+  }
+  return Number.POSITIVE_INFINITY;
 }
 
 function firstFreeLane(occupied: Set<number>, start: number): number {

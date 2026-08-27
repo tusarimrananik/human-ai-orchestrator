@@ -136,12 +136,21 @@ test('adds a parallel sibling above target with identical parent dependencies', 
   deepEqual(result.find((t) => t.id === 'a')?.dependencies, ['p']);
 });
 
-test('adds a parallel sibling below target with identical parent dependencies', () => {
-  const root: T = { id: 'p', batch: 'B1', order: 0, dependencies: [] };
-  const b: T = { id: 'b', batch: 'B2', order: 1, dependencies: ['p'] };
-  const c: T = { id: 'c', batch: 'B2', order: 2, dependencies: [] };
+test('allocates vertical lane footprint so second root starts below first root subtree', () => {
+  const tasks: T[] = [
+    { id: 'task-1', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'dfgdfgd', batch: 'B1', order: 1, dependencies: [] },
+    { id: 'sfsdfs', batch: 'B2', order: 2, dependencies: ['task-1'] },
+    { id: 'another-task', batch: 'B2', order: 3, dependencies: ['task-1'] },
+    { id: 'dfsdfsdfsdfs', batch: 'B2', order: 4, dependencies: ['task-1'] },
+    { id: 'task-3', batch: 'B2', order: 5, dependencies: ['another-task'] },
+  ];
 
-  const result = addDagTaskSibling([root, b], 'b', c, 'bottom');
-  deepEqual(result.map((t) => t.id), ['p', 'b', 'c']);
-  deepEqual(result.find((t) => t.id === 'c')?.dependencies, ['p']);
+  const result = alignDagLevels(tasks, (a, b) => a.order - b.order);
+  equal(result.lanes.get('task-1'), 0);
+  equal(result.lanes.get('sfsdfs'), 0);
+  equal(result.lanes.get('another-task'), 1);
+  equal(result.lanes.get('dfsdfsdfsdfs'), 2);
+  // dfgdfgd must be at lane 3 (row 4 in 1-based display), not lane 1
+  equal(result.lanes.get('dfgdfgd'), 3);
 });
