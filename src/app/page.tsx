@@ -56,15 +56,15 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 
-export type BatchTag = string;
+type BatchTag = string;
 
-export interface ParallelGroupConfig {
+interface ParallelGroupConfig {
   id: string;
   name: string;
   slotLimit: number; // e.g. Development = 3, Study = 1
 }
 
-export interface SubTask {
+interface SubTask {
   id: string;
   name: string;
   status: 'todo' | 'done';
@@ -115,7 +115,7 @@ const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
   { id: 'pgrp_study', name: 'Study', slotLimit: 1 },
 ];
 
-export const ALL_BATCHES: BatchTag[] = [
+const ALL_BATCHES: BatchTag[] = [
   'Batch 1',
   'Batch 2',
   'Batch 3',
@@ -133,7 +133,7 @@ export const ALL_BATCHES: BatchTag[] = [
 const DEFAULT_BATCH_ORDER: BatchTag[] = [...ALL_BATCHES];
 
 // Natural alphanumeric batch sort comparator (e.g. B1 -> B2 -> ... -> B9 -> B10 -> B11)
-export function naturalBatchCompare(a: string, b: string): number {
+function naturalBatchCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
@@ -250,7 +250,7 @@ const BATCH_THEME_PALETTE = [
   },
 ];
 
-export function getBatchTheme(batch: string = 'Batch 1') {
+function getBatchTheme(batch: string = 'Batch 1') {
   const match = batch.match(/^Batch\s+(\d+)$/i);
   let index = 0;
   if (match) {
@@ -2299,23 +2299,23 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </svg>
 
               <div
-                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-4 items-stretch relative z-20 pt-1"
-                style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, auto)` }}
+                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-4 items-start relative z-20 pt-1"
+                style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 148px)` }}
               >
                 {orderedLevels.map((level, index) => {
                   const stageTasks = levels[level] || [];
                   return (
                     <div
                       key={level}
-                      className="grid gap-y-4"
+                      className="grid gap-y-4 items-start"
                       style={{
                         gridColumn: index + 1,
                         gridRow: `1 / span ${Math.max(laneCount, 1) + 1}`,
-                        gridTemplateRows: 'subgrid',
+                        gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 148px)`,
                       }}
                     >
                       {/* Stage Header with Stage name, task count & + Add Task button */}
-                      <div className="flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 py-1.5 shadow-sm" style={{ gridRow: 1 }}>
+                      <div className="h-9 flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 shadow-sm" style={{ gridRow: 1 }}>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
                             {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
@@ -2338,7 +2338,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                         const durationDisplay = getTaskDurationDisplay(t);
                         const batchTheme = getBatchTheme(t.batch);
 
-                        const batchSiblings = stageTasks.filter((x) => (x.batch || 'None') === (t.batch || 'None'));
+                        const batchSiblings = stageTasks.filter((x) => (x.batch || 'Batch 1') === (t.batch || 'Batch 1'));
                         const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
                         const isFirstInBatch = posInBatch === 0;
                         const isLastInBatch = posInBatch === batchSiblings.length - 1;
@@ -2360,7 +2360,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
                             style={{ gridRow: (lanes.get(t.id) ?? 0) + 2 }}
-                            className={`group relative overflow-visible p-2.5 rounded-lg border-2 shadow space-y-1.5 transition-all ${batchTheme.dagNode} ${
+                            className={`group relative overflow-visible w-[260px] h-[148px] p-2.5 rounded-lg border-2 shadow flex flex-col justify-between transition-all select-none ${batchTheme.dagNode} ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
@@ -2413,27 +2413,27 @@ function OrchestratorPage({ userId }: { userId: string }) {
                               <Plus className="h-3 w-3" />
                             </button>
 
-                            {/* Card Top: Grip, Owner, Goal/Parallel Tags, Up/Down reorder within batch, Batch Dropdown */}
-                            <div className="flex items-center justify-between gap-1">
-                              <div className="flex items-center gap-1">
-                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
-                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
+                            {/* Card Top Row: Fixed height */}
+                            <div className="flex items-center justify-between gap-1 flex-shrink-0">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
                                   {t.owner}
                                 </span>
                                 {t.taskType === 'goal' && (
-                                  <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                                  <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5 flex-shrink-0">
                                     <Target className="w-2.5 h-2.5" /> Goal
                                   </span>
                                 )}
                                 {t.isParallel && t.parallelGroup && (
-                                  <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
-                                    <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
+                                  <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5 truncate">
+                                    <Split className="w-2 h-2 text-indigo-400 flex-shrink-0" /> {t.parallelGroup}
                                   </span>
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-1">
-                                <div className="flex items-center gap-0.5 mr-0.5">
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <div className="flex items-center gap-0.5">
                                   <button
                                     disabled={isFirstInBatch}
                                     onClick={(e) => {
@@ -2472,67 +2472,47 @@ function OrchestratorPage({ userId }: { userId: string }) {
                               </div>
                             </div>
 
-                            {/* Task Name (Click to edit/plan) */}
-                            <div
-                              onClick={() => openTaskModal(t.id)}
-                              className={`text-xs font-bold leading-snug line-clamp-2 cursor-pointer hover:underline ${batchTheme.cardTitle}`}
-                              title="Click to edit/plan task"
-                            >
-                              {t.name}
+                            {/* Card Middle: Title, Description & Status/Subtask snippet */}
+                            <div className="flex-1 flex flex-col justify-center min-h-0 space-y-1 my-0.5">
+                              <div
+                                onClick={() => openTaskModal(t.id)}
+                                className={`text-xs font-bold leading-tight line-clamp-1 truncate cursor-pointer hover:underline ${batchTheme.cardTitle}`}
+                                title="Click to edit/plan task"
+                              >
+                                {t.name}
+                              </div>
+
+                              {t.description ? (
+                                <p className={`text-[10px] truncate leading-tight px-1 py-0.5 rounded border ${batchTheme.descBg}`}>
+                                  {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
+                                </p>
+                              ) : null}
+
+                              {/* Compact Subtask / Waiting Badge */}
+                              <div className="flex items-center justify-between text-[9px] gap-1">
+                                {totalSubsCount > 0 ? (
+                                  <span className="font-mono text-emerald-400 flex items-center gap-1 truncate">
+                                    <ListTodo className="w-2.5 h-2.5 text-indigo-400 flex-shrink-0" />
+                                    {completedSubsCount}/{totalSubsCount} Subtasks
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-500 italic text-[9px]">No subtasks</span>
+                                )}
+
+                                {waiting.length > 0 ? (
+                                  <span className="text-rose-300 bg-rose-950/90 border border-rose-800/80 px-1 py-0.2 rounded truncate flex items-center gap-0.5 text-[8px] max-w-[130px]" title={`Waiting: ${waiting.join(', ')}`}>
+                                    <Lock className="w-2 h-2 flex-shrink-0 text-rose-400" />
+                                    <span className="truncate">{waiting[0]}{waiting.length > 1 ? ` +${waiting.length - 1}` : ''}</span>
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
 
-                            {/* Description if present */}
-                            {t.description && (
-                              <p className={`text-[10px] line-clamp-2 leading-relaxed p-1 rounded border ${batchTheme.descBg}`}>
-                                {t.description}
-                              </p>
-                            )}
-
-                            {/* Sub-Tasks Checklist Breakdown in DAG */}
-                            {t.subTasks && t.subTasks.length > 0 && (
-                              <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
-                                <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
-                                  <span className="flex items-center gap-1">
-                                    <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
-                                  </span>
-                                  <span className="font-mono text-[8px] text-emerald-400">
-                                    {completedSubsCount}/{totalSubsCount} Done
-                                  </span>
-                                </div>
-                                <div className="space-y-0.5">
-                                  {t.subTasks.map((st) => (
-                                    <div
-                                      key={st.id}
-                                      onClick={() => toggleSubTask(t.id, st.id)}
-                                      className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
-                                    >
-                                      {st.status === 'done' ? (
-                                        <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                                      ) : (
-                                        <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                                      )}
-                                      <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
-                                        {st.name}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Waiting Prerequisite Lock */}
-                            {waiting.length > 0 && (
-                              <div className="text-[9px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
-                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
-                              </div>
-                            )}
-
-                            {/* Bottom row: Duration / Status on left, Planning + Action buttons on right */}
-                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10">
+                            {/* Bottom row: Fixed height footer with status and actions */}
+                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10 flex-shrink-0">
                               <div className="flex items-center gap-1">
                                 {durationDisplay ? (
-                                  <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+                                  <div className="flex items-center gap-1 font-mono px-1 py-0.2 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
                                     <Timer className="w-2.5 h-2.5" />
                                     <span>{durationDisplay}</span>
                                   </div>
@@ -2541,7 +2521,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                     <Clock className="w-2.5 h-2.5" /> {t.estimate}
                                   </div>
                                 ) : null}
-                                <span className="font-semibold uppercase text-[9px] px-1 py-0.2 rounded bg-black/40 text-zinc-300 border border-white/10">
+                                <span className={`font-bold uppercase text-[8px] px-1.5 py-0.2 rounded border ${
+                                  status === 'ready'
+                                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                                    : status === 'progress'
+                                    ? 'bg-blue-950/60 border-blue-500/50 text-blue-300'
+                                    : status === 'done'
+                                    ? 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                                    : 'bg-rose-950/60 border-rose-500/50 text-rose-300'
+                                }`}>
                                   {status}
                                 </span>
                               </div>
@@ -2880,29 +2868,29 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   e.stopPropagation();
                                   handleDropOnTask(t.id, batchTag);
                                 }}
-                                className={`p-2 rounded-md border shadow-sm space-y-1 ${theme.cardBg} ${
+                                className={`w-full h-[148px] p-2.5 rounded-lg border shadow flex flex-col justify-between transition-all select-none ${theme.cardBg} ${
                                   draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                                 }`}
                               >
-                                <div className="flex items-center justify-between gap-1">
-                                  <div className="flex items-center gap-1">
-                                    <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
-                                    <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
+                                <div className="flex items-center justify-between gap-1 flex-shrink-0">
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing flex-shrink-0" />
+                                    <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
                                       {t.owner}
                                     </span>
                                     {t.taskType === 'goal' && (
-                                      <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                                      <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5 flex-shrink-0">
                                         <Target className="w-2.5 h-2.5" /> Goal
                                       </span>
                                     )}
                                     {t.isParallel && t.parallelGroup && (
-                                      <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
-                                        <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
+                                      <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5 truncate">
+                                        <Split className="w-2 h-2 text-indigo-400 flex-shrink-0" /> {t.parallelGroup}
                                       </span>
                                     )}
                                   </div>
 
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 flex-shrink-0">
                                     <div className="flex items-center gap-0.5 mr-0.5">
                                       <button
                                         disabled={isFirst}
@@ -2942,131 +2930,125 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   </div>
                                 </div>
 
-                                <div className={`text-xs font-bold leading-snug line-clamp-2 ${theme.cardTitle}`}>
-                                  {t.name}
-                                </div>
-
-                                {t.description && (
-                                  <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${theme.descBg}`}>
-                                    {t.description}
-                                  </p>
-                                )}
-
-                                {/* Sub-Tasks Checklist Breakdown */}
-                                {t.subTasks && t.subTasks.length > 0 && (
-                                  <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
-                                    <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
-                                      <span className="flex items-center gap-1">
-                                        <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
-                                      </span>
-                                      <span className="font-mono text-[8px] text-emerald-400">
-                                        {completedSubsCount}/{totalSubsCount} Done
-                                      </span>
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      {t.subTasks.map((st) => (
-                                        <div
-                                          key={st.id}
-                                          onClick={() => toggleSubTask(t.id, st.id)}
-                                          className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
-                                        >
-                                          {st.status === 'done' ? (
-                                            <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                                          ) : (
-                                            <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                                          )}
-                                          <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
-                                            {st.name}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </div>
+                                {/* Card Middle */}
+                                <div className="flex-1 flex flex-col justify-center min-h-0 space-y-1 my-0.5">
+                                  <div
+                                    onClick={() => openTaskModal(t.id)}
+                                    className={`text-xs font-bold leading-tight line-clamp-1 truncate cursor-pointer hover:underline ${theme.cardTitle}`}
+                                    title="Click to edit task"
+                                  >
+                                    {t.name}
                                   </div>
-                                )}
 
-                                {waiting.length > 0 && (
-                                  <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                                    <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
-                                    <span className="truncate">Waiting: {waiting.join(', ')}</span>
-                                  </div>
-                                )}
-
-                                <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
-                                  {durationDisplay ? (
-                                    <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
-                                      <Timer className="w-2.5 h-2.5" />
-                                      <span>{durationDisplay}</span>
-                                    </div>
-                                  ) : t.estimate ? (
-                                    <div className="text-zinc-400 flex items-center gap-1">
-                                      <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                                    </div>
-                                  ) : (
-                                    <span />
-                                  )}
-
-                                  <span className="font-semibold uppercase text-[9px] px-1 py-0.2 rounded bg-black/40 text-zinc-300 border border-white/10">
-                                    {status}
-                                  </span>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
-                                  {status === 'ready' && (
-                                    <button
-                                      onClick={() => startInProgress(t.id)}
-                                      className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold shadow"
-                                    >
-                                      Start
-                                    </button>
-                                  )}
-
-                                  {status === 'progress' && t.taskType === 'goal' ? (
-                                    <button
-                                      onClick={() => {
-                                        setReviewingTaskId(t.id);
-                                        setIsBlockPickerOpen(false);
-                                        setBlockParentId('');
-                                        setBlockNewParentName('');
-                                      }}
-                                      className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold shadow flex items-center gap-1"
-                                    >
-                                      <Eye className="w-3 h-3" /> Review
-                                    </button>
-                                  ) : status === 'progress' && t.taskType !== 'goal' ? (
-                                    <button
-                                      onClick={() => finishTask(t.id)}
-                                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
-                                    >
-                                      Done
-                                    </button>
+                                  {t.description ? (
+                                    <p className={`text-[10px] truncate leading-tight px-1 py-0.5 rounded border ${theme.descBg}`}>
+                                      {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
+                                    </p>
                                   ) : null}
 
-                                  {status === 'done' && (
-                                    <button
-                                      onClick={() => reopenTask(t.id)}
-                                      className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
-                                    >
-                                      Reopen
-                                    </button>
-                                  )}
+                                  <div className="flex items-center justify-between text-[9px] gap-1">
+                                    {totalSubsCount > 0 ? (
+                                      <span className="font-mono text-emerald-400 flex items-center gap-1 truncate">
+                                        <ListTodo className="w-2.5 h-2.5 text-indigo-400 flex-shrink-0" />
+                                        {completedSubsCount}/{totalSubsCount} Subtasks
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-500 italic text-[9px]">No subtasks</span>
+                                    )}
 
-                                  <button
-                                    onClick={() => openTaskModal(t.id)}
-                                    className="p-0.5 text-zinc-400 hover:text-white"
-                                    title="Edit"
-                                  >
-                                    <Pencil className="w-3 h-3" />
-                                  </button>
-                                  {status === 'done' && (
+                                    {waiting.length > 0 ? (
+                                      <span className="text-rose-300 bg-rose-950/90 border border-rose-800/80 px-1 py-0.2 rounded truncate flex items-center gap-0.5 text-[8px] max-w-[130px]" title={`Waiting: ${waiting.join(', ')}`}>
+                                        <Lock className="w-2 h-2 flex-shrink-0 text-rose-400" />
+                                        <span className="truncate">{waiting[0]}{waiting.length > 1 ? ` +${waiting.length - 1}` : ''}</span>
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+
+                                {/* Footer */}
+                                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10 flex-shrink-0">
+                                  <div className="flex items-center gap-1">
+                                    {durationDisplay ? (
+                                      <div className="flex items-center gap-1 font-mono px-1 py-0.2 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+                                        <Timer className="w-2.5 h-2.5" />
+                                        <span>{durationDisplay}</span>
+                                      </div>
+                                    ) : t.estimate ? (
+                                      <div className="text-zinc-400 flex items-center gap-1 text-[9px]">
+                                        <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                                      </div>
+                                    ) : null}
+
+                                    <span className={`font-bold uppercase text-[8px] px-1.5 py-0.2 rounded border ${
+                                      status === 'ready'
+                                        ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                                        : status === 'progress'
+                                        ? 'bg-blue-950/60 border-blue-500/50 text-blue-300'
+                                        : status === 'done'
+                                        ? 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                                        : 'bg-rose-950/60 border-rose-500/50 text-rose-300'
+                                    }`}>
+                                      {status}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    {status === 'ready' && (
+                                      <button
+                                        onClick={() => startInProgress(t.id)}
+                                        className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold shadow"
+                                      >
+                                        Start
+                                      </button>
+                                    )}
+
+                                    {status === 'progress' && t.taskType === 'goal' ? (
+                                      <button
+                                        onClick={() => {
+                                          setReviewingTaskId(t.id);
+                                          setIsBlockPickerOpen(false);
+                                          setBlockParentId('');
+                                          setBlockNewParentName('');
+                                        }}
+                                        className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold shadow flex items-center gap-1"
+                                      >
+                                        <Eye className="w-3 h-3" /> Review
+                                      </button>
+                                    ) : status === 'progress' && t.taskType !== 'goal' ? (
+                                      <button
+                                        onClick={() => finishTask(t.id)}
+                                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
+                                      >
+                                        Done
+                                      </button>
+                                    ) : null}
+
+                                    {status === 'done' && (
+                                      <button
+                                        onClick={() => reopenTask(t.id)}
+                                        className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
+                                      >
+                                        Reopen
+                                      </button>
+                                    )}
+
                                     <button
-                                      onClick={() => deleteTask(t.id)}
-                                      className="p-0.5 text-zinc-400 hover:text-rose-400"
-                                      title="Delete"
+                                      onClick={() => openTaskModal(t.id)}
+                                      className="p-0.5 text-zinc-400 hover:text-white"
+                                      title="Edit"
                                     >
-                                      <Trash2 className="w-3 h-3" />
+                                      <Pencil className="w-3 h-3" />
                                     </button>
-                                  )}
+                                    {status === 'done' && (
+                                      <button
+                                        onClick={() => deleteTask(t.id)}
+                                        className="p-0.5 text-zinc-400 hover:text-rose-400"
+                                        title="Delete"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             );
