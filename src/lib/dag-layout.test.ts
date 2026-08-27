@@ -1,6 +1,6 @@
 import { deepEqual, equal } from 'node:assert/strict';
 import { test } from 'node:test';
-import { alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator } from './dag-layout';
+import { addDagTaskAfter, alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator, insertDagTaskBefore } from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
 
@@ -98,4 +98,23 @@ test('starting a task does not change its manual DAG position when Board executi
 
   const result = alignDagLevels(tasks, createSourceOrderComparator(tasks));
   deepEqual(result.levels[0].map((task) => task.id), ['first', 'started', 'third']);
+});
+
+test('inserts a task between a target and all existing parents', () => {
+  const tasks: T[] = [
+    { id: 'a', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'c', batch: 'B1', order: 1, dependencies: [] },
+    { id: 'b', batch: 'B2', order: 2, dependencies: ['a', 'c'] },
+  ];
+  const result = insertDagTaskBefore(tasks, 'b', { id: 'x', batch: 'B2', order: 3, dependencies: [] });
+  deepEqual(result.find((task) => task.id === 'x')?.dependencies, ['a', 'c']);
+  deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['x']);
+});
+
+test('adds multiple children as independent parallel branches', () => {
+  const root: T = { id: 'a', batch: 'B1', order: 0, dependencies: [] };
+  const first = addDagTaskAfter([root], 'a', { id: 'b', batch: 'B2', order: 1, dependencies: [] });
+  const result = addDagTaskAfter(first, 'a', { id: 'c', batch: 'B2', order: 2, dependencies: [] });
+  deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['a']);
+  deepEqual(result.find((task) => task.id === 'c')?.dependencies, ['a']);
 });

@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { alignDagLevels, collapseHiddenDagTasks, createSourceOrderComparator } from '@/lib/dag-layout';
+import {
+  addDagTaskAfter,
+  alignDagLevels,
+  collapseHiddenDagTasks,
+  createSourceOrderComparator,
+  insertDagTaskBefore,
+} from '@/lib/dag-layout';
 import {
   Play,
   CheckCircle2,
@@ -303,6 +309,7 @@ export default function Page() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [dagInsert, setDagInsert] = useState<{ taskId: string; position: 'before' | 'after' } | null>(null);
   const [taskName, setTaskName] = useState('');
   const [taskType, setTaskType] = useState<'normal' | 'goal'>('normal');
   const [taskDescription, setTaskDescription] = useState('');
@@ -1092,9 +1099,11 @@ export default function Page() {
     id: string | null = null,
     defaultState?: 'blocked' | 'ready' | 'progress' | 'done',
     initialParentIds?: string[],
-    initialBatch?: BatchTag
+    initialBatch?: BatchTag,
+    insertion?: { taskId: string; position: 'before' | 'after' }
   ) => {
     setEditId(id);
+    setDagInsert(insertion || null);
     const current = tasks.find((t) => t.id === id);
     setTaskName(current?.name || '');
     setTaskType(current?.taskType || 'normal');
@@ -1306,11 +1315,15 @@ export default function Page() {
         order: baseList.length,
         totalTimeSpentSeconds: 0,
       };
-      updatedTasks = [...baseList, newTask];
+      updatedTasks = dagInsert?.position === 'before'
+        ? insertDagTaskBefore(baseList, dagInsert.taskId, newTask)
+        : dagInsert?.position === 'after'
+          ? addDagTaskAfter(baseList, dagInsert.taskId, newTask)
+          : [...baseList, newTask];
     }
 
     // Bi-directionally synchronize child downstream tasks
-    updatedTasks = updatedTasks.map((t) => {
+    if (!dagInsert) updatedTasks = updatedTasks.map((t) => {
       if (t.id === targetId) return t;
       const isMarkedAsChild = selectedChildren.includes(t.id);
       const currentlyHasAsDep = (t.dependencies || []).includes(targetId);
@@ -1977,7 +1990,7 @@ export default function Page() {
         ) : (
           /* DAG View */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
-            <div className="relative min-w-max pb-6" ref={stageRef}>
+            <div className="relative min-w-max pb-6 pl-7" ref={stageRef}>
               <div className="sticky left-0 z-30 mb-3 flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950/95 px-2.5 py-1.5 shadow-lg">
                 <label htmlFor="dag-sort" className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
                   <Layers className="h-3 w-3 text-indigo-400" /> Sort by
@@ -2091,10 +2104,35 @@ export default function Page() {
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
                             style={{ gridRow: (lanes.get(t.id) ?? 0) + 2 }}
-                            className={`p-2.5 rounded-lg border-2 shadow space-y-1.5 transition-all ${batchTheme.dagNode} ${
+                            className={`group relative overflow-visible p-2.5 rounded-lg border-2 shadow space-y-1.5 transition-all ${batchTheme.dagNode} ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTaskModal(null, 'blocked', undefined, t.batch, { taskId: t.id, position: 'before' });
+                              }}
+                              className="absolute -left-6 top-1/2 z-30 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              title={`Insert a task before ${t.name}`}
+                              aria-label={`Insert a task before ${t.name}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTaskModal(null, 'blocked', [t.id], t.batch, { taskId: t.id, position: 'after' });
+                              }}
+                              className="absolute -right-6 top-1/2 z-30 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              title={`Add a parallel-capable task after ${t.name}`}
+                              aria-label={`Add a task after ${t.name}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+
                             {/* Card Top: Grip, Owner, Goal/Parallel Tags, Up/Down reorder within batch, Batch Dropdown */}
                             <div className="flex items-center justify-between gap-1">
                               <div className="flex items-center gap-1">

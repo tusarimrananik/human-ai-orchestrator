@@ -13,6 +13,18 @@ export interface AlignedDag<T extends DagTask> {
   laneCount: number;
 }
 
+export function insertDagTaskBefore<T extends DagTask>(tasks: readonly T[], targetId: string, insertedTask: T): T[] {
+  const target = tasks.find((task) => task.id === targetId);
+  if (!target || tasks.some((task) => task.id === insertedTask.id)) return [...tasks];
+  const inserted = { ...insertedTask, dependencies: [...new Set(target.dependencies || [])] };
+  return [...tasks.map((task) => task.id === targetId ? { ...task, dependencies: [insertedTask.id] } : task), inserted];
+}
+
+export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], parentId: string, childTask: T): T[] {
+  if (!tasks.some((task) => task.id === parentId) || tasks.some((task) => task.id === childTask.id)) return [...tasks];
+  return [...tasks, { ...childTask, dependencies: [parentId] }];
+}
+
 /** Keeps DAG manual order tied to stable source-array position, not Board execution order. */
 export function createSourceOrderComparator<T extends DagTask>(tasks: readonly T[]): (a: T, b: T) => number {
   const positions = new Map(tasks.map((task, index) => [task.id, index]));
