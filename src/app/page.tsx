@@ -52,6 +52,7 @@ import {
   Ban,
   Eye,
   Boxes,
+  Filter,
 } from 'lucide-react';
 
 export type BatchTag =
@@ -349,6 +350,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
   const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
+  const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
   const remoteWorkspace = useQuery(api.workspace.get, {});
   const saveRemoteWorkspace = useMutation(api.workspace.save);
   const remoteRevisionRef = useRef(0);
@@ -2553,271 +2555,336 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
         ) : (
           /* Batch Task View (Grouped/Sorted by Batch Priority, Not Tree Structure) */
-          <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-2.5 flex gap-2.5 overflow-x-auto select-none">
-            {[...batchPriorityOrder, 'None' as BatchTag].map((batchTag) => {
-              const batchTasks = filtered.filter((t) => (t.batch || 'None') === batchTag);
-              const theme = getBatchTheme(batchTag);
-
-              // Sort batch tasks by position order within this batch
-              batchTasks.sort((a, b) => {
-                const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
-                const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
-                return ordA - ordB;
-              });
-
-              return (
-                <div
-                  key={batchTag}
-                  className="w-72 flex-shrink-0 bg-zinc-900/60 border border-zinc-800/90 rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm"
-                >
-                  {/* Batch Column Header */}
-                  <div className={`px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between flex-shrink-0`}>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] font-mono uppercase font-bold px-1.5 py-0.2 rounded border ${theme.badge}`}>
-                        {theme.short || (batchTag === 'None' ? 'No Batch' : batchTag)}
-                      </span>
-                      <span className="text-[11px] font-bold text-zinc-200">
-                        {batchTag === 'None' ? 'No Batch' : batchTag}
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
-                        {batchTasks.length}
-                      </span>
-                    </div>
+          <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-2.5 flex flex-col min-h-0 overflow-hidden select-none">
+            {/* Batch View Sub-header with quick jump and empty batch toggle */}
+            <div className="mb-2 flex items-center justify-between gap-2 flex-shrink-0 bg-zinc-950/80 border border-zinc-800/90 rounded-lg px-2.5 py-1.5 shadow-sm">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+                <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
+                  <Boxes className="w-3 h-3 text-indigo-400" /> Batches:
+                </span>
+                {['None' as BatchTag, ...batchPriorityOrder].map((bTag) => {
+                  const count = filtered.filter((t) => (t.batch || 'None') === bTag).length;
+                  const theme = getBatchTheme(bTag);
+                  return (
                     <button
-                      onClick={() => openTaskModal(null, 'ready', undefined, batchTag)}
-                      className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition"
-                      title={`Add task directly to ${batchTag}`}
+                      key={bTag}
+                      onClick={() => {
+                        const col = document.getElementById(`batch-col-${bTag}`);
+                        col?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+                      }}
+                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 ${
+                        bTag === 'None'
+                          ? 'border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
+                          : `${theme.badge} hover:brightness-125`
+                      }`}
+                      title={`Jump to ${bTag === 'None' ? 'No Batch' : bTag}`}
                     >
-                      <Plus className="w-2.5 h-2.5" /> Add
+                      <span>{bTag === 'None' ? 'No Batch' : (theme.short || bTag)}</span>
+                      <span className="px-1 py-0.2 rounded-full bg-black/40 text-[8px]">{count}</span>
                     </button>
-                  </div>
+                  );
+                })}
+              </div>
 
-                  {/* Batch Task List */}
-                  <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
-                    {batchTasks.length === 0 ? (
-                      <div className="py-8 text-center text-[10px] text-zinc-600 italic">No tasks in this batch</div>
-                    ) : (
-                      batchTasks.map((t) => {
-                        const status = computedStatus(t);
-                        const durationDisplay = getTaskDurationDisplay(t);
-                        const depNames = (t.dependencies || [])
-                          .map((id) => tasks.find((x) => x.id === id))
-                          .filter(Boolean) as Task[];
-                        const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowEmptyBatches(!showEmptyBatches)}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                    showEmptyBatches
+                      ? 'bg-indigo-950/80 border-indigo-500/60 text-indigo-200'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="Toggle displaying batches with 0 tasks"
+                >
+                  <Filter className="w-2.5 h-2.5" />
+                  <span>{showEmptyBatches ? 'Hide empty batches' : 'Show all batches'}</span>
+                </button>
+              </div>
+            </div>
 
-                        const posInBatch = batchTasks.findIndex((x) => x.id === t.id);
-                        const isFirst = posInBatch === 0;
-                        const isLast = posInBatch === batchTasks.length - 1;
+            {/* Batch Columns */}
+            <div className="flex-1 flex gap-2.5 overflow-x-auto min-h-0 pb-2">
+              {['None' as BatchTag, ...batchPriorityOrder]
+                .filter((bTag) => {
+                  if (showEmptyBatches) return true;
+                  const count = filtered.filter((t) => (t.batch || 'None') === bTag).length;
+                  return count > 0 || bTag === 'None';
+                })
+                .map((batchTag) => {
+                  const batchTasks = filtered.filter((t) => {
+                    const b = t.batch || 'None';
+                    return b === batchTag || (batchTag === 'None' && (!t.batch || t.batch === 'None'));
+                  });
+                  const theme = getBatchTheme(batchTag);
 
-                        const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
-                        const totalSubsCount = (t.subTasks || []).length;
+                  // Sort batch tasks by position order within this batch
+                  batchTasks.sort((a, b) => {
+                    const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+                    const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+                    return ordA - ordB;
+                  });
 
-                        return (
-                          <div
-                            key={t.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, t.id)}
-                            onDragOver={handleDragOver}
-                            onDrop={() => handleDropOnTask(t.id)}
-                            className={`p-2 rounded-md border shadow-sm space-y-1 ${theme.cardBg} ${
-                              draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <div className="flex items-center gap-1">
-                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
-                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
-                                  {t.owner}
-                                </span>
-                                {t.taskType === 'goal' && (
-                                  <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
-                                    <Target className="w-2.5 h-2.5" /> Goal
-                                  </span>
-                                )}
-                                {t.isParallel && t.parallelGroup && (
-                                  <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
-                                    <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
-                                  </span>
-                                )}
-                              </div>
+                  return (
+                    <div
+                      key={batchTag}
+                      id={`batch-col-${batchTag}`}
+                      className={`w-72 flex-shrink-0 border rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm ${
+                        batchTag === 'None'
+                          ? 'bg-zinc-950/80 border-zinc-700/80 ring-1 ring-zinc-700/40'
+                          : 'bg-zinc-900/60 border-zinc-800/90'
+                      }`}
+                    >
+                      {/* Batch Column Header */}
+                      <div className={`px-2.5 py-1.5 border-b flex items-center justify-between flex-shrink-0 ${
+                        batchTag === 'None' ? 'border-zinc-800 bg-zinc-900/90' : 'border-zinc-800/80 bg-zinc-950/80'
+                      }`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-mono uppercase font-bold px-1.5 py-0.2 rounded border ${theme.badge}`}>
+                            {batchTag === 'None' ? 'No Batch' : (theme.short || batchTag)}
+                          </span>
+                          <span className="text-[11px] font-bold text-zinc-200">
+                            {batchTag === 'None' ? 'No Batch (Unassigned)' : batchTag}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                            {batchTasks.length}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => openTaskModal(null, 'ready', undefined, batchTag)}
+                          className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition"
+                          title={`Add task directly to ${batchTag === 'None' ? 'No Batch' : batchTag}`}
+                        >
+                          <Plus className="w-2.5 h-2.5" /> Add
+                        </button>
+                      </div>
 
-                              <div className="flex items-center gap-1">
-                                <div className="flex items-center gap-0.5 mr-0.5">
-                                  <button
-                                    disabled={isFirst}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveTaskWithinBatch(t.id, batchTasks, 'up');
-                                    }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Up Within Batch"
-                                  >
-                                    <ArrowUp className="w-2.5 h-2.5" />
-                                  </button>
-                                  <button
-                                    disabled={isLast}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      moveTaskWithinBatch(t.id, batchTasks, 'down');
-                                    }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Down Within Batch"
-                                  >
-                                    <ArrowDown className="w-2.5 h-2.5" />
-                                  </button>
-                                </div>
+                      {/* Batch Task List */}
+                      <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
+                        {batchTasks.length === 0 ? (
+                          <div className="py-8 text-center text-[10px] text-zinc-600 italic">No tasks in this batch</div>
+                        ) : (
+                          batchTasks.map((t) => {
+                            const status = computedStatus(t);
+                            const durationDisplay = getTaskDurationDisplay(t);
+                            const depNames = (t.dependencies || [])
+                              .map((id) => tasks.find((x) => x.id === id))
+                              .filter(Boolean) as Task[];
+                            const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
 
-                                <select
-                                  value={t.batch || 'None'}
-                                  onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
-                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${theme.dropdown}`}
-                                >
-                                  <option value="None" className="bg-zinc-900 text-zinc-400">
-                                    No Batch
-                                  </option>
-                                  {ALL_BATCHES.map((b) => (
-                                    <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
-                                      {b}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
+                            const posInBatch = batchTasks.findIndex((x) => x.id === t.id);
+                            const isFirst = posInBatch === 0;
+                            const isLast = posInBatch === batchTasks.length - 1;
 
-                            <div className={`text-xs font-bold leading-snug line-clamp-2 ${theme.cardTitle}`}>
-                              {t.name}
-                            </div>
+                            const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
+                            const totalSubsCount = (t.subTasks || []).length;
 
-                            {t.description && (
-                              <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${theme.descBg}`}>
-                                {t.description}
-                              </p>
-                            )}
+                            return (
+                              <div
+                                key={t.id}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, t.id)}
+                                onDragOver={handleDragOver}
+                                onDrop={() => handleDropOnTask(t.id)}
+                                className={`p-2 rounded-md border shadow-sm space-y-1 ${theme.cardBg} ${
+                                  draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
+                                    <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
+                                      {t.owner}
+                                    </span>
+                                    {t.taskType === 'goal' && (
+                                      <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                                        <Target className="w-2.5 h-2.5" /> Goal
+                                      </span>
+                                    )}
+                                    {t.isParallel && t.parallelGroup && (
+                                      <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
+                                        <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
+                                      </span>
+                                    )}
+                                  </div>
 
-                            {/* Sub-Tasks Checklist Breakdown */}
-                            {t.subTasks && t.subTasks.length > 0 && (
-                              <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
-                                <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
-                                  <span className="flex items-center gap-1">
-                                    <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
-                                  </span>
-                                  <span className="font-mono text-[8px] text-emerald-400">
-                                    {completedSubsCount}/{totalSubsCount} Done
-                                  </span>
-                                </div>
-                                <div className="space-y-0.5">
-                                  {t.subTasks.map((st) => (
-                                    <div
-                                      key={st.id}
-                                      onClick={() => toggleSubTask(t.id, st.id)}
-                                      className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
+                                  <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-0.5 mr-0.5">
+                                      <button
+                                        disabled={isFirst}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          moveTaskWithinBatch(t.id, batchTasks, 'up');
+                                        }}
+                                        className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                        title="Move Up Within Batch"
+                                      >
+                                        <ArrowUp className="w-2.5 h-2.5" />
+                                      </button>
+                                      <button
+                                        disabled={isLast}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          moveTaskWithinBatch(t.id, batchTasks, 'down');
+                                        }}
+                                        className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
+                                        title="Move Down Within Batch"
+                                      >
+                                        <ArrowDown className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+
+                                    <select
+                                      value={t.batch || 'None'}
+                                      onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
+                                      className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${theme.dropdown}`}
                                     >
-                                      {st.status === 'done' ? (
-                                        <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                                      ) : (
-                                        <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                                      )}
-                                      <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
-                                        {st.name}
+                                      <option value="None" className="bg-zinc-900 text-zinc-400">
+                                        No Batch
+                                      </option>
+                                      {ALL_BATCHES.map((b) => (
+                                        <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
+                                          {b}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div className={`text-xs font-bold leading-snug line-clamp-2 ${theme.cardTitle}`}>
+                                  {t.name}
+                                </div>
+
+                                {t.description && (
+                                  <p className={`text-[11px] line-clamp-2 leading-relaxed p-1 rounded border ${theme.descBg}`}>
+                                    {t.description}
+                                  </p>
+                                )}
+
+                                {/* Sub-Tasks Checklist Breakdown */}
+                                {t.subTasks && t.subTasks.length > 0 && (
+                                  <div className="p-1.5 bg-black/30 rounded border border-white/10 space-y-1">
+                                    <div className="flex items-center justify-between text-[9px] font-bold text-zinc-400">
+                                      <span className="flex items-center gap-1">
+                                        <ListTodo className="w-2.5 h-2.5 text-indigo-400" /> Sub-Tasks
+                                      </span>
+                                      <span className="font-mono text-[8px] text-emerald-400">
+                                        {completedSubsCount}/{totalSubsCount} Done
                                       </span>
                                     </div>
-                                  ))}
+                                    <div className="space-y-0.5">
+                                      {t.subTasks.map((st) => (
+                                        <div
+                                          key={st.id}
+                                          onClick={() => toggleSubTask(t.id, st.id)}
+                                          className="flex items-center gap-1.5 cursor-pointer text-[10px] py-0.5 text-zinc-300 hover:text-white"
+                                        >
+                                          {st.status === 'done' ? (
+                                            <CheckSquare className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                          ) : (
+                                            <Square className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+                                          )}
+                                          <span className={`truncate ${st.status === 'done' ? 'line-through opacity-50 text-zinc-400' : ''}`}>
+                                            {st.name}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {waiting.length > 0 && (
+                                  <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
+                                    <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
+                                    <span className="truncate">Waiting: {waiting.join(', ')}</span>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
+                                  {durationDisplay ? (
+                                    <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+                                      <Timer className="w-2.5 h-2.5" />
+                                      <span>{durationDisplay}</span>
+                                    </div>
+                                  ) : t.estimate ? (
+                                    <div className="text-zinc-400 flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5" /> {t.estimate}
+                                    </div>
+                                  ) : (
+                                    <span />
+                                  )}
+
+                                  <span className="font-semibold uppercase text-[9px] px-1 py-0.2 rounded bg-black/40 text-zinc-300 border border-white/10">
+                                    {status}
+                                  </span>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
+                                  {status === 'ready' && (
+                                    <button
+                                      onClick={() => startInProgress(t.id)}
+                                      className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold shadow"
+                                    >
+                                      Start
+                                    </button>
+                                  )}
+
+                                  {status === 'progress' && t.taskType === 'goal' ? (
+                                    <button
+                                      onClick={() => {
+                                        setReviewingTaskId(t.id);
+                                        setIsBlockPickerOpen(false);
+                                        setBlockParentId('');
+                                        setBlockNewParentName('');
+                                      }}
+                                      className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold shadow flex items-center gap-1"
+                                    >
+                                      <Eye className="w-3 h-3" /> Review
+                                    </button>
+                                  ) : status === 'progress' && t.taskType !== 'goal' ? (
+                                    <button
+                                      onClick={() => finishTask(t.id)}
+                                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
+                                    >
+                                      Done
+                                    </button>
+                                  ) : null}
+
+                                  {status === 'done' && (
+                                    <button
+                                      onClick={() => reopenTask(t.id)}
+                                      className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
+                                    >
+                                      Reopen
+                                    </button>
+                                  )}
+
+                                  <button
+                                    onClick={() => openTaskModal(t.id)}
+                                    className="p-0.5 text-zinc-400 hover:text-white"
+                                    title="Edit"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                  {status === 'done' && (
+                                    <button
+                                      onClick={() => deleteTask(t.id)}
+                                      className="p-0.5 text-zinc-400 hover:text-rose-400"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                            )}
-
-                            {waiting.length > 0 && (
-                              <div className="text-[10px] text-rose-300 bg-rose-950/80 border border-rose-800/80 px-1.5 py-0.5 rounded truncate flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
-                                <span className="truncate">Waiting: {waiting.join(', ')}</span>
-                              </div>
-                            )}
-
-                            <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
-                              {durationDisplay ? (
-                                <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
-                                  <Timer className="w-2.5 h-2.5" />
-                                  <span>{durationDisplay}</span>
-                                </div>
-                              ) : t.estimate ? (
-                                <div className="text-zinc-400 flex items-center gap-1">
-                                  <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                                </div>
-                              ) : (
-                                <span />
-                              )}
-
-                              <span className="font-semibold uppercase text-[9px] px-1 py-0.2 rounded bg-black/40 text-zinc-300 border border-white/10">
-                                {status}
-                              </span>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex items-center justify-end gap-1 pt-1 border-t border-white/10">
-                              {status === 'ready' && (
-                                <button
-                                  onClick={() => startInProgress(t.id)}
-                                  className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-semibold shadow"
-                                >
-                                  Start
-                                </button>
-                              )}
-
-                              {status === 'progress' && t.taskType === 'goal' ? (
-                                <button
-                                  onClick={() => {
-                                    setReviewingTaskId(t.id);
-                                    setIsBlockPickerOpen(false);
-                                    setBlockParentId('');
-                                    setBlockNewParentName('');
-                                  }}
-                                  className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold shadow flex items-center gap-1"
-                                >
-                                  <Eye className="w-3 h-3" /> Review
-                                </button>
-                              ) : status === 'progress' && t.taskType !== 'goal' ? (
-                                <button
-                                  onClick={() => finishTask(t.id)}
-                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold shadow"
-                                >
-                                  Done
-                                </button>
-                              ) : null}
-
-                              {status === 'done' && (
-                                <button
-                                  onClick={() => reopenTask(t.id)}
-                                  className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px]"
-                                >
-                                  Reopen
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => openTaskModal(t.id)}
-                                className="p-0.5 text-zinc-400 hover:text-white"
-                                title="Edit"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                              {status === 'done' && (
-                                <button
-                                  onClick={() => deleteTask(t.id)}
-                                  className="p-0.5 text-zinc-400 hover:text-rose-400"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
       </main>
