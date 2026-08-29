@@ -96,10 +96,10 @@ test('hides completed DAG nodes and shifts each next visible stage left', () => 
   deepEqual(result.levels[1].map((task) => task.id), ['stage-3']);
 });
 
-test('starting a task does not change its manual DAG position when Board execution order changes', () => {
-  const tasks: T[] = [
-    { id: 'first', batch: 'B1', order: 0, dependencies: [] },
-    { id: 'started', batch: 'B1', order: 999, dependencies: [] },
+test('starting or ranking a task does not change its manual DAG position', () => {
+  const tasks = [
+    { id: 'first', batch: 'B1', order: 0, dependencies: [], rank: 3 },
+    { id: 'started', batch: 'B1', order: 999, dependencies: [], rank: 1 },
     { id: 'third', batch: 'B1', order: 2, dependencies: [] },
   ];
 

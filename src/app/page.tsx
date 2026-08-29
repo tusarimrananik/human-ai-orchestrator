@@ -9,6 +9,7 @@ import {
   addDagTaskSibling,
   alignDagLevels,
   collapseHiddenDagTasks,
+  createSourceOrderComparator,
   insertDagTaskBefore,
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
@@ -1578,19 +1579,19 @@ function OrchestratorPage({ userId }: { userId: string }) {
   // Sort roots by the selected DAG rule, then align every later stage with
   // its earliest parent lane so a complete chain moves together when sorted.
   const getAlignedLevels = () => {
-    const manualOrder = (task: Task) => task.rank ?? task.order ?? task.createdAt;
+    const compareSourceOrder = createSourceOrderComparator(visibleDagTasks);
     const compareTasks = (a: Task, b: Task): number => {
       switch (dagSortMode) {
         case 'batch':
-          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || manualOrder(a) - manualOrder(b);
+          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
         case 'name':
-          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || manualOrder(a) - manualOrder(b);
+          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || compareSourceOrder(a, b);
         case 'owner':
-          return a.owner.localeCompare(b.owner) || manualOrder(a) - manualOrder(b);
+          return a.owner.localeCompare(b.owner) || compareSourceOrder(a, b);
         case 'status':
-          return computedStatus(a).localeCompare(computedStatus(b)) || manualOrder(a) - manualOrder(b);
+          return computedStatus(a).localeCompare(computedStatus(b)) || compareSourceOrder(a, b);
         default:
-          return manualOrder(a) - manualOrder(b);
+          return compareSourceOrder(a, b);
       }
     };
     return alignDagLevels(visibleDagTasks, compareTasks);
