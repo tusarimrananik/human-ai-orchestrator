@@ -9,9 +9,9 @@ import {
   addDagTaskSibling,
   alignDagLevels,
   collapseHiddenDagTasks,
-  createSourceOrderComparator,
   insertDagTaskBefore,
 } from '@/lib/dag-layout';
+import { normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import {
   Play,
   CheckCircle2,
@@ -90,6 +90,7 @@ interface Task {
   startedAt?: number | null;
   completedAt?: number | null;
   totalTimeSpentSeconds?: number;
+  rank?: number;
 }
 
 type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
@@ -322,7 +323,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'board' | 'dependency' | 'batch'>('board');
+  const [view, setView] = useState<'ranked' | 'dependency' | 'batch'>('ranked');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
@@ -457,7 +458,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const stored = localStorage.getItem(storageKey) || (canClaimLegacy ? localStorage.getItem(STORAGE_KEY) : null);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setTasks(
+        setTasks(normalizeTaskRanks(
           parsed.map((t: any, idx: number) => ({
             ...t,
             taskType: t.taskType || (t.isGoal ? 'goal' : 'normal'),
@@ -469,8 +470,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
             isParallel: typeof t.isParallel === 'boolean' ? t.isParallel : !!t.parallelGroup,
             parallelGroup: t.parallelGroup || '',
             subTasks: t.subTasks || [],
-          }))
-        );
+          })),
+          (task) => task.manualStatus === 'done'
+        ));
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
@@ -524,12 +526,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const payload = remoteWorkspace.payload as WorkspacePayload;
       remoteRevisionRef.current = remoteWorkspace.revision;
       lastRemoteHashRef.current = JSON.stringify(payload);
-      setTasks(payload.tasks);
+      const rankedTasks = normalizeTaskRanks(payload.tasks, (task) => task.manualStatus === 'done');
+      setTasks(rankedTasks);
       setBatchPriorityOrder(payload.batchPriorityOrder as BatchTag[]);
       setParallelGroups(payload.parallelGroups);
       setIsParallelModeActive(payload.isParallelModeActive);
       setActiveTurnGroupName(payload.activeTurnGroupName);
-      localStorage.setItem(storageKey, JSON.stringify(payload.tasks));
+      localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
       localStorage.setItem(batchOrderKey, JSON.stringify(payload.batchPriorityOrder));
       localStorage.setItem(parallelGroupsKey, JSON.stringify(payload.parallelGroups));
       localStorage.setItem(parallelModeKey, String(payload.isParallelModeActive));
@@ -593,10 +596,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
   }, [mounted, tasks, batchPriorityOrder, parallelGroups, isParallelModeActive, activeTurnGroupName, saveRemoteWorkspace, syncRetry]);
 
   const saveTasks = (newTasks: Task[]) => {
-    setTasks(newTasks);
+    const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done');
+    setTasks(rankedTasks);
     if (typeof window !== 'undefined') {
-      localStorage.setItem(storageKey, JSON.stringify(newTasks));
+      localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
     }
+  };
+
+  const changeTaskRank = (taskId: string, rank: number) => {
+    saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done'));
   };
 
   const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
@@ -922,6 +930,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
   });
   const visibleDagTasks = collapseHiddenDagTasks(filtered, (task) => task.manualStatus === 'done');
+  const rankedTasks = rankActiveTasks(filtered, (task) => task.manualStatus === 'done');
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
     blocked: [],
@@ -1554,8 +1563,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   // Sort roots by the selected DAG rule, then align every later stage with
   // its earliest parent lane so a complete chain moves together when sorted.
   const getAlignedLevels = () => {
-    const manualOrder = (task: Task) => task.order ?? task.createdAt;
-    const compareSourceOrder = createSourceOrderComparator(visibleDagTasks);
+    const manualOrder = (task: Task) => task.rank ?? task.order ?? task.createdAt;
     const compareTasks = (a: Task, b: Task): number => {
       switch (dagSortMode) {
         case 'batch':
@@ -1567,7 +1575,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         case 'status':
           return computedStatus(a).localeCompare(computedStatus(b)) || manualOrder(a) - manualOrder(b);
         default:
-          return compareSourceOrder(a, b);
+          return manualOrder(a) - manualOrder(b);
       }
     };
     return alignDagLevels(visibleDagTasks, compareTasks);
@@ -1761,6 +1769,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
       >
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1">
+            {colKey !== 'done' && (
+              <label className="flex items-center gap-1 rounded border border-indigo-500/50 bg-indigo-950/70 px-1 py-0.5 text-[9px] font-black text-indigo-200" title="Execution rank">
+                #
+                <input
+                  type="number"
+                  min={1}
+                  max={rankedTasks.length}
+                  value={t.rank || rankedTasks.length}
+                  onChange={(e) => changeTaskRank(t.id, Number(e.target.value))}
+                  className="w-8 bg-transparent text-center font-mono outline-none"
+                  aria-label={`Rank ${t.name}`}
+                />
+              </label>
+            )}
             <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing" />
             <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200">
               {t.owner}
@@ -1960,12 +1982,12 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
           <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-md">
             <button
-              onClick={() => setView('board')}
+              onClick={() => setView('ranked')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'board' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
+                view === 'ranked' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
               }`}
             >
-              <LayoutGrid className="w-3 h-3" /> Board
+              <ListTodo className="w-3 h-3" /> Ranked Tasks
             </button>
             <button
               onClick={() => setView('dependency')}
@@ -2206,44 +2228,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
       {/* Main Content Area */}
       <main className="flex-1 p-2.5 overflow-hidden min-h-0">
-        {view === 'board' ? (
-          <div className="h-full grid grid-cols-4 gap-2 min-h-0">
-            {(['blocked', 'ready', 'progress', 'done'] as const).map((colKey) => {
-              const list = groups[colKey];
-              const headerMeta = {
-                blocked: { title: 'Blocked', color: 'text-rose-400', countBg: 'bg-rose-500/10 text-rose-400' },
-                ready: { title: 'Ready', color: 'text-emerald-400', countBg: 'bg-emerald-500/10 text-emerald-400' },
-                progress: { title: 'In Progress', color: 'text-blue-400', countBg: 'bg-blue-500/10 text-blue-400' },
-                done: { title: 'Done', color: 'text-zinc-400', countBg: 'bg-zinc-800 text-zinc-400' },
-              }[colKey];
-
-              return (
-                <div
-                  key={colKey}
-                  className="bg-zinc-900/40 border border-zinc-800/80 rounded-lg flex flex-col min-h-0 overflow-hidden"
-                >
-                  <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/60 flex items-center justify-between flex-shrink-0">
-                    <span className={`text-[11px] font-bold uppercase tracking-wider ${headerMeta.color}`}>
-                      {headerMeta.title}
-                    </span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${headerMeta.countBg}`}>
-                      {list.length}
-                    </span>
-                  </div>
-
-                  <div className="p-1.5 space-y-1.5 overflow-y-auto flex-1">
-                    {colKey === 'progress' ? (
-                      /* Special Parallel Queue & Slot Engine inside In-Progress with Iterative Turn Rotation */
-                      renderInProgressColumn()
-                    ) : list.length === 0 ? (
-                      <div className="py-8 text-center text-[10px] text-zinc-600 italic">Empty</div>
-                    ) : (
-                      list.map((t) => renderTaskCard(t, colKey))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        {view === 'ranked' ? (
+          <div className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-zinc-800/80 bg-zinc-900/40">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/70 px-3 py-2">
+              <div>
+                <h2 className="text-xs font-bold text-white">Ranked execution list</h2>
+                <p className="text-[10px] text-zinc-500">Complete tasks from #1 downward. Change any number to reorder the queue.</p>
+              </div>
+              <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 font-mono text-[10px] text-indigo-300">{rankedTasks.length} active</span>
+            </div>
+            <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
+              {rankedTasks.length === 0 ? (
+                <div className="py-16 text-center text-[11px] italic text-zinc-600">No active tasks</div>
+              ) : rankedTasks.map((task) => renderTaskCard(task, computedStatus(task)))}
+            </div>
           </div>
         ) : view === 'dependency' ? (
           /* DAG View */
@@ -2418,6 +2416,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
                             {/* Card Top Row: Fixed height */}
                             <div className="flex items-center justify-between gap-1 flex-shrink-0">
                               <div className="flex items-center gap-1 min-w-0">
+                                <label className="flex flex-shrink-0 items-center gap-0.5 rounded border border-indigo-400/60 bg-indigo-950/80 px-1 py-0.5 text-[8px] font-black text-indigo-200" title="Execution rank">
+                                  #
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={rankedTasks.length}
+                                    value={t.rank || rankedTasks.length}
+                                    onChange={(e) => changeTaskRank(t.id, Number(e.target.value))}
+                                    className="w-7 bg-transparent text-center font-mono outline-none"
+                                    aria-label={`Rank ${t.name}`}
+                                  />
+                                </label>
                                 <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing flex-shrink-0" />
                                 <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
                                   {t.owner}
