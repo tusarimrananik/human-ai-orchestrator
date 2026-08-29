@@ -17,15 +17,12 @@ test('generates unique distinct colors for arbitrary number of batches without c
   const uniqueHues = new Set(hues);
   deepEqual(uniqueHues.size, batchNames.length);
 
-  // Assert themes contain valid CSS styles with high contrast
   for (const theme of themes) {
-    ok(theme.cardStyle.backgroundColor, 'has background color');
-    ok(theme.cardStyle.borderColor, 'has border color');
-    ok(theme.cardStyle.color, 'has text color');
     ok(theme.badgeStyle.backgroundColor, 'has badge background');
     ok(theme.badgeStyle.borderColor, 'has badge border');
     ok(theme.dropdownStyle.backgroundColor, 'has dropdown background');
     ok(theme.dropdownStyle.borderColor, 'has dropdown border');
+    ok(theme.borderAccentStyle.borderLeftColor, 'has border accent');
   }
 });
 
