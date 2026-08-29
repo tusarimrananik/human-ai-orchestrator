@@ -220,7 +220,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'queue' | 'dependency' | 'ranked' | 'batch'>('queue');
+  const [view, setView] = useState<'queue' | 'backlog' | 'dependency' | 'ranked' | 'batch'>('queue');
   const [rankedViewTab, setRankedViewTab] = useState<'active' | 'done'>('active');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -1185,6 +1185,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const activeUnfinishedTasks = useMemo(() => {
     const list = view === 'queue'
       ? filtered.filter((t) => typeof t.rank === 'number' && t.rank > 0)
+      : view === 'backlog'
+      ? filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0)
       : filtered;
     return list.filter((t) => t.manualStatus !== 'done');
   }, [filtered, view]);
@@ -1211,6 +1213,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const visibleDagTasks = useMemo(() => {
     const sourceList = view === 'queue'
       ? filtered.filter((t) => typeof t.rank === 'number' && t.rank > 0)
+      : view === 'backlog'
+      ? filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0)
       : filtered;
 
     const isHidden = (task: Task) => {
@@ -2581,6 +2585,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
               )}
             </button>
             <button
+              onClick={() => setView('backlog')}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                view === 'backlog' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="View remaining tasks not yet queued (Full DAG − Queue DAG)"
+            >
+              <Clock className="w-3 h-3" /> Backlog DAG
+              {filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0).length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[9px] font-mono">
+                  {filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0).length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setView('dependency')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
                 view === 'dependency' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
@@ -2932,21 +2950,35 @@ function OrchestratorPage({ userId }: { userId: string }) {
               )}
             </div>
           </div>
-        ) : view === 'queue' || view === 'dependency' ? (
-          /* DAG View (Queue DAG or Full DAG) */
+        ) : view === 'queue' || view === 'backlog' || view === 'dependency' ? (
+          /* DAG View (Queue DAG, Backlog DAG, or Full DAG) */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             {view === 'queue' && rankedTasks.length === 0 ? (
               <div className="py-24 text-center space-y-3">
                 <div className="text-3xl">🎯</div>
                 <div className="text-sm font-bold text-zinc-200">Your Queue DAG is empty</div>
                 <div className="text-xs text-zinc-400 max-w-sm mx-auto">
-                  Go to <strong className="text-indigo-400">Full DAG</strong>, select the tasks you want to do (dependencies are auto-selected), and click <strong className="text-indigo-400">Move to Queue</strong>.
+                  Go to <strong className="text-indigo-400">Backlog DAG</strong> or <strong className="text-indigo-400">Full DAG</strong>, select the tasks you want to do (dependencies are auto-selected), and click <strong className="text-indigo-400">Move to Queue</strong>.
                 </div>
                 <button
-                  onClick={() => setView('dependency')}
+                  onClick={() => setView('backlog')}
                   className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-white text-xs shadow inline-flex items-center gap-1 transition"
                 >
-                  <GitFork className="w-3.5 h-3.5" /> Go to Full DAG
+                  <Clock className="w-3.5 h-3.5" /> Go to Backlog DAG
+                </button>
+              </div>
+            ) : view === 'backlog' && filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0).length === 0 ? (
+              <div className="py-24 text-center space-y-3">
+                <div className="text-3xl">🎉</div>
+                <div className="text-sm font-bold text-zinc-200">No unqueued tasks remaining</div>
+                <div className="text-xs text-zinc-400 max-w-sm mx-auto">
+                  All active tasks in this project are already in your <strong className="text-indigo-400">Queue DAG</strong>.
+                </div>
+                <button
+                  onClick={() => setView('queue')}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-white text-xs shadow inline-flex items-center gap-1 transition"
+                >
+                  <Target className="w-3.5 h-3.5" /> View Queue DAG
                 </button>
               </div>
             ) : (
