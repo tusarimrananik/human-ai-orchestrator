@@ -231,6 +231,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
   const [selectedBatchTaskIds, setSelectedBatchTaskIds] = useState<string[]>([]);
   const [bulkTargetBatch, setBulkTargetBatch] = useState<string>('');
+  const [isBulkCreatingNewBatch, setIsBulkCreatingNewBatch] = useState<boolean>(false);
+  const [bulkNewBatchInput, setBulkNewBatchInput] = useState<string>('');
   const [isNewBatchInputOpen, setIsNewBatchInputOpen] = useState<boolean>(false);
   const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
   const remoteWorkspace = useQuery(api.workspace.get, {});
@@ -637,15 +639,151 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   const clearBatchTaskSelection = () => {
     setSelectedBatchTaskIds([]);
+    setIsBulkCreatingNewBatch(false);
+    setBulkNewBatchInput('');
   };
 
-  const moveSelectedTasksToBatch = (targetBatch: string) => {
+  const moveSelectedTasksToBatch = (rawTargetBatch: string) => {
+    const targetBatch = rawTargetBatch.trim();
     if (!targetBatch || selectedBatchTaskIds.length === 0) return;
+
+    if (!batchPriorityOrder.includes(targetBatch)) {
+      const next = [...batchPriorityOrder, targetBatch];
+      saveBatchOrder(next);
+    }
+
     const updated = tasks.map((t) =>
       selectedBatchTaskIds.includes(t.id) ? { ...t, batch: targetBatch as BatchTag } : t
     );
     saveTasks(updated);
     setSelectedBatchTaskIds([]);
+    setIsBulkCreatingNewBatch(false);
+    setBulkNewBatchInput('');
+  };
+
+  const getSuggestedNextBatchName = () => {
+    let candidateNum = batchPriorityOrder.length + 1;
+    while (batchPriorityOrder.includes(`Batch ${candidateNum}`)) {
+      candidateNum++;
+    }
+    return `Batch ${candidateNum}`;
+  };
+
+  const renderBulkMoveBar = () => {
+    if (selectedBatchTaskIds.length === 0) return null;
+
+    if (isBulkCreatingNewBatch) {
+      return (
+        <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-0.5 rounded-md shadow animate-in fade-in ml-2">
+          <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
+            <Layers className="w-3 h-3 text-indigo-400" /> New Batch:
+          </span>
+          <input
+            autoFocus
+            placeholder={getSuggestedNextBatchName()}
+            value={bulkNewBatchInput}
+            onChange={(e) => setBulkNewBatchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const target = bulkNewBatchInput.trim() || getSuggestedNextBatchName();
+                moveSelectedTasksToBatch(target);
+              }
+              if (e.key === 'Escape') {
+                setIsBulkCreatingNewBatch(false);
+              }
+            }}
+            className="bg-zinc-900 border border-indigo-400 rounded px-1.5 py-0.5 text-[9px] font-bold text-white w-24 outline-none"
+          />
+          <button
+            onClick={() => {
+              const target = bulkNewBatchInput.trim() || getSuggestedNextBatchName();
+              moveSelectedTasksToBatch(target);
+            }}
+            className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
+            title="Create batch and move selected tasks into it"
+          >
+            <Check className="w-2.5 h-2.5" /> Move
+          </button>
+          <button
+            onClick={() => setIsBulkCreatingNewBatch(false)}
+            className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
+            title="Back to dropdown"
+          >
+            <X className="w-2.5 h-2.5" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-0.5 rounded-md shadow animate-in fade-in ml-2">
+        <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
+          <CheckSquare className="w-3 h-3 text-indigo-400" />
+          <span className="bg-indigo-600 text-white px-1.5 py-0.2 rounded-full text-[9px] font-mono">
+            {selectedBatchTaskIds.length}
+          </span>
+          selected
+        </span>
+
+        <span className="text-[9px] uppercase font-bold text-zinc-400 ml-1">Move to:</span>
+
+        <select
+          value={bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1'}
+          onChange={(e) => {
+            if (e.target.value === '__create_new__') {
+              setBulkNewBatchInput(getSuggestedNextBatchName());
+              setIsBulkCreatingNewBatch(true);
+            } else {
+              setBulkTargetBatch(e.target.value);
+            }
+          }}
+          style={getBatchTheme(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1', batchPriorityOrder).dropdownStyle}
+          className="text-[9px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer"
+        >
+          {batchPriorityOrder.map((b) => (
+            <option
+              key={b}
+              value={b}
+              style={{
+                backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
+                color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
+              }}
+            >
+              {b}
+            </option>
+          ))}
+          <option value="__create_new__" className="bg-indigo-950 text-indigo-200 font-bold">
+            + Create New Batch...
+          </option>
+        </select>
+
+        <button
+          onClick={() => {
+            setBulkNewBatchInput(getSuggestedNextBatchName());
+            setIsBulkCreatingNewBatch(true);
+          }}
+          className="p-1 rounded hover:bg-white/20 text-indigo-300 hover:text-white transition"
+          title="Create a new batch and move selected tasks"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+
+        <button
+          onClick={() => moveSelectedTasksToBatch(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1')}
+          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
+          title="Move all selected tasks to the selected batch"
+        >
+          <ArrowRight className="w-2.5 h-2.5" /> Move
+        </button>
+
+        <button
+          onClick={clearBatchTaskSelection}
+          className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
+        >
+          Cancel
+        </button>
+      </div>
+    );
   };
 
   const handleDeleteBatch = (batchToDelete: string) => {
@@ -2678,54 +2816,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 </select>
                 <span className="text-[9px] text-zinc-500">Children follow parent rows</span>
 
-                {selectedBatchTaskIds.length > 0 && (
-                  <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-0.5 rounded-md shadow animate-in fade-in ml-2">
-                    <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
-                      <CheckSquare className="w-3 h-3 text-indigo-400" />
-                      <span className="bg-indigo-600 text-white px-1.5 py-0.2 rounded-full text-[9px] font-mono">
-                        {selectedBatchTaskIds.length}
-                      </span>
-                      selected
-                    </span>
-
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 ml-1">Move to:</span>
-
-                    <select
-                      value={bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1'}
-                      onChange={(e) => setBulkTargetBatch(e.target.value)}
-                      style={getBatchTheme(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1', batchPriorityOrder).dropdownStyle}
-                      className="text-[9px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer"
-                    >
-                      {batchPriorityOrder.map((b) => (
-                        <option
-                          key={b}
-                          value={b}
-                          style={{
-                            backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
-                            color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
-                          }}
-                        >
-                          {b}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      onClick={() => moveSelectedTasksToBatch(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1')}
-                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
-                      title="Move all selected tasks to the selected batch"
-                    >
-                      <ArrowRight className="w-2.5 h-2.5" /> Move
-                    </button>
-
-                    <button
-                      onClick={clearBatchTaskSelection}
-                      className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
+                {renderBulkMoveBar()}
               </div>
 
               <svg
@@ -3171,54 +3262,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
               {/* Right tools or Bulk Move Toolbar */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {selectedBatchTaskIds.length > 0 ? (
-                  <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-1 rounded-md shadow animate-in fade-in">
-                    <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
-                      <CheckSquare className="w-3 h-3 text-indigo-400" />
-                      <span className="bg-indigo-600 text-white px-1.5 py-0.2 rounded-full text-[9px] font-mono">
-                        {selectedBatchTaskIds.length}
-                      </span>
-                      selected
-                    </span>
-
-                    <span className="text-[9px] uppercase font-bold text-zinc-400 ml-1">Move to:</span>
-
-                    <select
-                      value={bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1'}
-                      onChange={(e) => setBulkTargetBatch(e.target.value)}
-                      style={getBatchTheme(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1', batchPriorityOrder).dropdownStyle}
-                      className="text-[9px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer"
-                    >
-                      {batchPriorityOrder.map((b) => (
-                        <option
-                          key={b}
-                          value={b}
-                          style={{
-                            backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
-                            color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
-                          }}
-                        >
-                          {b}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      onClick={() => moveSelectedTasksToBatch(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1')}
-                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
-                      title="Move all selected tasks to the selected batch"
-                    >
-                      <ArrowRight className="w-2.5 h-2.5" /> Move
-                    </button>
-
-                    <button
-                      onClick={clearBatchTaskSelection}
-                      className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : null}
+                {renderBulkMoveBar()}
 
                 <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
                   <label htmlFor="batch-sort" className="text-[9px] font-bold uppercase text-zinc-400 flex items-center gap-0.5">
