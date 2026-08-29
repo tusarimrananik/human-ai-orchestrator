@@ -2,8 +2,8 @@ export interface DagTask {
   id: string;
   batch?: string;
   order?: number;
-  createdAt?: number;
   dependencies?: string[];
+  [key: string]: any;
 }
 
 export interface AlignedDag<T extends DagTask> {
@@ -13,35 +13,85 @@ export interface AlignedDag<T extends DagTask> {
   laneCount: number;
 }
 
-export function insertDagTaskBefore<T extends DagTask>(tasks: readonly T[], targetId: string, insertedTask: T): T[] {
-  const target = tasks.find((task) => task.id === targetId);
-  if (!target || tasks.some((task) => task.id === insertedTask.id)) return [...tasks];
-  const inserted = { ...insertedTask, dependencies: [...new Set(target.dependencies || [])] };
-  return [...tasks.map((task) => task.id === targetId ? { ...task, dependencies: [insertedTask.id] } : task), inserted];
-}
-
-export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], parentId: string, childTask: T): T[] {
-  if (!tasks.some((task) => task.id === parentId) || tasks.some((task) => task.id === childTask.id)) return [...tasks];
-  return [...tasks, { ...childTask, dependencies: [parentId] }];
-}
-
-export function addDagTaskSibling<T extends DagTask>(
-  tasks: readonly T[],
-  siblingId: string,
-  newTask: T,
-  position: 'top' | 'bottom'
-): T[] {
-  const siblingIndex = tasks.findIndex((task) => task.id === siblingId);
-  if (siblingIndex === -1 || tasks.some((task) => task.id === newTask.id)) return [...tasks];
-  const sibling = tasks[siblingIndex];
-  const taskWithDeps = {
-    ...newTask,
-    dependencies: [...new Set(sibling.dependencies || [])],
-  };
+/** Swaps two tasks in a list and re-indexes `order` fields. */
+export function swapTaskOrder<T extends DagTask>(tasks: readonly T[], idA: string, idB: string): T[] {
+  const indexA = tasks.findIndex((task) => task.id === idA);
+  const indexB = tasks.findIndex((task) => task.id === idB);
+  if (indexA === -1 || indexB === -1 || indexA === indexB) return [...tasks];
 
   const copy = [...tasks];
-  const insertIndex = position === 'top' ? siblingIndex : siblingIndex + 1;
-  copy.splice(insertIndex, 0, taskWithDeps);
+  const [removedA] = copy.splice(indexA, 1);
+  copy.splice(indexB, 0, removedA);
+  return copy.map((task, order) => ({ ...task, order }));
+}
+
+/** Replaces a task's dependencies with the new target IDs. */
+export function updateTaskDependencies<T extends DagTask>(
+  tasks: readonly T[],
+  taskId: string,
+  dependencies: string[]
+): T[] {
+  return tasks.map((task) => (task.id === taskId ? { ...task, dependencies } : task));
+}
+
+/** Prepends or appends a task relative to its sibling dependencies. */
+export function insertTaskAtBoundary<T extends DagTask>(
+  tasks: readonly T[],
+  taskToInsert: T,
+  boundary: 'start' | 'end' = 'end'
+): T[] {
+  const copy = [...tasks];
+  if (boundary === 'start') {
+    copy.unshift(taskToInsert);
+  } else {
+    copy.push(taskToInsert);
+  }
+  return copy.map((task, order) => ({ ...task, order }));
+}
+
+/** Inserts a task before target in the DAG, adopting target's dependencies while making target depend on it. */
+export function insertDagTaskBefore<T extends DagTask>(tasks: readonly T[], targetId: string, newTask: T): T[] {
+  const target = tasks.find((task) => task.id === targetId);
+  if (!target) return [...tasks, newTask];
+
+  const targetParents = [...(target.dependencies || [])];
+  const preparedNewTask: T = { ...newTask, dependencies: targetParents };
+
+  const copy = [...tasks];
+  const targetIndex = copy.findIndex((task) => task.id === targetId);
+  copy.splice(targetIndex, 0, preparedNewTask);
+
+  return copy.map((task) => (task.id === targetId ? { ...task, dependencies: [preparedNewTask.id] } : task));
+}
+
+/** Adds a task after target, making it depend on target. */
+export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], targetId: string, newTask: T): T[] {
+  const preparedNewTask: T = { ...newTask, dependencies: [targetId] };
+  const targetIndex = tasks.findIndex((task) => task.id === targetId);
+  if (targetIndex === -1) return [...tasks, preparedNewTask];
+
+  const copy = [...tasks];
+  copy.splice(targetIndex + 1, 0, preparedNewTask);
+  return copy;
+}
+
+/** Adds a sibling task sharing target's exact parents. */
+export function addDagTaskSibling<T extends DagTask>(
+  tasks: readonly T[],
+  targetId: string,
+  newTask: T,
+  position: 'top' | 'bottom' = 'bottom'
+): T[] {
+  const target = tasks.find((task) => task.id === targetId);
+  if (!target) return [...tasks, newTask];
+
+  const targetParents = [...(target.dependencies || [])];
+  const preparedNewTask: T = { ...newTask, dependencies: targetParents };
+
+  const copy = [...tasks];
+  const targetIndex = copy.findIndex((task) => task.id === targetId);
+  const insertIndex = position === 'top' ? targetIndex : targetIndex + 1;
+  copy.splice(insertIndex, 0, preparedNewTask);
   return copy;
 }
 
@@ -58,7 +108,6 @@ export function swapBatchTaskPositions<T extends DagTask>(
   demotedBatch: string
 ): T[] {
   const list = [...tasks];
-  // Find indices belonging to either promotedBatch or demotedBatch
   const affectedIndices: number[] = [];
   const promotedTasks: T[] = [];
   const demotedTasks: T[] = [];
@@ -113,14 +162,14 @@ export function collapseHiddenDagTasks<T extends DagTask>(
 }
 
 /**
- * Topologically groups tasks into stages. Root tasks use the selected sort,
- * while later stages inherit parent lanes before applying their own tie-break.
- * Lanes are unique within each stage so they can be rendered as shared CSS-grid
- * rows across every stage without cards overlapping.
+ * Topologically groups tasks into stages.
+ * - stageAlignment = 'parent': child stages horizontally align with their parent node rows.
+ * - stageAlignment = 'batch': every stage groups strictly by batch priority order.
  */
 export function alignDagLevels<T extends DagTask>(
   tasks: readonly T[],
-  compareTasks: (a: T, b: T) => number
+  compareTasks: (a: T, b: T) => number,
+  stageAlignment: 'parent' | 'batch' = 'parent'
 ): AlignedDag<T> {
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const levelMemo = new Map<string, number>();
@@ -157,7 +206,23 @@ export function alignDagLevels<T extends DagTask>(
     levels[0] = [...levels[0]].sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
   }
 
-  // Children mapping: For each task, which child tasks directly depend on it?
+  // If stageAlignment === 'batch': sort every stage strictly by batch and assign compact rows
+  if (stageAlignment === 'batch') {
+    const lanes = new Map<string, number>();
+    let laneCount = 0;
+
+    orderedLevels.forEach((level) => {
+      levels[level] = [...levels[level]].sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
+      levels[level].forEach((t, rowIndex) => {
+        lanes.set(t.id, rowIndex);
+      });
+      laneCount = Math.max(laneCount, levels[level].length);
+    });
+
+    return { levels, orderedLevels, lanes, laneCount };
+  }
+
+  // Default: stageAlignment === 'parent' (tree-lane horizontal alignment)
   const childrenMap = new Map<string, T[]>();
   tasks.forEach((t) => {
     (t.dependencies || []).forEach((pId) => {
@@ -169,12 +234,10 @@ export function alignDagLevels<T extends DagTask>(
     });
   });
 
-  // Sort children deterministically by comparator
-  childrenMap.forEach((list, pId) => {
+  childrenMap.forEach((list) => {
     list.sort((a, b) => compareTasks(a, b) || a.id.localeCompare(b.id));
   });
 
-  // Calculate recursive subtree vertical span (number of parallel rows needed)
   const spanMemo = new Map<string, number>();
   function getSubtreeSpan(taskId: string, stack = new Set<string>()): number {
     if (spanMemo.has(taskId)) return spanMemo.get(taskId)!;
@@ -187,7 +250,6 @@ export function alignDagLevels<T extends DagTask>(
       return 1;
     }
 
-    // Sum of child spans (children at the next stage occupy consecutive vertical rows)
     const childrenSpanSum = children
       .map((c) => getSubtreeSpan(c.id, new Set(stack)))
       .reduce((sum, s) => sum + s, 0);
@@ -199,8 +261,6 @@ export function alignDagLevels<T extends DagTask>(
 
   const lanes = new Map<string, number>();
   let laneCount = 0;
-
-  // Allocate lane offsets recursively starting from Root tasks
   let currentRootLane = 0;
   const assigned = new Set<string>();
 
@@ -225,7 +285,6 @@ export function alignDagLevels<T extends DagTask>(
     currentRootLane += rootSpan;
   });
 
-  // Handle any disconnected or cyclic tasks that weren't assigned through roots
   tasks.forEach((t) => {
     if (!lanes.has(t.id)) {
       lanes.set(t.id, currentRootLane);
@@ -234,7 +293,6 @@ export function alignDagLevels<T extends DagTask>(
     }
   });
 
-  // Sort each level's array so CSS grid subgrid renders tasks in lane order
   orderedLevels.forEach((level) => {
     levels[level] = [...levels[level]].sort((a, b) => {
       const laneA = lanes.get(a.id) ?? 0;

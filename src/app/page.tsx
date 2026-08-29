@@ -227,6 +227,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
   const [hiddenStageIndices, setHiddenStageIndices] = useState<number[]>([]);
+  const [dagStageAlignMode, setDagStageAlignMode] = useState<'parent' | 'batch'>('parent');
   const [batchSortMode, setBatchSortMode] = useState<BatchSortMode>('manual');
   const [batchSequenceSortMode, setBatchSequenceSortMode] = useState<BatchSequenceSortMode>('custom');
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
@@ -1244,7 +1245,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, hiddenStageIndices]);
+  }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, hiddenStageIndices, dagStageAlignMode]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -1797,7 +1798,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     const compareTasks = (a: Task, b: Task): number => {
       return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
     };
-    return alignDagLevels(visibleDagTasks, compareTasks);
+    return alignDagLevels(visibleDagTasks, compareTasks, dagStageAlignMode);
   };
 
   const { levels, orderedLevels, lanes, laneCount } = getAlignedLevels();
@@ -2858,8 +2859,35 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <div className="relative min-w-max pb-6 pl-7" ref={stageRef}>
               <div className="sticky left-0 z-30 mb-3 flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950/95 px-2.5 py-1.5 shadow-lg">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400 flex items-center gap-1">
-                  <Layers className="h-3.5 w-3.5 text-indigo-400" /> Batch Priority Order
+                  <Layers className="h-3.5 w-3.5 text-indigo-400" /> Stages 2+:
                 </span>
+
+                <div className="flex items-center rounded border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-inner">
+                  <button
+                    onClick={() => setDagStageAlignMode('parent')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                      dagStageAlignMode === 'parent'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="Child tasks horizontally align with their parent rows"
+                  >
+                    <Link2 className="w-3 h-3" />
+                    <span>Parent Align</span>
+                  </button>
+                  <button
+                    onClick={() => setDagStageAlignMode('batch')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                      dagStageAlignMode === 'batch'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="Every stage groups tasks strictly by batch priority order"
+                  >
+                    <Boxes className="w-3 h-3" />
+                    <span>Batch Grouped</span>
+                  </button>
+                </div>
 
                 {hiddenStageIndices.length > 0 && (
                   <button

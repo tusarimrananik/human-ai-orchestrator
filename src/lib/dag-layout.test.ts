@@ -232,3 +232,23 @@ test('hiding a parent stage shifts child tasks to root where they sort by batch 
   // Children shifted into Stage 0 (Root) and are sorted strictly by batch priority: B1 before B2
   deepEqual(result.levels[0].map((t) => t.id), ['child-b1', 'child-b2']);
 });
+
+test('stageAlignment="batch" sorts every downstream stage strictly by batch priority', () => {
+  const tasks = [
+    { id: 'root-1', batch: 'B2', order: 0, dependencies: [] },
+    { id: 'child-1-b2', batch: 'B2', order: 1, dependencies: ['root-1'] },
+    { id: 'child-2-b1', batch: 'B1', order: 2, dependencies: ['root-1'] },
+  ];
+
+  const batchWeights = (b: string) => ({ B1: 0, B2: 1 }[b] ?? 99);
+  const compareSource = createSourceOrderComparator(tasks);
+
+  // In batch alignment mode: Stage 1 sorts B1 before B2
+  const result = alignDagLevels(
+    tasks,
+    (a, b) => batchWeights(a.batch) - batchWeights(b.batch) || compareSource(a, b),
+    'batch'
+  );
+
+  deepEqual(result.levels[1].map((t) => t.id), ['child-2-b1', 'child-1-b2']);
+});
