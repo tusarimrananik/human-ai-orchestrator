@@ -241,6 +241,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
   const remoteWorkspace = useQuery(api.workspace.get, {});
   const saveRemoteWorkspace = useMutation(api.workspace.save);
+  const forceSaveRemote = useMutation(api.workspace.forceSave);
   const remoteRevisionRef = useRef(0);
   const syncReadyRef = useRef(false);
   const lastRemoteHashRef = useRef('');
@@ -480,11 +481,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const sending = pendingPayloadRef.current;
       const sendingHash = JSON.stringify(sending);
       try {
-        const result = await saveRemoteWorkspace({ payload: sending, expectedRevision: remoteRevisionRef.current });
+        let result = await saveRemoteWorkspace({ payload: sending, expectedRevision: remoteRevisionRef.current });
         if (!result.ok) {
-          remoteRevisionRef.current = result.revision;
-          setSyncStatus('conflict');
-          return;
+          // Auto-resolve revision conflict by pushing latest state with forceSaveRemote
+          result = await forceSaveRemote({ payload: sending });
         }
         remoteRevisionRef.current = result.revision;
         lastRemoteHashRef.current = sendingHash;
@@ -505,7 +505,31 @@ function OrchestratorPage({ userId }: { userId: string }) {
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [mounted, tasks, batchPriorityOrder, parallelGroups, isParallelModeActive, activeTurnGroupName, saveRemoteWorkspace, syncRetry]);
+  }, [mounted, tasks, batchPriorityOrder, parallelGroups, isParallelModeActive, activeTurnGroupName, saveRemoteWorkspace, forceSaveRemote, syncRetry]);
+
+  const forcePushToCloud = async () => {
+    try {
+      setSyncStatus('saving');
+      const payload: WorkspacePayload = {
+        schemaVersion: 2,
+        tasks,
+        batchPriorityOrder,
+        parallelGroups,
+        isParallelModeActive,
+        activeTurnGroupName,
+      };
+      const res = await forceSaveRemote({ payload });
+      if (res.ok) {
+        remoteRevisionRef.current = res.revision;
+        lastRemoteHashRef.current = JSON.stringify(payload);
+        localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: res.revision, dirty: false }));
+        setSyncStatus('saved');
+      }
+    } catch (err) {
+      console.error('Force push failed:', err);
+      setSyncStatus('offline');
+    }
+  };
 
   const saveTasks = (newTasks: Task[]) => {
     const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done');
@@ -2744,18 +2768,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span
-            className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase ${
+          <button
+            onClick={forcePushToCloud}
+            className={`rounded border px-2 py-0.5 text-[9px] font-bold uppercase transition flex items-center gap-1 shadow-sm ${
               syncStatus === 'saved'
-                ? 'border-emerald-700/60 bg-emerald-950/60 text-emerald-300'
+                ? 'border-emerald-700/60 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60'
                 : syncStatus === 'conflict'
-                  ? 'border-rose-700/60 bg-rose-950/60 text-rose-300'
-                  : 'border-amber-700/60 bg-amber-950/60 text-amber-300'
+                  ? 'border-rose-700/60 bg-rose-950/60 text-rose-300 hover:bg-rose-900/60'
+                  : 'border-amber-700/60 bg-amber-950/60 text-amber-300 hover:bg-amber-900/60'
             }`}
-            title={syncStatus === 'conflict' ? 'Local changes are preserved; another device changed the remote workspace.' : 'Convex database synchronization status'}
+            title="Click to instantly push latest PC tasks to Cloud/Phone"
           >
-            {syncStatus}
-          </span>
+            <RefreshCw className={`w-2.5 h-2.5 ${syncStatus === 'saving' ? 'animate-spin' : ''}`} />
+            <span>{syncStatus === 'saved' ? 'Cloud Synced' : syncStatus === 'saving' ? 'Syncing...' : 'Push to Cloud'}</span>
+          </button>
           {/* Master Action: Start / Stop Parallel Work Toggle */}
           {isParallelModeActive ? (
             <button

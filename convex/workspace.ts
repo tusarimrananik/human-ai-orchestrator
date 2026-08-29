@@ -52,6 +52,26 @@ export const save = mutation({
   },
 });
 
+export const forceSave = mutation({
+  args: {
+    payload: workspacePayload,
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+    const key = identity.subject;
+    const existing = await ctx.db.query("workspaces").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    const revision = (existing?.revision ?? 0) + 1;
+    const updatedAt = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { payload: args.payload, revision, updatedAt });
+    } else {
+      await ctx.db.insert("workspaces", { key, payload: args.payload, revision, updatedAt });
+    }
+    return { ok: true as const, revision, updatedAt };
+  },
+});
+
 export const adminClearTasks = mutation({
   args: { key: v.string() },
   handler: async (ctx, args) => {
