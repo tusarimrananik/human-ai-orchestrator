@@ -1,44 +1,33 @@
-import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
+import { deepEqual, notEqual, ok } from 'node:assert/strict';
 import { test } from 'node:test';
 import { getBatchHue, getBatchTheme, syncBatchPriorityWithTasks } from './batch-theme';
 
-test('batch color is completely stable and does not change when order changes', () => {
-  const b1HueBefore = getBatchHue('Batch 1');
-  const b2HueBefore = getBatchHue('Batch 2');
+test('custom named batches in the same workspace have completely unique colors', () => {
+  const workspaceBatches = ['Batch 1', 'Batch 2', 'Batch 3', 'Batch 4', 'goog', 'new'];
 
-  // Assert hues are distinct
-  notEqual(b1HueBefore, b2HueBefore);
-
-  // Assert hues remain identical regardless of any external list order
-  equal(getBatchHue('Batch 1'), b1HueBefore);
-  equal(getBatchHue('Batch 2'), b2HueBefore);
-});
-
-test('generates unique distinct colors for numbered and custom batches', () => {
-  const batchNames = [
-    'Batch 1', 'Batch 2', 'Batch 3', 'Batch 4', 'Batch 5',
-    'Batch 6', 'Batch 7', 'Batch 8', 'Batch 9', 'Batch 10',
-    'Batch 11', 'Batch 12', 'Batch 13', 'Batch 14', 'Batch 15',
-  ];
-
-  const themes = batchNames.map((name) => getBatchTheme(name));
+  const themes = workspaceBatches.map((b) => getBatchTheme(b, workspaceBatches));
   const hues = themes.map((t) => t.hue);
 
   const uniqueHues = new Set(hues);
-  deepEqual(uniqueHues.size, batchNames.length);
+  deepEqual(uniqueHues.size, workspaceBatches.length);
 
-  for (const theme of themes) {
-    ok(theme.cardStyle.backgroundColor, 'has full-element card background');
-    ok(theme.cardStyle.borderColor, 'has full card border');
-    ok(theme.cardStyle.color, 'has card text color');
-  }
+  // Assert goog and Batch 2 do NOT collide
+  const googHue = getBatchHue('goog', workspaceBatches);
+  const b2Hue = getBatchHue('Batch 2', workspaceBatches);
+  notEqual(googHue, b2Hue);
+
+  // Assert new and Batch 3 do NOT collide
+  const newHue = getBatchHue('new', workspaceBatches);
+  const b3Hue = getBatchHue('Batch 3', workspaceBatches);
+  notEqual(newHue, b3Hue);
 });
 
 test('adjacent batches have maximally distant hues across the color wheel', () => {
-  const h1 = getBatchHue('Batch 1'); // 215 (Blue)
-  const h2 = getBatchHue('Batch 2'); // 350 (Red)
-  const h3 = getBatchHue('Batch 3'); // 145 (Green)
-  const h4 = getBatchHue('Batch 4'); // 42 (Gold)
+  const workspaceBatches = ['Batch 1', 'Batch 2', 'Batch 3', 'Batch 4'];
+  const h1 = getBatchHue('Batch 1', workspaceBatches); // 215 (Blue)
+  const h2 = getBatchHue('Batch 2', workspaceBatches); // 350 (Red)
+  const h3 = getBatchHue('Batch 3', workspaceBatches); // 145 (Green)
+  const h4 = getBatchHue('Batch 4', workspaceBatches); // 42 (Gold)
 
   const diff1_2 = Math.abs(h1 - h2);
   const diff2_3 = Math.abs(h2 - h3);

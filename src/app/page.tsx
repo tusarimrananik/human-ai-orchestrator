@@ -233,6 +233,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [bulkTargetBatch, setBulkTargetBatch] = useState<string>('');
   const [isBulkCreatingNewBatch, setIsBulkCreatingNewBatch] = useState<boolean>(false);
   const [bulkNewBatchInput, setBulkNewBatchInput] = useState<string>('');
+  const [editingBatchName, setEditingBatchName] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState<string>('');
   const [isNewBatchInputOpen, setIsNewBatchInputOpen] = useState<boolean>(false);
   const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
   const remoteWorkspace = useQuery(api.workspace.get, {});
@@ -591,6 +593,30 @@ function OrchestratorPage({ userId }: { userId: string }) {
     saveBatchOrder(next);
     setNewBatchNameInput('');
     setIsNewBatchInputOpen(false);
+  };
+
+  const handleRenameBatch = (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingBatchName(null);
+      setRenameInput('');
+      return;
+    }
+
+    // Update batch order
+    const nextOrder = batchPriorityOrder.map((b) => (b === oldName ? trimmed : b));
+    saveBatchOrder(nextOrder);
+
+    // Update all tasks in this batch
+    const updatedTasks = tasks.map((t) => ((t.batch || 'Batch 1') === oldName ? { ...t, batch: trimmed } : t));
+    saveTasks(updatedTasks);
+
+    if (batchFilter === oldName) setBatchFilter(trimmed);
+    if (bulkTargetBatch === oldName) setBulkTargetBatch(trimmed);
+    if (taskBatch === oldName) setTaskBatch(trimmed);
+
+    setEditingBatchName(null);
+    setRenameInput('');
   };
 
   const createNextBatchAfter = (targetBatch: string) => {
@@ -3360,28 +3386,69 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     >
                       {/* Batch Column Header */}
                       <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between flex-shrink-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <input
                             type="checkbox"
                             checked={batchTasks.length > 0 && batchTasks.every((t) => selectedBatchTaskIds.includes(t.id))}
                             onChange={() => toggleSelectAllInBatch(batchTasks)}
-                            className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
+                            className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
                             title={`Select all tasks in ${batchTag}`}
                           />
                           <span
                             style={theme.badgeStyle}
-                            className="text-[10px] font-mono uppercase font-bold px-1.5 py-0.5 rounded border shadow-sm"
+                            className="text-[10px] font-mono uppercase font-bold px-1.5 py-0.5 rounded border shadow-sm flex-shrink-0"
                           >
                             {theme.short || batchTag}
                           </span>
-                          <span className="text-[11px] font-bold text-zinc-200">
-                            {batchTag}
-                          </span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+
+                          {editingBatchName === batchTag ? (
+                            <div className="flex items-center gap-1 min-w-0">
+                              <input
+                                autoFocus
+                                value={renameInput}
+                                onChange={(e) => setRenameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleRenameBatch(batchTag, renameInput);
+                                  if (e.key === 'Escape') setEditingBatchName(null);
+                                }}
+                                className="bg-zinc-900 border border-indigo-400 rounded px-1.5 py-0.2 text-[11px] font-bold text-white w-24 outline-none"
+                              />
+                              <button
+                                onClick={() => handleRenameBatch(batchTag, renameInput)}
+                                className="text-emerald-400 hover:text-emerald-300"
+                                title="Save"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setEditingBatchName(null)}
+                                className="text-zinc-500 hover:text-zinc-300"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setEditingBatchName(batchTag);
+                                setRenameInput(batchTag);
+                              }}
+                              className="flex items-center gap-1 cursor-pointer group/title min-w-0"
+                              title="Click to rename batch"
+                            >
+                              <span className="text-[11px] font-bold text-zinc-200 truncate group-hover/title:text-white">
+                                {batchTag}
+                              </span>
+                              <Pencil className="w-2.5 h-2.5 text-zinc-500 opacity-0 group-hover/title:opacity-100 transition flex-shrink-0" />
+                            </div>
+                          )}
+
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 flex-shrink-0">
                             {batchTasks.length}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           <button
                             onClick={() => openTaskModal(null, 'ready', undefined, batchTag)}
                             className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition"
