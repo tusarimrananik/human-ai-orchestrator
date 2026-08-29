@@ -655,24 +655,27 @@ function OrchestratorPage({ userId }: { userId: string }) {
     );
   };
 
-  // When selecting a task in DAG, automatically select all its uncompleted upstream parents!
+  // Toggle single task selection without auto-mutating batch targets
   const toggleSelectDagTask = (taskId: string) => {
-    const isCurrentlySelected = selectedBatchTaskIds.includes(taskId);
-    if (isCurrentlySelected) {
-      setSelectedBatchTaskIds((prev) => prev.filter((id) => id !== taskId));
-    } else {
-      const upstreamParents = getUpstreamChain(taskId)
-        .filter((t) => t.manualStatus !== 'done')
-        .map((t) => t.id);
-      setSelectedBatchTaskIds((prev) => Array.from(new Set([...prev, taskId, ...upstreamParents])));
-    }
+    setSelectedBatchTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
   };
 
   const queueSelectedTasks = () => {
     if (selectedBatchTaskIds.length === 0) return;
 
+    // Collect all selected tasks + all of their uncompleted upstream parent dependencies
+    const allTargetIds = new Set<string>();
+    selectedBatchTaskIds.forEach((id) => {
+      allTargetIds.add(id);
+      getUpstreamChain(id)
+        .filter((t) => t.manualStatus !== 'done')
+        .forEach((p) => allTargetIds.add(p.id));
+    });
+
     let nextTasks = [...tasks];
-    const uncompletedSelected = selectedBatchTaskIds
+    const uncompletedSelected = Array.from(allTargetIds)
       .map((id) => nextTasks.find((t) => t.id === id))
       .filter((t): t is Task => Boolean(t && t.manualStatus !== 'done'));
 
@@ -693,6 +696,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
     saveTasks(nextTasks);
     setSelectedBatchTaskIds([]);
     setView('queue');
+  };
+
+  const clearExecutionQueue = () => {
+    const cleared = tasks.map((t) => (t.rank ? { ...t, rank: undefined } : t));
+    saveTasks(cleared);
   };
 
   const toggleSelectAllInBatch = (batchTasks: Task[]) => {
@@ -2974,6 +2982,21 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <span>Batch Grouped</span>
                   </button>
                 </div>
+
+                {view === 'queue' && rankedTasks.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Clear all tasks from the execution Queue?')) {
+                        clearExecutionQueue();
+                      }
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-rose-900/60 hover:text-rose-200 border border-zinc-700 hover:border-rose-700/60 text-zinc-400 text-[10px] font-bold flex items-center gap-1 shadow transition"
+                    title="Clear all tasks from the execution Queue DAG"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                    <span>Clear Queue ({rankedTasks.length})</span>
+                  </button>
+                )}
 
                 {hiddenStageIndices.length > 0 && (
                   <button
