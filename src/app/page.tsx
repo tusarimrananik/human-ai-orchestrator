@@ -483,16 +483,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
       try {
         let result = await saveRemoteWorkspace({ payload: sending, expectedRevision: remoteRevisionRef.current });
         if (!result.ok) {
-          // Auto-resolve revision conflict by pushing latest state with forceSaveRemote
           result = await forceSaveRemote({ payload: sending });
         }
         remoteRevisionRef.current = result.revision;
         lastRemoteHashRef.current = sendingHash;
-        if (JSON.stringify(pendingPayloadRef.current) === sendingHash) {
-          pendingPayloadRef.current = null;
-          localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: sending, baseRevision: result.revision, dirty: false }));
-          setSyncStatus('saved');
-        }
+        pendingPayloadRef.current = null;
+        localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: sending, baseRevision: result.revision, dirty: false }));
+        setSyncStatus('saved');
       } catch (error) {
         console.warn('Convex sync deferred:', error);
         setSyncStatus('offline');
@@ -522,6 +519,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       if (res.ok) {
         remoteRevisionRef.current = res.revision;
         lastRemoteHashRef.current = JSON.stringify(payload);
+        pendingPayloadRef.current = null;
         localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: res.revision, dirty: false }));
         setSyncStatus('saved');
       }
