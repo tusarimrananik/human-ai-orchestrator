@@ -7,6 +7,7 @@ import {
   collapseHiddenDagTasks,
   createSourceOrderComparator,
   insertDagTaskBefore,
+  swapBatchTaskPositions,
 } from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
@@ -185,4 +186,16 @@ test('pushes subsequent siblings and roots down based on downstream subtree heig
   equal(result.lanes.get('dfgdfgd'), 5);
   equal(result.lanes.get('this-should-work'), 5);
   equal(result.lanes.get('hi-there'), 6);
+});
+
+test('swapBatchTaskPositions moves all tasks of promotedBatch before demotedBatch', () => {
+  const tasks = [
+    { id: 'b1-task1', batch: 'B1', order: 0, dependencies: [] },
+    { id: 'b2-task1', batch: 'B2', order: 1, dependencies: [] },
+    { id: 'b2-task2', batch: 'B2', order: 2, dependencies: [] },
+    { id: 'b3-task1', batch: 'B3', order: 3, dependencies: [] },
+  ];
+  // Move B2 before B1
+  const result = swapBatchTaskPositions(tasks, 'B2', 'B1');
+  deepEqual(result.map((t) => t.id), ['b2-task1', 'b2-task2', 'b1-task1', 'b3-task1']);
 });

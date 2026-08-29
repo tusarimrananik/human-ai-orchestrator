@@ -51,6 +51,39 @@ export function createSourceOrderComparator<T extends DagTask>(tasks: readonly T
   return (a, b) => (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER);
 }
 
+/** Swaps the relative order of all tasks in batchA with batchB in the task array. */
+export function swapBatchTaskPositions<T extends DagTask>(
+  tasks: readonly T[],
+  promotedBatch: string,
+  demotedBatch: string
+): T[] {
+  const list = [...tasks];
+  // Find indices belonging to either promotedBatch or demotedBatch
+  const affectedIndices: number[] = [];
+  const promotedTasks: T[] = [];
+  const demotedTasks: T[] = [];
+
+  list.forEach((t, i) => {
+    const b = t.batch || 'Batch 1';
+    if (b === promotedBatch) {
+      affectedIndices.push(i);
+      promotedTasks.push(t);
+    } else if (b === demotedBatch) {
+      affectedIndices.push(i);
+      demotedTasks.push(t);
+    }
+  });
+
+  if (affectedIndices.length === 0) return list;
+
+  const combined = [...promotedTasks, ...demotedTasks];
+  affectedIndices.forEach((targetIndex, k) => {
+    list[targetIndex] = combined[k];
+  });
+
+  return list.map((t, idx) => ({ ...t, order: idx }));
+}
+
 /**
  * Creates a DAG-only projection with hidden nodes removed. Dependencies pass
  * through hidden nodes to their nearest visible ancestors, so completing a
