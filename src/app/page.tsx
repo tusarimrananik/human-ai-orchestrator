@@ -220,7 +220,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'ranked' | 'dependency' | 'batch'>('ranked');
+  const [view, setView] = useState<'queue' | 'dependency' | 'ranked' | 'batch'>('queue');
   const [rankedViewTab, setRankedViewTab] = useState<'active' | 'done'>('active');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -655,6 +655,46 @@ function OrchestratorPage({ userId }: { userId: string }) {
     );
   };
 
+  // When selecting a task in DAG, automatically select all its uncompleted upstream parents!
+  const toggleSelectDagTask = (taskId: string) => {
+    const isCurrentlySelected = selectedBatchTaskIds.includes(taskId);
+    if (isCurrentlySelected) {
+      setSelectedBatchTaskIds((prev) => prev.filter((id) => id !== taskId));
+    } else {
+      const upstreamParents = getUpstreamChain(taskId)
+        .filter((t) => t.manualStatus !== 'done')
+        .map((t) => t.id);
+      setSelectedBatchTaskIds((prev) => Array.from(new Set([...prev, taskId, ...upstreamParents])));
+    }
+  };
+
+  const queueSelectedTasks = () => {
+    if (selectedBatchTaskIds.length === 0) return;
+
+    let nextTasks = [...tasks];
+    const uncompletedSelected = selectedBatchTaskIds
+      .map((id) => nextTasks.find((t) => t.id === id))
+      .filter((t): t is Task => Boolean(t && t.manualStatus !== 'done'));
+
+    const { orderedLevels, levels } = alignDagLevels(
+      uncompletedSelected,
+      (a, b) => getBatchWeight(a.batch) - getBatchWeight(b.batch)
+    );
+
+    const topoOrderedIds: string[] = [];
+    orderedLevels.forEach((lvl) => {
+      (levels[lvl] || []).forEach((t) => topoOrderedIds.push(t.id));
+    });
+
+    topoOrderedIds.forEach((id, idx) => {
+      nextTasks = setTaskRank(nextTasks, id, idx + 1, (t) => t.manualStatus === 'done');
+    });
+
+    saveTasks(nextTasks);
+    setSelectedBatchTaskIds([]);
+    setView('queue');
+  };
+
   const toggleSelectAllInBatch = (batchTasks: Task[]) => {
     const taskIds = batchTasks.map((t) => t.id);
     const allSelected = taskIds.length > 0 && taskIds.every((id) => selectedBatchTaskIds.includes(id));
@@ -802,6 +842,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
           title="Move all selected tasks to the selected batch"
         >
           <ArrowRight className="w-2.5 h-2.5" /> Move
+        </button>
+
+        <button
+          onClick={queueSelectedTasks}
+          className="px-2.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold shadow flex items-center gap-1 transition"
+          title="Add all selected tasks and their dependencies into the execution Queue DAG"
+        >
+          <Target className="w-3 h-3" /> Move to Queue
         </button>
 
         <button
@@ -1126,10 +1174,12 @@ function OrchestratorPage({ userId }: { userId: string }) {
   });
 
   // 1. Compute full unhidden DAG stage indices for all active tasks
-  const activeUnfinishedTasks = useMemo(
-    () => filtered.filter((t) => t.manualStatus !== 'done'),
-    [filtered]
-  );
+  const activeUnfinishedTasks = useMemo(() => {
+    const list = view === 'queue'
+      ? filtered.filter((t) => typeof t.rank === 'number' && t.rank > 0)
+      : filtered;
+    return list.filter((t) => t.manualStatus !== 'done');
+  }, [filtered, view]);
 
   const baseLevelsResult = useMemo(() => {
     const compareSource = createSourceOrderComparator(activeUnfinishedTasks);
@@ -1151,13 +1201,17 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   // 2. Collapse hidden stages & done tasks
   const visibleDagTasks = useMemo(() => {
+    const sourceList = view === 'queue'
+      ? filtered.filter((t) => typeof t.rank === 'number' && t.rank > 0)
+      : filtered;
+
     const isHidden = (task: Task) => {
       if (task.manualStatus === 'done') return true;
       const sIdx = taskStageIndexMap.get(task.id);
       return sIdx !== undefined && hiddenStageIndices.includes(sIdx);
     };
-    return collapseHiddenDagTasks(filtered, isHidden);
-  }, [filtered, taskStageIndexMap, hiddenStageIndices]);
+    return collapseHiddenDagTasks(sourceList, isHidden);
+  }, [filtered, view, taskStageIndexMap, hiddenStageIndices]);
 
   const toggleHideStage = (stageIdx: number) => {
     setHiddenStageIndices((prev) =>
@@ -2505,26 +2559,43 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
           <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-md">
             <button
-              onClick={() => setView('ranked')}
+              onClick={() => setView('queue')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'ranked' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
+                view === 'queue' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
+              title="View focused DAG containing only your queued/selected tasks"
             >
-              <ListTodo className="w-3 h-3" /> Ranked Tasks
+              <Target className="w-3 h-3" /> Queue DAG
+              {rankedTasks.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[9px] font-mono">
+                  {rankedTasks.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setView('dependency')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'dependency' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
+                view === 'dependency' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
+              title="View the complete project DAG graph with all tasks"
             >
-              <GitFork className="w-3 h-3" /> DAG Graph
+              <GitFork className="w-3 h-3" /> Full DAG
+            </button>
+            <button
+              onClick={() => setView('ranked')}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                view === 'ranked' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title="Linear execution list in ranked order"
+            >
+              <ListTodo className="w-3 h-3" /> Execution List
             </button>
             <button
               onClick={() => setView('batch')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'batch' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400'
+                view === 'batch' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
+              title="Columns grouped by batch"
             >
               <Boxes className="w-3 h-3" /> Batch View
             </button>
@@ -2853,10 +2924,25 @@ function OrchestratorPage({ userId }: { userId: string }) {
               )}
             </div>
           </div>
-        ) : view === 'dependency' ? (
-          /* DAG View */
+        ) : view === 'queue' || view === 'dependency' ? (
+          /* DAG View (Queue DAG or Full DAG) */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
-            <div className="relative min-w-max pb-6 pl-7" ref={stageRef}>
+            {view === 'queue' && rankedTasks.length === 0 ? (
+              <div className="py-24 text-center space-y-3">
+                <div className="text-3xl">🎯</div>
+                <div className="text-sm font-bold text-zinc-200">Your Queue DAG is empty</div>
+                <div className="text-xs text-zinc-400 max-w-sm mx-auto">
+                  Go to <strong className="text-indigo-400">Full DAG</strong>, select the tasks you want to do (dependencies are auto-selected), and click <strong className="text-indigo-400">Move to Queue</strong>.
+                </div>
+                <button
+                  onClick={() => setView('dependency')}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-white text-xs shadow inline-flex items-center gap-1 transition"
+                >
+                  <GitFork className="w-3.5 h-3.5" /> Go to Full DAG
+                </button>
+              </div>
+            ) : (
+              <div className="relative min-w-max pb-6 pl-7" ref={stageRef}>
               <div className="sticky left-0 z-30 mb-3 flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950/95 px-2.5 py-1.5 shadow-lg">
                 <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400 flex items-center gap-1">
                   <Layers className="h-3.5 w-3.5 text-indigo-400" /> Stages 2+:
@@ -3086,10 +3172,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   checked={isSelected}
                                   onChange={(e) => {
                                     e.stopPropagation();
-                                    toggleSelectBatchTask(t.id);
+                                    toggleSelectDagTask(t.id);
                                   }}
                                   className="w-3 h-3 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
-                                  title="Select task for bulk batch move"
+                                  title="Select task (auto-selects parent dependencies)"
                                 />
                                 <label
                                   style={batchTheme.badgeStyle}
@@ -3257,6 +3343,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 })}
               </div>
             </div>
+            )}
           </div>
         ) : (
           /* Batch Task View (Grouped/Sorted by Batch Priority, Not Tree Structure) */
