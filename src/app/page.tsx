@@ -16,6 +16,7 @@ import {
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
 import { canonicalizeWorkspacePayload, nextSyncStatusAfterSave } from '@/lib/workspace-sync';
+import { getVisibleDagEdges, isDagView } from '@/lib/dag-edges';
 import {
   Play,
   CheckCircle2,
@@ -326,7 +327,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const batchContainerRef = useRef<HTMLDivElement>(null);
-  const [svgContent, setSvgContent] = useState<{ width: number; height: number; paths: string[] }>({
+  const [svgContent, setSvgContent] = useState<{
+    width: number;
+    height: number;
+    paths: Array<{ key: string; d: string }>;
+  }>({
     width: 0,
     height: 0,
     paths: [],
@@ -1317,21 +1322,26 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   // Straight horizontal dependency lines calculation for DAG
   useLayoutEffect(() => {
-    if (view !== 'dependency' || !stageRef.current || !visibleDagTasks.length) return;
+    if (!isDagView(view) || !stageRef.current || visibleDagTasks.length === 0) {
+      setSvgContent({ width: 0, height: 0, paths: [] });
+      return;
+    }
 
     const timer = setTimeout(() => {
       const stage = stageRef.current;
-      if (!stage) return;
+      if (!stage) {
+        setSvgContent({ width: 0, height: 0, paths: [] });
+        return;
+      }
 
       const stageRect = stage.getBoundingClientRect();
       const width = stage.scrollWidth;
       const height = stage.scrollHeight;
-      const paths: string[] = [];
+      const paths: Array<{ key: string; d: string }> = [];
 
-      visibleDagTasks.forEach((targetTask) => {
-        (targetTask.dependencies || []).forEach((depId) => {
-          const source = stage.querySelector(`[data-node-id="${depId}"]`);
-          const target = stage.querySelector(`[data-node-id="${targetTask.id}"]`);
+      getVisibleDagEdges(visibleDagTasks).forEach(({ sourceId, targetId }) => {
+          const source = stage.querySelector(`[data-node-id="${CSS.escape(sourceId)}"]`);
+          const target = stage.querySelector(`[data-node-id="${CSS.escape(targetId)}"]`);
           if (!source || !target) return;
 
           const a = source.getBoundingClientRect();
@@ -1350,8 +1360,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
             const bend = Math.max(24, (x2 - x1) * 0.45);
             d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2 - 6} ${y2}`;
           }
-          paths.push(d);
-        });
+          paths.push({ key: `${sourceId}->${targetId}`, d });
       });
 
       setSvgContent({ width, height, paths });
@@ -3111,9 +3120,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <path d="M0,0 L6,3 L0,6 z" fill="#6366f1" />
                   </marker>
                 </defs>
-                {svgContent.paths.map((d, i) => (
+                {svgContent.paths.map(({ key, d }) => (
                   <path
-                    key={i}
+                    key={key}
                     d={d}
                     fill="none"
                     stroke="#6366f1"
