@@ -14,7 +14,7 @@ import {
   swapBatchTaskPositions,
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
-import { getBatchTheme } from '@/lib/batch-theme';
+import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
 import {
   Play,
   CheckCircle2,
@@ -358,7 +358,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         const storedEnvelope = JSON.parse(localStorage.getItem(syncEnvelopeKey) || 'null') as { payload?: { schemaVersion?: number } } | null;
-        setTasks(migrateOptionalRanks(
+        const loadedTasks = migrateOptionalRanks(
           parsed.map((t: any, idx: number) => ({
             ...t,
             taskType: t.taskType || (t.isGoal ? 'goal' : 'normal'),
@@ -372,7 +372,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
             subTasks: t.subTasks || [],
           })),
           storedEnvelope?.payload?.schemaVersion
-        ));
+        );
+        setTasks(loadedTasks);
+        setBatchPriorityOrder((prev) => syncBatchPriorityWithTasks(prev, loadedTasks));
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
@@ -427,13 +429,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
       remoteRevisionRef.current = remoteWorkspace.revision;
       lastRemoteHashRef.current = JSON.stringify(payload);
       const rankedTasks = migrateOptionalRanks(payload.tasks, payload.schemaVersion);
+      const syncedBatches = syncBatchPriorityWithTasks(payload.batchPriorityOrder as BatchTag[] || DEFAULT_BATCH_ORDER, rankedTasks);
       setTasks(rankedTasks);
-      setBatchPriorityOrder(payload.batchPriorityOrder as BatchTag[]);
+      setBatchPriorityOrder(syncedBatches);
       setParallelGroups(payload.parallelGroups);
       setIsParallelModeActive(payload.isParallelModeActive);
       setActiveTurnGroupName(payload.activeTurnGroupName);
       localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
-      localStorage.setItem(batchOrderKey, JSON.stringify(payload.batchPriorityOrder));
+      localStorage.setItem(batchOrderKey, JSON.stringify(syncedBatches));
       localStorage.setItem(parallelGroupsKey, JSON.stringify(payload.parallelGroups));
       localStorage.setItem(parallelModeKey, String(payload.isParallelModeActive));
       localStorage.setItem(activeTurnKey, payload.activeTurnGroupName);
@@ -500,6 +503,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setTasks(rankedTasks);
     if (typeof window !== 'undefined') {
       localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
+    }
+
+    const syncedBatches = syncBatchPriorityWithTasks(batchPriorityOrder, rankedTasks);
+    if (syncedBatches.length > batchPriorityOrder.length) {
+      saveBatchOrder(syncedBatches);
     }
   };
 

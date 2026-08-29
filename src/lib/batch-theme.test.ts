@@ -1,6 +1,6 @@
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
 import { test } from 'node:test';
-import { getBatchHue, getBatchTheme } from './batch-theme';
+import { getBatchHue, getBatchTheme, syncBatchPriorityWithTasks } from './batch-theme';
 
 test('batch color is completely stable and does not change when order changes', () => {
   const b1HueBefore = getBatchHue('Batch 1');
@@ -32,4 +32,16 @@ test('generates unique distinct colors for numbered and custom batches', () => {
     ok(theme.cardStyle.borderColor, 'has full card border');
     ok(theme.cardStyle.color, 'has card text color');
   }
+});
+
+test('syncBatchPriorityWithTasks appends any missing task batches into order so DAG and Batch view always match', () => {
+  const current = ['Batch 1', 'Batch 2'];
+  const tasks = [
+    { batch: 'Batch 1' },
+    { batch: 'Batch 3' },
+    { batch: 'Sprint Alpha' },
+  ];
+
+  const synced = syncBatchPriorityWithTasks(current, tasks);
+  deepEqual(synced, ['Batch 1', 'Batch 2', 'Batch 3', 'Sprint Alpha']);
 });

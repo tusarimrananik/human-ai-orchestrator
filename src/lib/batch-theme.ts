@@ -93,3 +93,22 @@ export function getBatchTheme(rawBatch: string = 'Batch 1', _allBatches?: string
     descStyle,
   };
 }
+
+/** Ensures all batches present on tasks are included in batch priority list so DAG and Batch views stay 100% in sync. */
+export function syncBatchPriorityWithTasks(
+  currentOrder: readonly string[],
+  tasks: readonly { batch?: string }[]
+): string[] {
+  const result = [...currentOrder];
+  const seen = new Set(result);
+
+  for (const t of tasks) {
+    const b = t.batch || 'Batch 1';
+    if (b && !seen.has(b)) {
+      seen.add(b);
+      result.push(b);
+    }
+  }
+
+  return result;
+}
