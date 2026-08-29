@@ -13,6 +13,7 @@ import {
   insertDagTaskBefore,
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
+import { getBatchTheme } from '@/lib/batch-theme';
 import {
   Play,
   CheckCircle2,
@@ -163,124 +164,7 @@ function formatElapsed(seconds: number): string {
   return `${secs}s`;
 }
 
-const BATCH_THEME_PALETTE = [
-  {
-    cardBg: 'bg-sky-950/40 border-sky-600/70 text-sky-100',
-    cardTitle: 'text-sky-100',
-    descBg: 'bg-sky-950/60 border-sky-800/60 text-sky-200/90',
-    badge: 'bg-sky-500/20 text-sky-300 border border-sky-500/50',
-    dropdown: 'bg-sky-950 text-sky-300 border-sky-700/80',
-    dagNode: 'bg-sky-950/60 border-sky-500 text-sky-100',
-  },
-  {
-    cardBg: 'bg-purple-950/40 border-purple-600/70 text-purple-100',
-    cardTitle: 'text-purple-100',
-    descBg: 'bg-purple-950/60 border-purple-800/60 text-purple-200/90',
-    badge: 'bg-purple-500/20 text-purple-300 border border-purple-500/50',
-    dropdown: 'bg-purple-950 text-purple-300 border-purple-700/80',
-    dagNode: 'bg-purple-950/60 border-purple-500 text-purple-100',
-  },
-  {
-    cardBg: 'bg-amber-950/40 border-amber-600/70 text-amber-100',
-    cardTitle: 'text-amber-100',
-    descBg: 'bg-amber-950/60 border-amber-800/60 text-amber-200/90',
-    badge: 'bg-amber-500/20 text-amber-300 border border-amber-500/50',
-    dropdown: 'bg-amber-950 text-amber-300 border-amber-700/80',
-    dagNode: 'bg-amber-950/60 border-amber-500 text-amber-100',
-  },
-  {
-    cardBg: 'bg-emerald-950/40 border-emerald-600/70 text-emerald-100',
-    cardTitle: 'text-emerald-100',
-    descBg: 'bg-emerald-950/60 border-emerald-800/60 text-emerald-200/90',
-    badge: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50',
-    dropdown: 'bg-emerald-950 text-emerald-300 border-emerald-700/80',
-    dagNode: 'bg-emerald-950/60 border-emerald-500 text-emerald-100',
-  },
-  {
-    cardBg: 'bg-rose-950/40 border-rose-600/70 text-rose-100',
-    cardTitle: 'text-rose-100',
-    descBg: 'bg-rose-950/60 border-rose-800/60 text-rose-200/90',
-    badge: 'bg-rose-500/20 text-rose-300 border border-rose-500/50',
-    dropdown: 'bg-rose-950 text-rose-300 border-rose-700/80',
-    dagNode: 'bg-rose-950/60 border-rose-500 text-rose-100',
-  },
-  {
-    cardBg: 'bg-pink-950/40 border-pink-600/70 text-pink-100',
-    cardTitle: 'text-pink-100',
-    descBg: 'bg-pink-950/60 border-pink-800/60 text-pink-200/90',
-    badge: 'bg-pink-500/20 text-pink-300 border border-pink-500/50',
-    dropdown: 'bg-pink-950 text-pink-300 border-pink-700/80',
-    dagNode: 'bg-pink-950/60 border-pink-500 text-pink-100',
-  },
-  {
-    cardBg: 'bg-cyan-950/40 border-cyan-600/70 text-cyan-100',
-    cardTitle: 'text-cyan-100',
-    descBg: 'bg-cyan-950/60 border-cyan-800/60 text-cyan-200/90',
-    badge: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50',
-    dropdown: 'bg-cyan-950 text-cyan-300 border-cyan-700/80',
-    dagNode: 'bg-cyan-950/60 border-cyan-500 text-cyan-100',
-  },
-  {
-    cardBg: 'bg-lime-950/40 border-lime-600/70 text-lime-100',
-    cardTitle: 'text-lime-100',
-    descBg: 'bg-lime-950/60 border-lime-800/60 text-lime-200/90',
-    badge: 'bg-lime-500/20 text-lime-300 border border-lime-500/50',
-    dropdown: 'bg-lime-950 text-lime-300 border-lime-700/80',
-    dagNode: 'bg-lime-950/60 border-lime-500 text-lime-100',
-  },
-  {
-    cardBg: 'bg-indigo-950/40 border-indigo-600/70 text-indigo-100',
-    cardTitle: 'text-indigo-100',
-    descBg: 'bg-indigo-950/60 border-indigo-800/60 text-indigo-200/90',
-    badge: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50',
-    dropdown: 'bg-indigo-950 text-indigo-300 border-indigo-700/80',
-    dagNode: 'bg-indigo-950/60 border-indigo-500 text-indigo-100',
-  },
-  {
-    cardBg: 'bg-orange-950/40 border-orange-600/70 text-orange-100',
-    cardTitle: 'text-orange-100',
-    descBg: 'bg-orange-950/60 border-orange-800/60 text-orange-200/90',
-    badge: 'bg-orange-500/20 text-orange-300 border border-orange-500/50',
-    dropdown: 'bg-orange-950 text-orange-300 border-orange-700/80',
-    dagNode: 'bg-orange-950/60 border-orange-500 text-orange-100',
-  },
-  {
-    cardBg: 'bg-teal-950/40 border-teal-600/70 text-teal-100',
-    cardTitle: 'text-teal-100',
-    descBg: 'bg-teal-950/60 border-teal-800/60 text-teal-200/90',
-    badge: 'bg-teal-500/20 text-teal-300 border border-teal-500/50',
-    dropdown: 'bg-teal-950 text-teal-300 border-teal-700/80',
-    dagNode: 'bg-teal-950/60 border-teal-500 text-teal-100',
-  },
-  {
-    cardBg: 'bg-violet-950/40 border-violet-600/70 text-violet-100',
-    cardTitle: 'text-violet-100',
-    descBg: 'bg-violet-950/60 border-violet-800/60 text-violet-200/90',
-    badge: 'bg-violet-500/20 text-violet-300 border border-violet-500/50',
-    dropdown: 'bg-violet-950 text-violet-300 border-violet-700/80',
-    dagNode: 'bg-violet-950/60 border-violet-500 text-violet-100',
-  },
-];
 
-function getBatchTheme(rawBatch: string = 'Batch 1') {
-  const batch = (!rawBatch || rawBatch === 'None') ? 'Batch 1' : rawBatch;
-  const match = batch.match(/^Batch\s+(\d+)$/i);
-  let index = 0;
-  if (match) {
-    index = (parseInt(match[1], 10) - 1) % BATCH_THEME_PALETTE.length;
-  } else {
-    let hash = 0;
-    for (let i = 0; i < batch.length; i++) {
-      hash = (hash << 5) - hash + batch.charCodeAt(i);
-      hash |= 0;
-    }
-    index = Math.abs(hash) % BATCH_THEME_PALETTE.length;
-  }
-
-  const base = BATCH_THEME_PALETTE[index] || BATCH_THEME_PALETTE[0];
-  const short = match ? `B${match[1]}` : batch.length > 5 ? batch.slice(0, 4) : batch;
-  return { ...base, short };
-}
 
 export default function Page() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -2048,12 +1932,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <div className="h-3 w-[1px] bg-zinc-800 flex-shrink-0" />
 
             {batchPriorityOrder.map((b, idx) => {
-              const theme = getBatchTheme(b);
+              const theme = getBatchTheme(b, batchPriorityOrder);
               const count = tasks.filter((t) => (t.batch || 'Batch 1') === b).length;
               return (
                 <div
                   key={b}
-                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition flex-shrink-0 ${theme.badge}`}
+                  style={theme.badgeStyle}
+                  className="flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-bold transition flex-shrink-0 shadow-sm"
                 >
                   <button
                     onClick={() => setTopBatchPriority(b)}
@@ -2061,9 +1946,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     className="hover:underline flex items-center gap-0.5"
                   >
                     <span>{theme.short || b}</span>
-                    <span className="text-[8px] opacity-70 font-mono">({count})</span>
+                    <span className="text-[8px] opacity-80 font-mono">({count})</span>
                   </button>
-                  <div className="flex items-center ml-0.5 opacity-60 hover:opacity-100">
+                  <div className="flex items-center ml-0.5 opacity-70 hover:opacity-100">
                     <button
                       disabled={idx === 0}
                       onClick={() => shiftBatchPriority(b, 'left')}
@@ -2231,14 +2116,25 @@ function OrchestratorPage({ userId }: { userId: string }) {
           <select
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-medium"
+            style={batchFilter ? getBatchTheme(batchFilter, batchPriorityOrder).dropdownStyle : undefined}
+            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-zinc-300 focus:outline-none font-bold"
           >
-            <option value="">All Batches</option>
-            {batchPriorityOrder.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
+            <option value="" className="bg-zinc-900 text-zinc-300">All Batches</option>
+            {batchPriorityOrder.map((b) => {
+              const optTheme = getBatchTheme(b, batchPriorityOrder);
+              return (
+                <option
+                  key={b}
+                  value={b}
+                  style={{
+                    backgroundColor: optTheme.dropdownStyle.backgroundColor,
+                    color: optTheme.dropdownStyle.color,
+                  }}
+                >
+                  {b}
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
@@ -2353,7 +2249,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                       {stageTasks.map((t) => {
                         const status = computedStatus(t);
                         const durationDisplay = getTaskDurationDisplay(t);
-                        const batchTheme = getBatchTheme(t.batch);
+                        const batchTheme = getBatchTheme(t.batch, batchPriorityOrder);
 
                         const batchSiblings = stageTasks.filter((x) => (x.batch || 'Batch 1') === (t.batch || 'Batch 1'));
                         const posInBatch = batchSiblings.findIndex((x) => x.id === t.id);
@@ -2376,8 +2272,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
                             onDragStart={(e) => handleDragStart(e, t.id)}
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
-                            style={{ gridRow: (lanes.get(t.id) ?? 0) + 2 }}
-                            className={`group relative overflow-visible w-[260px] h-[148px] p-2.5 rounded-lg border-2 shadow flex flex-col justify-between transition-all select-none ${batchTheme.dagNode} ${
+                            style={{ ...batchTheme.dagNodeStyle, gridRow: (lanes.get(t.id) ?? 0) + 2 }}
+                            className={`group relative overflow-visible w-[260px] h-[148px] p-2.5 rounded-lg border-2 shadow-md flex flex-col justify-between transition-all select-none ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
@@ -2491,13 +2387,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 <select
                                   value={t.batch || 'Batch 1'}
                                   onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
-                                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold cursor-pointer focus:outline-none ${batchTheme.dropdown}`}
+                                  style={batchTheme.dropdownStyle}
+                                  className="text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer focus:outline-none border shadow-sm"
                                 >
-                                  {batchPriorityOrder.map((b) => (
-                                    <option key={b} value={b} className="bg-zinc-900 text-zinc-200">
-                                      {b}
-                                    </option>
-                                  ))}
+                                  {batchPriorityOrder.map((b) => {
+                                    const optTheme = getBatchTheme(b, batchPriorityOrder);
+                                    return (
+                                      <option
+                                        key={b}
+                                        value={b}
+                                        style={{
+                                          backgroundColor: optTheme.dropdownStyle.backgroundColor,
+                                          color: optTheme.dropdownStyle.color,
+                                        }}
+                                      >
+                                        {b}
+                                      </option>
+                                    );
+                                  })}
                                 </select>
                               </div>
                             </div>
@@ -2513,7 +2420,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                               </div>
 
                               {t.description ? (
-                                <p className={`text-[10px] truncate leading-tight px-1 py-0.5 rounded border ${batchTheme.descBg}`}>
+                                <p
+                                  style={batchTheme.descStyle}
+                                  className="text-[10px] truncate leading-tight px-1 py-0.5 rounded border"
+                                >
                                   {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
                                 </p>
                               ) : null}
@@ -2678,15 +2588,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                 {batchPriorityOrder.map((bTag) => {
                   const count = filtered.filter((t) => (t.batch || 'Batch 1') === bTag).length;
-                  const theme = getBatchTheme(bTag);
+                  const theme = getBatchTheme(bTag, batchPriorityOrder);
                   return (
                     <button
                       key={bTag}
+                      style={theme.badgeStyle}
                       onClick={() => {
                         const col = document.getElementById(`batch-col-${bTag}`);
                         col?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
                       }}
-                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 ${theme.badge} hover:brightness-125`}
+                      className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 hover:brightness-125 shadow-sm"
                       title={`Jump to ${bTag}`}
                     >
                       <span>{theme.short || bTag}</span>
@@ -2797,7 +2708,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 })
                 .map((batchTag) => {
                   const batchTasks = filtered.filter((t) => (t.batch || 'Batch 1') === batchTag);
-                  const theme = getBatchTheme(batchTag);
+                  const theme = getBatchTheme(batchTag, batchPriorityOrder);
 
                   // Sort batch tasks according to batchSortMode
                   batchTasks.sort((a, b) => {
@@ -2823,12 +2734,22 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <div
                       key={batchTag}
                       id={`batch-col-${batchTag}`}
-                      className="w-72 flex-shrink-0 border rounded-lg flex flex-col min-h-0 overflow-hidden shadow-sm bg-zinc-900/60 border-zinc-800/90"
+                      style={{
+                        borderColor: theme.cardStyle.borderColor,
+                        backgroundColor: 'rgba(24, 24, 27, 0.7)',
+                      }}
+                      className="w-72 flex-shrink-0 border-2 rounded-lg flex flex-col min-h-0 overflow-hidden shadow-md"
                     >
                       {/* Batch Column Header */}
-                      <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between flex-shrink-0">
+                      <div
+                        style={theme.descStyle}
+                        className="px-2.5 py-1.5 border-b flex items-center justify-between flex-shrink-0"
+                      >
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-mono uppercase font-bold px-1.5 py-0.2 rounded border ${theme.badge}`}>
+                          <span
+                            style={theme.badgeStyle}
+                            className="text-[10px] font-mono uppercase font-bold px-1.5 py-0.5 rounded border shadow-sm"
+                          >
                             {theme.short || batchTag}
                           </span>
                           <span className="text-[11px] font-bold text-zinc-200">
@@ -3480,13 +3401,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 <select
                   value={taskBatch}
                   onChange={(e) => setTaskBatch(e.target.value as BatchTag)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-200 font-bold"
+                  style={getBatchTheme(taskBatch, batchPriorityOrder).dropdownStyle}
+                  className="w-full border rounded px-2 py-1 text-xs font-bold focus:outline-none shadow-sm"
                 >
-                  {batchPriorityOrder.map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
+                  {batchPriorityOrder.map((b) => {
+                    const optTheme = getBatchTheme(b, batchPriorityOrder);
+                    return (
+                      <option
+                        key={b}
+                        value={b}
+                        style={{
+                          backgroundColor: optTheme.dropdownStyle.backgroundColor,
+                          color: optTheme.dropdownStyle.color,
+                        }}
+                      >
+                        {b}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
