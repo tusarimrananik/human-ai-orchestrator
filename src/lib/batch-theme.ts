@@ -11,13 +11,8 @@ export interface BatchTheme {
 // Golden angle in degrees (~137.50776405°), provides optimal dispersion across 360° hue circle
 const GOLDEN_ANGLE = 137.508;
 
-export function getBatchHue(rawBatch: string = 'Batch 1', allBatches: string[] = []): number {
+export function getBatchHue(rawBatch: string = 'Batch 1', _allBatches?: string[]): number {
   const batch = !rawBatch || rawBatch === 'None' ? 'Batch 1' : rawBatch;
-
-  const idx = allBatches.indexOf(batch);
-  if (idx !== -1) {
-    return Math.round((210 + idx * GOLDEN_ANGLE) % 360);
-  }
 
   const match = batch.match(/^Batch\s+(\d+)$/i);
   if (match) {
@@ -25,19 +20,21 @@ export function getBatchHue(rawBatch: string = 'Batch 1', allBatches: string[] =
     return Math.round((210 + (num - 1) * GOLDEN_ANGLE) % 360);
   }
 
+  // Stable high-dispersion hash for arbitrary custom batch names
   let hash = 0;
   for (let i = 0; i < batch.length; i++) {
     hash = (hash << 5) - hash + batch.charCodeAt(i);
     hash |= 0;
   }
-  return Math.abs(hash) % 360;
+  const hashIndex = Math.abs(hash) % 360;
+  return Math.round((210 + hashIndex * GOLDEN_ANGLE) % 360);
 }
 
-export function getBatchTheme(rawBatch: string = 'Batch 1', allBatches: string[] = []): BatchTheme {
+export function getBatchTheme(rawBatch: string = 'Batch 1', _allBatches?: string[]): BatchTheme {
   const batch = !rawBatch || rawBatch === 'None' ? 'Batch 1' : rawBatch;
   const match = batch.match(/^Batch\s+(\d+)$/i);
   const short = match ? `B${match[1]}` : batch.length > 5 ? batch.slice(0, 4) : batch;
-  const hue = getBatchHue(batch, allBatches);
+  const hue = getBatchHue(batch);
 
   // Full-element rich colored boxes with high contrast
   const cardBg = `hsla(${hue}, 85%, 8%, 0.75)`;

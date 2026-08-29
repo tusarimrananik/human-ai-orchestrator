@@ -715,8 +715,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
         });
         saveTasks(newTasks);
       } else if (isRootStage) {
-        // At top of batch on a root task: shift entire batch UP
-        shiftBatchPriority(currentBatch, 'left');
+        // Move entire batch UP in Stage 1!
+        const stageBatches = Array.from(new Set(stageTasks.map((t) => t.batch || 'Batch 1')));
+        const currentStageBatchIdx = stageBatches.indexOf(currentBatch);
+        if (currentStageBatchIdx > 0) {
+          const precedingBatch = stageBatches[currentStageBatchIdx - 1];
+          const idx1 = batchPriorityOrder.indexOf(currentBatch);
+          const idx2 = batchPriorityOrder.indexOf(precedingBatch);
+          if (idx1 !== -1 && idx2 !== -1) {
+            const nextOrder = [...batchPriorityOrder];
+            nextOrder[idx1] = precedingBatch;
+            nextOrder[idx2] = currentBatch;
+            saveBatchOrder(nextOrder);
+          }
+          const reordered = swapBatchTaskPositions(tasks, currentBatch, precedingBatch);
+          saveTasks(reordered);
+        } else {
+          shiftBatchPriority(currentBatch, 'left');
+        }
       }
     } else {
       if (batchIdx < batchTasks.length - 1) {
@@ -734,8 +750,24 @@ function OrchestratorPage({ userId }: { userId: string }) {
         });
         saveTasks(newTasks);
       } else if (isRootStage) {
-        // At bottom of batch on a root task: shift entire batch DOWN
-        shiftBatchPriority(currentBatch, 'right');
+        // Move entire batch DOWN in Stage 1!
+        const stageBatches = Array.from(new Set(stageTasks.map((t) => t.batch || 'Batch 1')));
+        const currentStageBatchIdx = stageBatches.indexOf(currentBatch);
+        if (currentStageBatchIdx !== -1 && currentStageBatchIdx < stageBatches.length - 1) {
+          const nextBatch = stageBatches[currentStageBatchIdx + 1];
+          const idx1 = batchPriorityOrder.indexOf(currentBatch);
+          const idx2 = batchPriorityOrder.indexOf(nextBatch);
+          if (idx1 !== -1 && idx2 !== -1) {
+            const nextOrder = [...batchPriorityOrder];
+            nextOrder[idx1] = nextBatch;
+            nextOrder[idx2] = currentBatch;
+            saveBatchOrder(nextOrder);
+          }
+          const reordered = swapBatchTaskPositions(tasks, nextBatch, currentBatch);
+          saveTasks(reordered);
+        } else {
+          shiftBatchPriority(currentBatch, 'right');
+        }
       }
     }
   };
@@ -2654,8 +2686,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                         const isRootStage = index === 0;
                         const currentBatchIdx = batchPriorityOrder.indexOf(t.batch || 'Batch 1');
-                        const canMoveUp = isRootStage ? (!isFirstInBatch || currentBatchIdx > 0) : !isFirstInBatch;
-                        const canMoveDown = isRootStage ? (!isLastInBatch || (currentBatchIdx !== -1 && currentBatchIdx < batchPriorityOrder.length - 1)) : !isLastInBatch;
+                        const stageBatches = Array.from(new Set(stageTasks.map((x) => x.batch || 'Batch 1')));
+                        const stageBatchIdx = stageBatches.indexOf(t.batch || 'Batch 1');
+
+                        const canMoveUp = posInBatch > 0 || (isRootStage && (stageBatchIdx > 0 || currentBatchIdx > 0));
+                        const canMoveDown = posInBatch < batchSiblings.length - 1 || (isRootStage && (stageBatchIdx < stageBatches.length - 1 || (currentBatchIdx !== -1 && currentBatchIdx < batchPriorityOrder.length - 1)));
 
                         const depNames = (t.dependencies || [])
                           .map((id) => tasks.find((x) => x.id === id))
@@ -2764,10 +2799,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                       e.stopPropagation();
                                       moveTaskWithinDagStage(t.id, stageTasks, 'up', isRootStage);
                                     }}
-                                    className="p-0.2 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    className="p-0.5 rounded text-zinc-300 hover:text-white hover:bg-white/10 disabled:opacity-20 transition"
                                     title={isFirstInBatch && isRootStage ? "Move entire batch UP" : "Move task UP"}
                                   >
-                                    <ArrowUp className="w-2 h-2" />
+                                    <ArrowUp className="w-2.5 h-2.5" />
                                   </button>
                                   <button
                                     disabled={!canMoveDown}
@@ -2775,10 +2810,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                       e.stopPropagation();
                                       moveTaskWithinDagStage(t.id, stageTasks, 'down', isRootStage);
                                     }}
-                                    className="p-0.2 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    className="p-0.5 rounded text-zinc-300 hover:text-white hover:bg-white/10 disabled:opacity-20 transition"
                                     title={isLastInBatch && isRootStage ? "Move entire batch DOWN" : "Move task DOWN"}
                                   >
-                                    <ArrowDown className="w-2 h-2" />
+                                    <ArrowDown className="w-2.5 h-2.5" />
                                   </button>
                                 </div>
 
