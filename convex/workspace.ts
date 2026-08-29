@@ -10,6 +10,10 @@ const workspacePayload = v.object({
   activeTurnGroupName: v.string(),
 });
 
+function payloadsEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export const me = query({
   args: {},
   handler: async (ctx) => {
@@ -37,6 +41,9 @@ export const save = mutation({
     if (!identity) throw new Error("Authentication required");
     const key = identity.subject;
     const existing = await ctx.db.query("workspaces").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    if (existing && payloadsEqual(existing.payload, args.payload)) {
+      return { ok: true as const, revision: existing.revision, updatedAt: existing.updatedAt };
+    }
     if ((!existing && args.expectedRevision !== 0) || (existing && existing.revision !== args.expectedRevision)) {
       return { ok: false as const, revision: existing?.revision ?? 0, updatedAt: existing?.updatedAt ?? 0 };
     }
@@ -61,6 +68,9 @@ export const forceSave = mutation({
     if (!identity) throw new Error("Authentication required");
     const key = identity.subject;
     const existing = await ctx.db.query("workspaces").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    if (existing && payloadsEqual(existing.payload, args.payload)) {
+      return { ok: true as const, revision: existing.revision, updatedAt: existing.updatedAt };
+    }
     const revision = (existing?.revision ?? 0) + 1;
     const updatedAt = Date.now();
     if (existing) {
