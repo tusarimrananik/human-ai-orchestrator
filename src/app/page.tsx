@@ -581,6 +581,34 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setIsNewBatchInputOpen(false);
   };
 
+  const createNextBatchAfter = (targetBatch: string) => {
+    const targetIdx = batchPriorityOrder.indexOf(targetBatch);
+    if (targetIdx === -1) return;
+
+    let nextName = '';
+    const match = targetBatch.match(/^Batch\s+(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      let candidateNum = num + 1;
+      while (batchPriorityOrder.includes(`Batch ${candidateNum}`)) {
+        candidateNum++;
+      }
+      nextName = `Batch ${candidateNum}`;
+    } else {
+      let candidate = `${targetBatch} 2`;
+      let counter = 2;
+      while (batchPriorityOrder.includes(candidate)) {
+        counter++;
+        candidate = `${targetBatch} ${counter}`;
+      }
+      nextName = candidate;
+    }
+
+    const newOrder = [...batchPriorityOrder];
+    newOrder.splice(targetIdx + 1, 0, nextName);
+    saveBatchOrder(newOrder);
+  };
+
   const handleDeleteBatch = (batchToDelete: string) => {
     if (batchPriorityOrder.length <= 1) return;
     const next = batchPriorityOrder.filter((b) => b !== batchToDelete);
@@ -2329,6 +2357,17 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     >
                       <ArrowRight className="w-2.5 h-2.5" />
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        createNextBatchAfter(b);
+                      }}
+                      className="p-0.2 hover:text-white hover:bg-white/20 rounded ml-0.5"
+                      title={`Create next batch right next to ${b}`}
+                      aria-label={`Create next batch right next to ${b}`}
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                    </button>
                   </div>
                 </div>
               );
@@ -2966,19 +3005,34 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   const count = filtered.filter((t) => (t.batch || 'Batch 1') === bTag).length;
                   const theme = getBatchTheme(bTag, batchPriorityOrder);
                   return (
-                    <button
+                    <div
                       key={bTag}
                       style={theme.badgeStyle}
-                      onClick={() => {
-                        const col = document.getElementById(`batch-col-${bTag}`);
-                        col?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
-                      }}
-                      className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border transition flex items-center gap-1 flex-shrink-0 hover:brightness-125 shadow-sm"
-                      title={`Jump to ${bTag}`}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold transition flex-shrink-0 shadow-sm"
                     >
-                      <span>{theme.short || bTag}</span>
-                      <span className="px-1 py-0.2 rounded-full bg-black/40 text-[8px]">{count}</span>
-                    </button>
+                      <button
+                        onClick={() => {
+                          const col = document.getElementById(`batch-col-${bTag}`);
+                          col?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+                        }}
+                        className="hover:underline flex items-center gap-1"
+                        title={`Jump to ${bTag}`}
+                      >
+                        <span>{theme.short || bTag}</span>
+                        <span className="px-1 py-0.2 rounded-full bg-black/40 text-[8px]">{count}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          createNextBatchAfter(bTag);
+                        }}
+                        className="p-0.2 hover:text-white hover:bg-white/20 rounded ml-0.5"
+                        title={`Create next batch right next to ${bTag}`}
+                        aria-label={`Create next batch right next to ${bTag}`}
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
                   );
                 })}
 
