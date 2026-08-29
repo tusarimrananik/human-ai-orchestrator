@@ -2,7 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const workspacePayload = v.object({
-  schemaVersion: v.literal(1),
+  schemaVersion: v.union(v.literal(1), v.literal(2)),
   tasks: v.array(v.any()),
   batchPriorityOrder: v.array(v.string()),
   parallelGroups: v.array(v.object({ id: v.string(), name: v.string(), slotLimit: v.number() })),

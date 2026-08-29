@@ -11,7 +11,7 @@ import {
   collapseHiddenDagTasks,
   insertDagTaskBefore,
 } from '@/lib/dag-layout';
-import { normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
+import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import {
   Play,
   CheckCircle2,
@@ -103,13 +103,23 @@ const PARALLEL_GROUPS_KEY = 'smart_task_parallel_groups_v1';
 const ACTIVE_TURN_KEY = 'smart_task_active_turn_v1';
 const PARALLEL_MODE_KEY = 'smart_task_parallel_mode_v1';
 type WorkspacePayload = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   tasks: Task[];
   batchPriorityOrder: BatchTag[];
   parallelGroups: ParallelGroupConfig[];
   isParallelModeActive: boolean;
   activeTurnGroupName: string;
 };
+
+function migrateOptionalRanks(tasks: Task[], schemaVersion?: number): Task[] {
+  if ((schemaVersion || 1) < 2) {
+    return tasks.map((task) => {
+      const { rank: _rank, ...withoutRank } = task;
+      return withoutRank;
+    });
+  }
+  return normalizeTaskRanks(tasks, (task) => task.manualStatus === 'done');
+}
 
 const DEFAULT_PARALLEL_GROUPS: ParallelGroupConfig[] = [
   { id: 'pgrp_dev', name: 'Development', slotLimit: 3 },
@@ -458,7 +468,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const stored = localStorage.getItem(storageKey) || (canClaimLegacy ? localStorage.getItem(STORAGE_KEY) : null);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setTasks(normalizeTaskRanks(
+        const storedEnvelope = JSON.parse(localStorage.getItem(syncEnvelopeKey) || 'null') as { payload?: { schemaVersion?: number } } | null;
+        setTasks(migrateOptionalRanks(
           parsed.map((t: any, idx: number) => ({
             ...t,
             taskType: t.taskType || (t.isGoal ? 'goal' : 'normal'),
@@ -471,7 +482,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
             parallelGroup: t.parallelGroup || '',
             subTasks: t.subTasks || [],
           })),
-          (task) => task.manualStatus === 'done'
+          storedEnvelope?.payload?.schemaVersion
         ));
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
@@ -526,7 +537,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const payload = remoteWorkspace.payload as WorkspacePayload;
       remoteRevisionRef.current = remoteWorkspace.revision;
       lastRemoteHashRef.current = JSON.stringify(payload);
-      const rankedTasks = normalizeTaskRanks(payload.tasks, (task) => task.manualStatus === 'done');
+      const rankedTasks = migrateOptionalRanks(payload.tasks, payload.schemaVersion);
       setTasks(rankedTasks);
       setBatchPriorityOrder(payload.batchPriorityOrder as BatchTag[]);
       setParallelGroups(payload.parallelGroups);
@@ -549,7 +560,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   useEffect(() => {
     if (!mounted || !syncReadyRef.current) return;
     const payload: WorkspacePayload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       tasks,
       batchPriorityOrder,
       parallelGroups,
@@ -605,6 +616,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   const changeTaskRank = (taskId: string, rank: number) => {
     saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done'));
+  };
+
+  const removeTaskRank = (taskId: string) => {
+    saveTasks(clearTaskRank(tasks, taskId, (task) => task.manualStatus === 'done'));
   };
 
   const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
@@ -1775,9 +1790,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 <input
                   type="number"
                   min={1}
-                  max={rankedTasks.length}
-                  value={t.rank || rankedTasks.length}
-                  onChange={(e) => changeTaskRank(t.id, Number(e.target.value))}
+                  max={rankedTasks.length + (t.rank ? 0 : 1)}
+                  placeholder="—"
+                  value={t.rank ?? ''}
+                  onChange={(e) => e.target.value === '' ? removeTaskRank(t.id) : changeTaskRank(t.id, Number(e.target.value))}
                   className="w-8 bg-transparent text-center font-mono outline-none"
                   aria-label={`Rank ${t.name}`}
                 />
@@ -2421,9 +2437,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   <input
                                     type="number"
                                     min={1}
-                                    max={rankedTasks.length}
-                                    value={t.rank || rankedTasks.length}
-                                    onChange={(e) => changeTaskRank(t.id, Number(e.target.value))}
+                                    max={rankedTasks.length + (t.rank ? 0 : 1)}
+                                    placeholder="—"
+                                    value={t.rank ?? ''}
+                                    onChange={(e) => e.target.value === '' ? removeTaskRank(t.id) : changeTaskRank(t.id, Number(e.target.value))}
                                     className="w-7 bg-transparent text-center font-mono outline-none"
                                     aria-label={`Rank ${t.name}`}
                                   />

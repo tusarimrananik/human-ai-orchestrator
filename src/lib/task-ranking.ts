@@ -5,6 +5,10 @@ export interface RankableTask {
   createdAt?: number;
 }
 
+function hasRank(task: RankableTask): boolean {
+  return Number.isInteger(task.rank) && (task.rank as number) > 0;
+}
+
 function fallbackOrder(task: RankableTask, sourceIndex: number): number {
   if (typeof task.order === 'number') return task.order;
   if (typeof task.createdAt === 'number') return task.createdAt;
@@ -17,12 +21,12 @@ export function rankActiveTasks<T extends RankableTask>(
 ): T[] {
   return tasks
     .map((task, sourceIndex) => ({ task, sourceIndex }))
-    .filter(({ task }) => !isDone(task))
-    .sort((a, b) => {
-      const rankA = Number.isInteger(a.task.rank) && (a.task.rank as number) > 0 ? (a.task.rank as number) : Number.MAX_SAFE_INTEGER;
-      const rankB = Number.isInteger(b.task.rank) && (b.task.rank as number) > 0 ? (b.task.rank as number) : Number.MAX_SAFE_INTEGER;
-      return rankA - rankB || fallbackOrder(a.task, a.sourceIndex) - fallbackOrder(b.task, b.sourceIndex) || a.sourceIndex - b.sourceIndex;
-    })
+    .filter(({ task }) => !isDone(task) && hasRank(task))
+    .sort((a, b) =>
+      (a.task.rank as number) - (b.task.rank as number)
+      || fallbackOrder(a.task, a.sourceIndex) - fallbackOrder(b.task, b.sourceIndex)
+      || a.sourceIndex - b.sourceIndex
+    )
     .map(({ task }) => task);
 }
 
@@ -30,8 +34,9 @@ export function normalizeTaskRanks<T extends RankableTask>(
   tasks: readonly T[],
   isDone: (task: T) => boolean
 ): T[] {
-  const active = rankActiveTasks(tasks, isDone);
-  const rankById = new Map(active.map((task, index) => [task.id, index + 1]));
+  const ranked = rankActiveTasks(tasks, isDone);
+  const rankById = new Map(ranked.map((task, index) => [task.id, index + 1]));
+
   return tasks.map((task) => {
     const rank = rankById.get(task.id);
     if (rank === undefined) {
@@ -48,14 +53,13 @@ export function setTaskRank<T extends RankableTask>(
   requestedRank: number,
   isDone: (task: T) => boolean
 ): T[] {
-  const active = rankActiveTasks(tasks, isDone);
-  const currentIndex = active.findIndex((task) => task.id === taskId);
-  if (currentIndex === -1) return normalizeTaskRanks(tasks, isDone);
+  const target = tasks.find((task) => task.id === taskId);
+  if (!target || isDone(target)) return normalizeTaskRanks(tasks, isDone);
 
-  const [moved] = active.splice(currentIndex, 1);
-  const nextIndex = Math.min(Math.max(Math.trunc(requestedRank) - 1, 0), active.length);
-  active.splice(nextIndex, 0, moved);
-  const rankById = new Map(active.map((task, index) => [task.id, index + 1]));
+  const ranked = rankActiveTasks(tasks, isDone).filter((task) => task.id !== taskId);
+  const nextIndex = Math.min(Math.max(Math.trunc(requestedRank) - 1, 0), ranked.length);
+  ranked.splice(nextIndex, 0, target);
+  const rankById = new Map(ranked.map((task, index) => [task.id, index + 1]));
 
   return tasks.map((task) => {
     const rank = rankById.get(task.id);
@@ -65,4 +69,19 @@ export function setTaskRank<T extends RankableTask>(
     }
     return { ...task, rank };
   });
+}
+
+export function clearTaskRank<T extends RankableTask>(
+  tasks: readonly T[],
+  taskId: string,
+  isDone: (task: T) => boolean
+): T[] {
+  return normalizeTaskRanks(
+    tasks.map((task) => {
+      if (task.id !== taskId) return { ...task };
+      const { rank: _rank, ...withoutRank } = task;
+      return withoutRank as T;
+    }),
+    isDone
+  );
 }
