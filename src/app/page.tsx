@@ -15,6 +15,7 @@ import {
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
+import { nextSyncStatusAfterSave } from '@/lib/workspace-sync';
 import {
   Play,
   CheckCircle2,
@@ -473,13 +474,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
     if (hash === lastRemoteHashRef.current) return;
     pendingPayloadRef.current = payload;
     localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteRevisionRef.current, dirty: true }));
-    setSyncStatus('saving');
 
     const timer = window.setTimeout(async () => {
       if (saveInFlightRef.current || !pendingPayloadRef.current) return;
       saveInFlightRef.current = true;
       const sending = pendingPayloadRef.current;
       const sendingHash = JSON.stringify(sending);
+      setSyncStatus('saving');
       try {
         let result = await saveRemoteWorkspace({ payload: sending, expectedRevision: remoteRevisionRef.current });
         if (!result.ok) {
@@ -487,9 +488,17 @@ function OrchestratorPage({ userId }: { userId: string }) {
         }
         remoteRevisionRef.current = result.revision;
         lastRemoteHashRef.current = sendingHash;
-        pendingPayloadRef.current = null;
-        localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: sending, baseRevision: result.revision, dirty: false }));
-        setSyncStatus('saved');
+        const queuedHash = pendingPayloadRef.current
+          ? JSON.stringify(pendingPayloadRef.current)
+          : null;
+        const nextStatus = nextSyncStatusAfterSave(sendingHash, queuedHash);
+        if (nextStatus === 'saved') {
+          pendingPayloadRef.current = null;
+          localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: sending, baseRevision: result.revision, dirty: false }));
+        } else if (pendingPayloadRef.current) {
+          localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload: pendingPayloadRef.current, baseRevision: result.revision, dirty: true }));
+        }
+        setSyncStatus(nextStatus);
       } catch (error) {
         console.warn('Convex sync deferred:', error);
         setSyncStatus('offline');
