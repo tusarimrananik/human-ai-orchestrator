@@ -214,3 +214,21 @@ test('groups tasks strictly by batch weight so a later batch never splits an exi
   // Both B2 tasks must be grouped together before B4
   deepEqual(result.levels[0].map((t) => t.id), ['b2-task1', 'b2-task2', 'b4-task1']);
 });
+
+test('hiding a parent stage shifts child tasks to root where they sort by batch priority', () => {
+  const tasks = [
+    { id: 'parent-1', batch: 'B3', order: 0, dependencies: [] },
+    { id: 'child-b1', batch: 'B1', order: 1, dependencies: ['parent-1'] },
+    { id: 'child-b2', batch: 'B2', order: 2, dependencies: ['parent-1'] },
+  ];
+
+  // Hide parent-1 (Stage 0)
+  const visible = collapseHiddenDagTasks(tasks, (t) => t.id === 'parent-1');
+  const batchWeights = (b: string) => ({ B1: 0, B2: 1, B3: 2 }[b] ?? 99);
+  const compareSource = createSourceOrderComparator(visible);
+
+  const result = alignDagLevels(visible, (a, b) => batchWeights(a.batch) - batchWeights(b.batch) || compareSource(a, b));
+
+  // Children shifted into Stage 0 (Root) and are sorted strictly by batch priority: B1 before B2
+  deepEqual(result.levels[0].map((t) => t.id), ['child-b1', 'child-b2']);
+});

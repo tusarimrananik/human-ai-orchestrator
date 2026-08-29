@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useAuthActions } from '@convex-dev/auth/react';
 import { api } from '../../convex/_generated/api';
@@ -54,6 +54,7 @@ import {
   RotateCcw,
   Ban,
   Eye,
+  EyeOff,
   Boxes,
   Filter,
   ArrowUpDown,
@@ -225,7 +226,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [ownerFilter, setOwnerFilter] = useState('');
   const [batchFilter, setBatchFilter] = useState('');
   const [parallelGroupFilter, setParallelGroupFilter] = useState('');
-  const [dagSortMode, setDagSortMode] = useState<DagSortMode>('manual');
+  const [hiddenStageIndices, setHiddenStageIndices] = useState<number[]>([]);
   const [batchSortMode, setBatchSortMode] = useState<BatchSortMode>('manual');
   const [batchSequenceSortMode, setBatchSequenceSortMode] = useState<BatchSequenceSortMode>('custom');
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
@@ -1122,7 +1123,51 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
     return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
   });
-  const visibleDagTasks = collapseHiddenDagTasks(filtered, (task) => task.manualStatus === 'done');
+
+  // 1. Compute full unhidden DAG stage indices for all active tasks
+  const activeUnfinishedTasks = useMemo(
+    () => filtered.filter((t) => t.manualStatus !== 'done'),
+    [filtered]
+  );
+
+  const baseLevelsResult = useMemo(() => {
+    const compareSource = createSourceOrderComparator(activeUnfinishedTasks);
+    return alignDagLevels(
+      activeUnfinishedTasks,
+      (a, b) => getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSource(a, b)
+    );
+  }, [activeUnfinishedTasks, batchPriorityOrder]);
+
+  const taskStageIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    baseLevelsResult.orderedLevels.forEach((levelNum: number, stageIndex: number) => {
+      (baseLevelsResult.levels[levelNum] || []).forEach((t: Task) => {
+        map.set(t.id, stageIndex);
+      });
+    });
+    return map;
+  }, [baseLevelsResult]);
+
+  // 2. Collapse hidden stages & done tasks
+  const visibleDagTasks = useMemo(() => {
+    const isHidden = (task: Task) => {
+      if (task.manualStatus === 'done') return true;
+      const sIdx = taskStageIndexMap.get(task.id);
+      return sIdx !== undefined && hiddenStageIndices.includes(sIdx);
+    };
+    return collapseHiddenDagTasks(filtered, isHidden);
+  }, [filtered, taskStageIndexMap, hiddenStageIndices]);
+
+  const toggleHideStage = (stageIdx: number) => {
+    setHiddenStageIndices((prev) =>
+      prev.includes(stageIdx) ? prev.filter((i) => i !== stageIdx) : [...prev, stageIdx]
+    );
+  };
+
+  const unhideAllStages = () => {
+    setHiddenStageIndices([]);
+  };
+
   const rankedTasks = rankActiveTasks(filtered, (task) => task.manualStatus === 'done');
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
@@ -1199,7 +1244,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }, 60);
 
     return () => clearTimeout(timer);
-  }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, dagSortMode]);
+  }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, hiddenStageIndices]);
 
   const startInProgress = (id: string) => {
     saveTasks(
@@ -1746,23 +1791,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
     return chain;
   };
 
-  // Sort roots by the selected DAG rule, then align every later stage with
-  // its earliest parent lane so a complete chain moves together when sorted.
+  // Topologically align DAG stages with permanent Batch Priority Sorting on roots
   const getAlignedLevels = () => {
     const compareSourceOrder = createSourceOrderComparator(visibleDagTasks);
     const compareTasks = (a: Task, b: Task): number => {
-      switch (dagSortMode) {
-        case 'batch':
-          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
-        case 'name':
-          return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || compareSourceOrder(a, b);
-        case 'owner':
-          return a.owner.localeCompare(b.owner) || compareSourceOrder(a, b);
-        case 'status':
-          return computedStatus(a).localeCompare(computedStatus(b)) || compareSourceOrder(a, b);
-        default:
-          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
-      }
+      return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
     };
     return alignDagLevels(visibleDagTasks, compareTasks);
   };
@@ -2824,23 +2857,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             <div className="relative min-w-max pb-6 pl-7" ref={stageRef}>
               <div className="sticky left-0 z-30 mb-3 flex w-fit items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-950/95 px-2.5 py-1.5 shadow-lg">
-                <label htmlFor="dag-sort" className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
-                  <Layers className="h-3 w-3 text-indigo-400" /> Sort by
-                </label>
-                <select
-                  id="dag-sort"
-                  aria-label="Sort DAG tasks"
-                  value={dagSortMode}
-                  onChange={(e) => setDagSortMode(e.target.value as DagSortMode)}
-                  className="min-w-32 rounded border border-indigo-500/60 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 outline-none focus:border-indigo-400"
-                >
-                  <option value="manual">Manual order</option>
-                  <option value="batch">Batch priority</option>
-                  <option value="name">Task name A–Z</option>
-                  <option value="owner">Owner A–Z</option>
-                  <option value="status">Status A–Z</option>
-                </select>
-                <span className="text-[9px] text-zinc-500">Children follow parent rows</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400 flex items-center gap-1">
+                  <Layers className="h-3.5 w-3.5 text-indigo-400" /> Batch Priority Order
+                </span>
+
+                {hiddenStageIndices.length > 0 && (
+                  <button
+                    onClick={unhideAllStages}
+                    className="px-2 py-0.5 rounded bg-indigo-950/90 border border-indigo-500/60 hover:bg-indigo-900 text-indigo-200 text-[10px] font-bold flex items-center gap-1 shadow transition"
+                    title="Restore and unhide all hidden stages"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Unhide {hiddenStageIndices.length} {hiddenStageIndices.length === 1 ? 'stage' : 'stages'}</span>
+                  </button>
+                )}
 
                 {renderBulkMoveBar()}
               </div>
@@ -2892,23 +2922,38 @@ function OrchestratorPage({ userId }: { userId: string }) {
                         gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 100px)`,
                       }}
                     >
-                      {/* Stage Header with Stage name, task count & + Add Task button */}
+                      {/* Stage Header with Stage name, task count, Hide Stage button & + Add Task button */}
                       <div className="h-8 flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-md px-2 shadow-sm" style={{ gridRow: 1 }}>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[9px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-[9px] font-mono uppercase font-bold text-zinc-300 tracking-wider truncate">
                             {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
                           </span>
-                          <span className="text-[8px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                          <span className="text-[8px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 flex-shrink-0">
                             {stageTasks.length}
                           </span>
                         </div>
-                        <button
-                          onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked', undefined, batchPriorityOrder[0] || 'Batch 1')}
-                          className="flex items-center gap-0.5 text-[8px] px-1.5 py-0.2 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
-                          title={`Add new task to ${index === 0 ? 'Root' : `Stage ${index + 1}`}`}
-                        >
-                          <Plus className="w-2 h-2" /> Add
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {stageTasks.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const sampleTask = stageTasks[0];
+                                const originalStageIdx = sampleTask ? taskStageIndexMap.get(sampleTask.id) ?? index : index;
+                                toggleHideStage(originalStageIdx);
+                              }}
+                              className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/10 transition"
+                              title="Hide this stage (collapses tasks and shifts child tasks left to parent/root)"
+                            >
+                              <EyeOff className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked', undefined, batchPriorityOrder[0] || 'Batch 1')}
+                            className="flex items-center gap-0.5 text-[8px] px-1.5 py-0.2 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
+                            title={`Add new task to ${index === 0 ? 'Root' : `Stage ${index + 1}`}`}
+                          >
+                            <Plus className="w-2 h-2" /> Add
+                          </button>
+                        </div>
                       </div>
 
                       {stageTasks.map((t) => {
