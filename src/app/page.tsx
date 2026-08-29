@@ -2677,6 +2677,55 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   <option value="status">Status A–Z</option>
                 </select>
                 <span className="text-[9px] text-zinc-500">Children follow parent rows</span>
+
+                {selectedBatchTaskIds.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-0.5 rounded-md shadow animate-in fade-in ml-2">
+                    <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
+                      <CheckSquare className="w-3 h-3 text-indigo-400" />
+                      <span className="bg-indigo-600 text-white px-1.5 py-0.2 rounded-full text-[9px] font-mono">
+                        {selectedBatchTaskIds.length}
+                      </span>
+                      selected
+                    </span>
+
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 ml-1">Move to:</span>
+
+                    <select
+                      value={bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1'}
+                      onChange={(e) => setBulkTargetBatch(e.target.value)}
+                      style={getBatchTheme(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1', batchPriorityOrder).dropdownStyle}
+                      className="text-[9px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer"
+                    >
+                      {batchPriorityOrder.map((b) => (
+                        <option
+                          key={b}
+                          value={b}
+                          style={{
+                            backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
+                            color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
+                          }}
+                        >
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => moveSelectedTasksToBatch(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1')}
+                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
+                      title="Move all selected tasks to the selected batch"
+                    >
+                      <ArrowRight className="w-2.5 h-2.5" /> Move
+                    </button>
+
+                    <button
+                      onClick={clearBatchTaskSelection}
+                      className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
               <svg
@@ -2770,6 +2819,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                         const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
                         const totalSubsCount = (t.subTasks || []).length;
+                        const isSelected = selectedBatchTaskIds.includes(t.id);
 
                         return (
                           <div
@@ -2784,6 +2834,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
                               gridRow: (lanes.get(t.id) ?? 0) + 2,
                             }}
                             className={`group relative overflow-visible w-[200px] h-[100px] p-2 rounded-lg border-2 shadow flex flex-col justify-between transition-all select-none ${
+                              isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/40' : ''
+                            } ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
@@ -2839,6 +2891,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
                             {/* Card Top Row */}
                             <div className="flex items-center justify-between gap-1 flex-shrink-0">
                               <div className="flex items-center gap-1 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleSelectBatchTask(t.id);
+                                  }}
+                                  className="w-3 h-3 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+                                  title="Select task for bulk batch move"
+                                />
                                 <label
                                   style={batchTheme.badgeStyle}
                                   className="flex flex-shrink-0 items-center gap-0.5 rounded border px-1 py-0.2 text-[8px] font-black shadow-sm cursor-pointer"
