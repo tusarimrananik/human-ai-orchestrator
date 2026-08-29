@@ -34,6 +34,21 @@ test('generates unique distinct colors for numbered and custom batches', () => {
   }
 });
 
+test('adjacent batches have maximally distant hues across the color wheel', () => {
+  const h1 = getBatchHue('Batch 1'); // 215 (Blue)
+  const h2 = getBatchHue('Batch 2'); // 350 (Red)
+  const h3 = getBatchHue('Batch 3'); // 145 (Green)
+  const h4 = getBatchHue('Batch 4'); // 42 (Gold)
+
+  const diff1_2 = Math.abs(h1 - h2);
+  const diff2_3 = Math.abs(h2 - h3);
+  const diff3_4 = Math.abs(h3 - h4);
+
+  ok(diff1_2 > 100, 'Batch 1 and 2 are on opposite sides of color wheel');
+  ok(diff2_3 > 100, 'Batch 2 and 3 are on opposite sides of color wheel');
+  ok(diff3_4 > 90, 'Batch 3 and 4 are on opposite sides of color wheel');
+});
+
 test('syncBatchPriorityWithTasks appends any missing task batches into order so DAG and Batch view always match', () => {
   const current = ['Batch 1', 'Batch 2'];
   const tasks = [

@@ -8,7 +8,25 @@ export interface BatchTheme {
   descStyle: React.CSSProperties;
 }
 
-// Golden angle in degrees (~137.50776405°), provides optimal dispersion across 360° hue circle
+// Curated maximally separated hues spanning the color wheel
+// Consecutive numbers jump between opposite/distinct spectrum quadrants:
+// Blue (215) -> Red (350) -> Green (145) -> Gold (42) -> Purple (275) -> Cyan (185) -> Magenta (325) -> Orange (22)...
+const CURATED_HUES: number[] = [
+  215, // B1: Electric Sky Blue
+  350, // B2: Crimson Ruby Red
+  145, // B3: Emerald Green
+  42,  // B4: Bright Amber Gold
+  275, // B5: Electric Purple
+  185, // B6: Neon Aqua / Cyan
+  325, // B7: Hot Magenta Pink
+  22,  // B8: Vivid Tangerine Orange
+  95,  // B9: Bright Lime Green
+  245, // B10: Deep Royal Indigo
+  165, // B11: Seafoam Teal
+  300, // B12: Bright Violet
+];
+
+// Golden angle in degrees (~137.50776405°) for batch 13+ and arbitrary custom names
 const GOLDEN_ANGLE = 137.508;
 
 export function getBatchHue(rawBatch: string = 'Batch 1', _allBatches?: string[]): number {
@@ -17,7 +35,10 @@ export function getBatchHue(rawBatch: string = 'Batch 1', _allBatches?: string[]
   const match = batch.match(/^Batch\s+(\d+)$/i);
   if (match) {
     const num = parseInt(match[1], 10);
-    return Math.round((210 + (num - 1) * GOLDEN_ANGLE) % 360);
+    if (num >= 1 && num <= CURATED_HUES.length) {
+      return CURATED_HUES[num - 1];
+    }
+    return Math.round((215 + (num - 1) * GOLDEN_ANGLE) % 360);
   }
 
   // Stable high-dispersion hash for arbitrary custom batch names
@@ -27,7 +48,7 @@ export function getBatchHue(rawBatch: string = 'Batch 1', _allBatches?: string[]
     hash |= 0;
   }
   const hashIndex = Math.abs(hash) % 360;
-  return Math.round((210 + hashIndex * GOLDEN_ANGLE) % 360);
+  return Math.round((215 + hashIndex * GOLDEN_ANGLE) % 360);
 }
 
 export function getBatchTheme(rawBatch: string = 'Batch 1', _allBatches?: string[]): BatchTheme {
@@ -36,22 +57,22 @@ export function getBatchTheme(rawBatch: string = 'Batch 1', _allBatches?: string
   const short = match ? `B${match[1]}` : batch.length > 5 ? batch.slice(0, 4) : batch;
   const hue = getBatchHue(batch);
 
-  // Full-element rich colored boxes with high contrast
-  const cardBg = `hsla(${hue}, 85%, 8%, 0.75)`;
-  const cardBorder = `hsla(${hue}, 85%, 55%, 0.85)`;
-  const cardText = `hsla(${hue}, 95%, 92%, 1)`;
+  // Vivid, full-element colored boxes with clear contrast
+  const cardBg = `hsla(${hue}, 85%, 13%, 0.88)`;
+  const cardBorder = `hsla(${hue}, 90%, 55%, 0.95)`;
+  const cardText = `hsla(${hue}, 95%, 95%, 1)`;
 
-  const badgeBg = `hsla(${hue}, 85%, 20%, 0.6)`;
-  const badgeBorder = `hsla(${hue}, 90%, 60%, 0.9)`;
-  const badgeText = `hsla(${hue}, 95%, 90%, 1)`;
+  const badgeBg = `hsla(${hue}, 90%, 25%, 0.8)`;
+  const badgeBorder = `hsla(${hue}, 95%, 65%, 1)`;
+  const badgeText = `hsla(${hue}, 95%, 95%, 1)`;
 
-  const dropdownBg = `hsla(${hue}, 85%, 8%, 0.95)`;
-  const dropdownBorder = `hsla(${hue}, 85%, 55%, 0.85)`;
-  const dropdownText = `hsla(${hue}, 95%, 90%, 1)`;
+  const dropdownBg = `hsla(${hue}, 90%, 10%, 0.95)`;
+  const dropdownBorder = `hsla(${hue}, 90%, 60%, 1)`;
+  const dropdownText = `hsla(${hue}, 95%, 95%, 1)`;
 
-  const descBg = `hsla(${hue}, 80%, 5%, 0.85)`;
-  const descBorder = `hsla(${hue}, 70%, 30%, 0.7)`;
-  const descText = `hsla(${hue}, 90%, 88%, 0.95)`;
+  const descBg = `hsla(${hue}, 85%, 8%, 0.9)`;
+  const descBorder = `hsla(${hue}, 75%, 35%, 0.8)`;
+  const descText = `hsla(${hue}, 90%, 90%, 1)`;
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: cardBg,
