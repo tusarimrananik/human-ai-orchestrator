@@ -18,11 +18,14 @@ test('generates unique distinct colors for arbitrary number of batches without c
   deepEqual(uniqueHues.size, batchNames.length);
 
   for (const theme of themes) {
+    ok(theme.cardStyle.backgroundColor, 'has full-element card background');
+    ok(theme.cardStyle.borderColor, 'has full card border');
+    ok(theme.cardStyle.color, 'has card text color');
     ok(theme.badgeStyle.backgroundColor, 'has badge background');
     ok(theme.badgeStyle.borderColor, 'has badge border');
     ok(theme.dropdownStyle.backgroundColor, 'has dropdown background');
     ok(theme.dropdownStyle.borderColor, 'has dropdown border');
-    ok(theme.borderAccentStyle.borderLeftColor, 'has border accent');
+    ok(theme.descStyle.backgroundColor, 'has desc background');
   }
 });
 

@@ -1653,24 +1653,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
     return (
       <div
         key={t.id}
-        style={{
-          borderLeftColor: batchTheme.badgeStyle.borderColor,
-          borderLeftWidth: '4px',
-        }}
-        className="bg-zinc-900/90 border border-zinc-800 rounded-lg p-3 shadow-md hover:border-zinc-700 transition flex items-center justify-between gap-3 select-none"
+        style={batchTheme.cardStyle}
+        className="border-2 rounded-xl p-3.5 shadow-lg flex items-center justify-between gap-3.5 select-none transition"
       >
         {/* Left: Rank badge & clear */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex flex-col items-center justify-center flex-shrink-0">
             <label
-              style={{
-                backgroundColor: 'rgba(99, 102, 241, 0.15)',
-                borderColor: 'rgba(99, 102, 241, 0.5)',
-              }}
-              className="flex items-center gap-0.5 rounded-md border px-2 py-1 text-xs font-black text-indigo-200 shadow-sm"
-              title="Execution Rank (Change number to reorder)"
+              style={batchTheme.badgeStyle}
+              className="flex items-center gap-0.5 rounded-lg border px-2 py-1 text-xs font-black shadow-md cursor-pointer"
+              title="Execution Rank (Type to reorder)"
             >
-              <span className="text-indigo-400 font-mono text-xs">#</span>
+              <span className="opacity-80 font-mono text-xs">#</span>
               <input
                 type="number"
                 min={1}
@@ -1681,13 +1675,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     ? removeTaskRank(t.id)
                     : changeTaskRank(t.id, Number(e.target.value))
                 }
-                className="w-8 bg-transparent text-center font-mono font-bold text-white text-xs outline-none"
+                className="w-8 bg-transparent text-center font-mono font-bold text-xs outline-none"
+                style={{ color: batchTheme.cardStyle.color }}
                 aria-label={`Rank ${t.name}`}
               />
             </label>
             <button
               onClick={() => removeTaskRank(t.id)}
-              className="text-[9px] text-zinc-500 hover:text-rose-400 mt-0.5"
+              className="text-[9px] opacity-70 hover:opacity-100 hover:text-rose-300 mt-1 font-semibold"
               title="Remove from ranked queue"
             >
               clear
@@ -1695,36 +1690,36 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
 
           {/* Center: Info */}
-          <div className="min-w-0 flex-1 space-y-1">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-black/40 border border-white/10 text-zinc-300">
+              <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-black/40 border border-white/20 text-zinc-100">
                 {t.owner}
               </span>
               <span
                 style={batchTheme.badgeStyle}
-                className="text-[9px] font-bold px-1.5 py-0.2 rounded border shadow-sm"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded border shadow-sm"
               >
                 {t.batch || 'Batch 1'}
               </span>
               {t.taskType === 'goal' && (
-                <span className="text-[8px] px-1.5 py-0.2 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5">
+                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold bg-amber-500/30 text-amber-200 border border-amber-400/50 flex items-center gap-0.5">
                   <Target className="w-2.5 h-2.5" /> Goal
                 </span>
               )}
               {t.isParallel && t.parallelGroup && (
-                <span className="text-[8px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5">
-                  <Split className="w-2 h-2 text-indigo-400" /> {t.parallelGroup}
+                <span className="text-[8px] px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 flex items-center gap-0.5">
+                  <Split className="w-2 h-2 text-indigo-300" /> {t.parallelGroup}
                 </span>
               )}
               <span
-                className={`text-[8px] font-bold uppercase px-1.5 py-0.2 rounded border ${
+                className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${
                   status === 'ready'
-                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                    ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200'
                     : status === 'progress'
-                    ? 'bg-blue-950/60 border-blue-500/50 text-blue-300 animate-pulse'
+                    ? 'bg-blue-950/80 border-blue-400 text-blue-200 animate-pulse'
                     : status === 'done'
-                    ? 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                    : 'bg-rose-950/60 border-rose-500/50 text-rose-300'
+                    ? 'bg-zinc-900/80 border-zinc-600 text-zinc-300'
+                    : 'bg-rose-950/80 border-rose-400 text-rose-200'
                 }`}
               >
                 {status}
@@ -1733,29 +1728,33 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
             <div
               onClick={() => openTaskModal(t.id)}
-              className="text-xs font-bold text-zinc-100 hover:text-white cursor-pointer hover:underline truncate"
+              className="text-sm font-bold hover:underline cursor-pointer truncate"
+              style={{ color: batchTheme.cardStyle.color }}
             >
               {t.name}
             </div>
 
             {t.description && (
-              <p className="text-[11px] text-zinc-400 truncate bg-zinc-950/40 px-1.5 py-0.5 rounded border border-zinc-800/80">
+              <p
+                style={batchTheme.descStyle}
+                className="text-[11px] truncate leading-tight px-2 py-1 rounded border shadow-inner"
+              >
                 {t.description}
               </p>
             )}
 
             {t.subTasks && t.subTasks.length > 0 && (
-              <div className="flex items-center gap-2 text-[10px] text-zinc-400">
-                <span className="text-emerald-400 font-mono font-bold flex items-center gap-1">
-                  <ListTodo className="w-3 h-3 text-indigo-400" />
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="font-mono font-bold flex items-center gap-1 opacity-90">
+                  <ListTodo className="w-3 h-3 text-indigo-300" />
                   {completedSubsCount}/{totalSubsCount} Subtasks
                 </span>
               </div>
             )}
 
             {waiting.length > 0 && (
-              <div className="text-[10px] text-rose-300 bg-rose-950/60 border border-rose-800/60 px-1.5 py-0.5 rounded truncate flex items-center gap-1 max-w-md">
-                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-400" />
+              <div className="text-[10px] text-rose-200 bg-rose-950/80 border border-rose-600/80 px-2 py-0.5 rounded truncate flex items-center gap-1 max-w-md">
+                <Lock className="w-2.5 h-2.5 flex-shrink-0 text-rose-300" />
                 <span className="truncate">Waiting for: {waiting.join(', ')}</span>
               </div>
             )}
@@ -1765,7 +1764,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         {/* Right: Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {durationDisplay && (
-            <div className="flex items-center gap-1 font-mono px-2 py-1 rounded text-[10px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/40">
+            <div className="flex items-center gap-1 font-mono px-2.5 py-1 rounded text-[10px] font-bold bg-blue-500/30 text-blue-100 border border-blue-400/60 shadow">
               <Timer className="w-3 h-3" />
               <span>{durationDisplay}</span>
             </div>
@@ -1774,7 +1773,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
           {status === 'ready' && (
             <button
               onClick={() => startInProgress(t.id)}
-              className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
+              className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
             >
               <Play className="w-3 h-3 fill-current" /> Start
             </button>
@@ -1788,14 +1787,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 setBlockParentId('');
                 setBlockNewParentName('');
               }}
-              className="px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
+              className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
             >
               <Eye className="w-3 h-3" /> Review
             </button>
           ) : status === 'progress' && t.taskType !== 'goal' ? (
             <button
               onClick={() => finishTask(t.id)}
-              className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
             >
               <Check className="w-3 h-3" /> Done
             </button>
@@ -1804,7 +1803,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
           {status === 'done' && (
             <button
               onClick={() => reopenTask(t.id)}
-              className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium"
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium shadow"
             >
               Reopen
             </button>
@@ -1812,7 +1811,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
           <button
             onClick={() => openTaskModal(t.id)}
-            className="p-1 text-zinc-400 hover:text-zinc-200"
+            className="p-1.5 text-zinc-300 hover:text-white rounded hover:bg-black/30 transition"
             title="Edit Task"
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -1846,18 +1845,19 @@ function OrchestratorPage({ userId }: { userId: string }) {
         onDragStart={(e) => handleDragStart(e, t.id)}
         onDragOver={handleDragOver}
         onDrop={() => handleDropOnTask(t.id)}
-        style={{
-          borderLeftColor: batchTheme.badgeStyle.borderColor,
-          borderLeftWidth: '3px',
-        }}
-        className={`p-2.5 rounded-md border border-zinc-800 bg-zinc-900/90 shadow-sm space-y-1.5 ${
+        style={batchTheme.cardStyle}
+        className={`p-2.5 rounded-lg border-2 shadow space-y-1.5 select-none ${
           draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
         }`}
       >
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1">
             {colKey !== 'done' && (
-              <label className="flex items-center gap-1 rounded border border-indigo-500/50 bg-indigo-950/70 px-1 py-0.5 text-[9px] font-black text-indigo-200" title="Execution rank">
+              <label
+                style={batchTheme.badgeStyle}
+                className="flex items-center gap-0.5 rounded border px-1 py-0.5 text-[9px] font-black shadow-sm cursor-pointer"
+                title="Execution rank"
+              >
                 #
                 <input
                   type="number"
@@ -1866,7 +1866,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   placeholder="—"
                   value={t.rank ?? ''}
                   onChange={(e) => e.target.value === '' ? removeTaskRank(t.id) : changeTaskRank(t.id, Number(e.target.value))}
-                  className="w-8 bg-transparent text-center font-mono outline-none"
+                  className="w-7 bg-transparent text-center font-mono outline-none font-bold"
+                  style={{ color: batchTheme.cardStyle.color }}
                   aria-label={`Rank ${t.name}`}
                 />
               </label>
@@ -1938,12 +1939,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
         </div>
 
-        <div className="text-xs font-bold leading-snug line-clamp-2 text-zinc-100">
+        <div
+          className="text-xs font-bold leading-snug line-clamp-2 truncate"
+          style={{ color: batchTheme.cardStyle.color }}
+        >
           {t.name}
         </div>
 
         {t.description && (
-          <p className="text-[11px] line-clamp-2 leading-relaxed p-1.5 rounded border border-zinc-800 bg-zinc-950/60 text-zinc-300">
+          <p
+            style={batchTheme.descStyle}
+            className="text-[11px] line-clamp-2 leading-relaxed p-1.5 rounded border"
+          >
             {t.description}
           </p>
         )}
@@ -2432,37 +2439,37 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </svg>
 
               <div
-                className="grid auto-cols-[260px] grid-flow-col gap-x-16 gap-y-4 items-start relative z-20 pt-1"
-                style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 148px)` }}
+                className="grid auto-cols-[200px] grid-flow-col gap-x-10 gap-y-3 items-start relative z-20 pt-1"
+                style={{ gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 100px)` }}
               >
                 {orderedLevels.map((level, index) => {
                   const stageTasks = levels[level] || [];
                   return (
                     <div
                       key={level}
-                      className="grid gap-y-4 items-start"
+                      className="grid gap-y-3 items-start"
                       style={{
                         gridColumn: index + 1,
                         gridRow: `1 / span ${Math.max(laneCount, 1) + 1}`,
-                        gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 148px)`,
+                        gridTemplateRows: `auto repeat(${Math.max(laneCount, 1)}, 100px)`,
                       }}
                     >
                       {/* Stage Header with Stage name, task count & + Add Task button */}
-                      <div className="h-9 flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 shadow-sm" style={{ gridRow: 1 }}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
+                      <div className="h-8 flex items-center justify-between bg-zinc-900/90 border border-zinc-800 rounded-md px-2 shadow-sm" style={{ gridRow: 1 }}>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] font-mono uppercase font-bold text-zinc-300 tracking-wider">
                             {index === 0 ? 'Root Available' : `Stage ${index + 1}`}
                           </span>
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
+                          <span className="text-[8px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400">
                             {stageTasks.length}
                           </span>
                         </div>
                         <button
                           onClick={() => openTaskModal(null, index === 0 ? 'ready' : 'blocked', undefined, batchPriorityOrder[0] || 'Batch 1')}
-                          className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
+                          className="flex items-center gap-0.5 text-[8px] px-1.5 py-0.2 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-semibold transition-colors"
                           title={`Add new task to ${index === 0 ? 'Root' : `Stage ${index + 1}`}`}
                         >
-                          <Plus className="w-2.5 h-2.5" /> Add
+                          <Plus className="w-2 h-2" /> Add
                         </button>
                       </div>
 
@@ -2493,11 +2500,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                             onDragOver={handleDragOver}
                             onDrop={() => handleDropOnTask(t.id)}
                             style={{
-                              borderLeftColor: batchTheme.badgeStyle.borderColor,
-                              borderLeftWidth: '4px',
+                              ...batchTheme.cardStyle,
                               gridRow: (lanes.get(t.id) ?? 0) + 2,
                             }}
-                            className={`group relative overflow-visible w-[260px] h-[148px] p-2.5 rounded-lg border border-zinc-800 bg-zinc-900/90 shadow-md flex flex-col justify-between transition-all select-none ${
+                            className={`group relative overflow-visible w-[200px] h-[100px] p-2 rounded-lg border-2 shadow flex flex-col justify-between transition-all select-none ${
                               draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                             }`}
                           >
@@ -2507,11 +2513,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 e.stopPropagation();
                                 openTaskModal(null, (t.dependencies || []).length > 0 ? 'blocked' : 'ready', t.dependencies, t.batch, { taskId: t.id, position: 'top' });
                               }}
-                              className="absolute -top-3 left-1/2 z-30 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              className="absolute -top-2.5 left-1/2 z-30 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
                               title={`Add parallel task above ${t.name} (same stage)`}
                               aria-label={`Add parallel task above ${t.name}`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2.5 w-2.5" />
                             </button>
                             <button
                               type="button"
@@ -2519,11 +2525,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 e.stopPropagation();
                                 openTaskModal(null, (t.dependencies || []).length > 0 ? 'blocked' : 'ready', t.dependencies, t.batch, { taskId: t.id, position: 'bottom' });
                               }}
-                              className="absolute -bottom-3 left-1/2 z-30 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              className="absolute -bottom-2.5 left-1/2 z-30 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
                               title={`Add parallel task below ${t.name} (same stage)`}
                               aria-label={`Add parallel task below ${t.name}`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2.5 w-2.5" />
                             </button>
                             <button
                               type="button"
@@ -2531,11 +2537,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 e.stopPropagation();
                                 openTaskModal(null, 'blocked', undefined, t.batch, { taskId: t.id, position: 'before' });
                               }}
-                              className="absolute -left-6 top-1/2 z-30 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              className="absolute -left-4 top-1/2 z-30 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
                               title={`Insert a task before ${t.name}`}
                               aria-label={`Insert a task before ${t.name}`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2.5 w-2.5" />
                             </button>
                             <button
                               type="button"
@@ -2543,17 +2549,21 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 e.stopPropagation();
                                 openTaskModal(null, 'blocked', [t.id], t.batch, { taskId: t.id, position: 'after' });
                               }}
-                              className="absolute -right-6 top-1/2 z-30 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
+                              className="absolute -right-4 top-1/2 z-30 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
                               title={`Add a parallel-capable task after ${t.name}`}
                               aria-label={`Add a task after ${t.name}`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2.5 w-2.5" />
                             </button>
 
-                            {/* Card Top Row: Fixed height */}
+                            {/* Card Top Row */}
                             <div className="flex items-center justify-between gap-1 flex-shrink-0">
                               <div className="flex items-center gap-1 min-w-0">
-                                <label className="flex flex-shrink-0 items-center gap-0.5 rounded border border-indigo-400/60 bg-indigo-950/80 px-1 py-0.5 text-[8px] font-black text-indigo-200" title="Execution rank">
+                                <label
+                                  style={batchTheme.badgeStyle}
+                                  className="flex flex-shrink-0 items-center gap-0.5 rounded border px-1 py-0.2 text-[8px] font-black shadow-sm cursor-pointer"
+                                  title="Execution rank"
+                                >
                                   #
                                   <input
                                     type="number"
@@ -2562,24 +2572,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                     placeholder="—"
                                     value={t.rank ?? ''}
                                     onChange={(e) => e.target.value === '' ? removeTaskRank(t.id) : changeTaskRank(t.id, Number(e.target.value))}
-                                    className="w-7 bg-transparent text-center font-mono outline-none"
+                                    className="w-5 bg-transparent text-center font-mono outline-none font-bold text-[9px]"
+                                    style={{ color: batchTheme.cardStyle.color }}
                                     aria-label={`Rank ${t.name}`}
                                   />
                                 </label>
-                                <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing flex-shrink-0" />
-                                <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
+                                <span className="text-[8px] px-1 rounded font-bold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
                                   {t.owner}
                                 </span>
-                                {t.taskType === 'goal' && (
-                                  <span className="text-[8px] px-1 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-0.5 flex-shrink-0">
-                                    <Target className="w-2.5 h-2.5" /> Goal
-                                  </span>
-                                )}
-                                {t.isParallel && t.parallelGroup && (
-                                  <span className="text-[8px] px-1 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-0.5 truncate">
-                                    <Split className="w-2 h-2 text-indigo-400 flex-shrink-0" /> {t.parallelGroup}
-                                  </span>
-                                )}
                               </div>
 
                               <div className="flex items-center gap-1 flex-shrink-0">
@@ -2590,10 +2590,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                       e.stopPropagation();
                                       moveTaskWithinDagStage(t.id, stageTasks, 'up');
                                     }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Up Within Batch"
+                                    className="p-0.2 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Up"
                                   >
-                                    <ArrowUp className="w-2.5 h-2.5" />
+                                    <ArrowUp className="w-2 h-2" />
                                   </button>
                                   <button
                                     disabled={isLastInBatch}
@@ -2601,10 +2601,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                       e.stopPropagation();
                                       moveTaskWithinDagStage(t.id, stageTasks, 'down');
                                     }}
-                                    className="p-0.5 text-zinc-400 hover:text-white disabled:opacity-20"
-                                    title="Move Down Within Batch"
+                                    className="p-0.2 text-zinc-400 hover:text-white disabled:opacity-20"
+                                    title="Move Down"
                                   >
-                                    <ArrowDown className="w-2.5 h-2.5" />
+                                    <ArrowDown className="w-2 h-2" />
                                   </button>
                                 </div>
 
@@ -2612,162 +2612,108 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   value={t.batch || 'Batch 1'}
                                   onChange={(e) => handleBatchChange(t.id, e.target.value as BatchTag)}
                                   style={batchTheme.dropdownStyle}
-                                  className="text-[9px] px-1.5 py-0.5 rounded font-bold cursor-pointer focus:outline-none border shadow-sm"
+                                  className="text-[8px] px-1 py-0.2 rounded font-bold cursor-pointer focus:outline-none border shadow-sm"
                                 >
-                                  {batchPriorityOrder.map((b) => {
-                                    const optTheme = getBatchTheme(b, batchPriorityOrder);
-                                    return (
-                                      <option
-                                        key={b}
-                                        value={b}
-                                        style={{
-                                          backgroundColor: optTheme.dropdownStyle.backgroundColor,
-                                          color: optTheme.dropdownStyle.color,
-                                        }}
-                                      >
-                                        {b}
-                                      </option>
-                                    );
-                                  })}
+                                  {batchPriorityOrder.map((b) => (
+                                    <option
+                                      key={b}
+                                      value={b}
+                                      style={{
+                                        backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
+                                        color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
+                                      }}
+                                    >
+                                      {getBatchTheme(b, batchPriorityOrder).short || b}
+                                    </option>
+                                  ))}
                                 </select>
                               </div>
                             </div>
 
-                            {/* Card Middle: Title, Description & Status/Subtask snippet */}
-                            <div className="flex-1 flex flex-col justify-center min-h-0 space-y-1 my-0.5">
+                            {/* Card Middle: Title & Description/Subtask */}
+                            <div className="flex-1 flex flex-col justify-center min-h-0 space-y-0.5 my-0.5">
                               <div
                                 onClick={() => openTaskModal(t.id)}
-                                className="text-xs font-bold leading-tight line-clamp-1 truncate cursor-pointer hover:underline text-zinc-100"
-                                title="Click to edit/plan task"
+                                className="text-[11px] font-bold leading-tight line-clamp-1 truncate cursor-pointer hover:underline"
+                                style={{ color: batchTheme.cardStyle.color }}
+                                title="Click to edit task"
                               >
                                 {t.name}
                               </div>
 
                               {t.description ? (
-                                <p className="text-[10px] truncate leading-tight px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-950/60 text-zinc-300">
+                                <p
+                                  style={batchTheme.descStyle}
+                                  className="text-[9px] truncate leading-none px-1 py-0.5 rounded border"
+                                >
                                   {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
                                 </p>
                               ) : null}
-
-                              {/* Compact Subtask / Waiting Badge */}
-                              <div className="flex items-center justify-between text-[9px] gap-1">
-                                {totalSubsCount > 0 ? (
-                                  <span className="font-mono text-emerald-400 flex items-center gap-1 truncate">
-                                    <ListTodo className="w-2.5 h-2.5 text-indigo-400 flex-shrink-0" />
-                                    {completedSubsCount}/{totalSubsCount} Subtasks
-                                  </span>
-                                ) : (
-                                  <span className="text-zinc-500 italic text-[9px]">No subtasks</span>
-                                )}
-
-                                {waiting.length > 0 ? (
-                                  <span className="text-rose-300 bg-rose-950/90 border border-rose-800/80 px-1 py-0.2 rounded truncate flex items-center gap-0.5 text-[8px] max-w-[130px]" title={`Waiting: ${waiting.join(', ')}`}>
-                                    <Lock className="w-2 h-2 flex-shrink-0 text-rose-400" />
-                                    <span className="truncate">{waiting[0]}{waiting.length > 1 ? ` +${waiting.length - 1}` : ''}</span>
-                                  </span>
-                                ) : null}
-                              </div>
                             </div>
 
-                            {/* Bottom row: Fixed height footer with status and actions */}
-                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10 flex-shrink-0">
+                            {/* Bottom row */}
+                            <div className="flex items-center justify-between text-[9px] pt-0.5 border-t border-white/10 flex-shrink-0">
                               <div className="flex items-center gap-1">
-                                {durationDisplay ? (
-                                  <div className="flex items-center gap-1 font-mono px-1 py-0.2 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
-                                    <Timer className="w-2.5 h-2.5" />
-                                    <span>{durationDisplay}</span>
-                                  </div>
-                                ) : t.estimate ? (
-                                  <div className="text-zinc-400 flex items-center gap-1 text-[9px]">
-                                    <Clock className="w-2.5 h-2.5" /> {t.estimate}
-                                  </div>
-                                ) : null}
-                                <span className={`font-bold uppercase text-[8px] px-1.5 py-0.2 rounded border ${
-                                  status === 'ready'
-                                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
-                                    : status === 'progress'
-                                    ? 'bg-blue-950/60 border-blue-500/50 text-blue-300'
-                                    : status === 'done'
-                                    ? 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                                    : 'bg-rose-950/60 border-rose-500/50 text-rose-300'
-                                }`}>
+                                <span className="font-bold uppercase text-[7px] px-1 py-0.2 rounded border bg-black/40 border-white/20">
                                   {status}
                                 </span>
+                                {durationDisplay ? (
+                                  <span className="font-mono text-[8px] font-bold text-blue-300">
+                                    {durationDisplay}
+                                  </span>
+                                ) : null}
                               </div>
 
-                              <div className="flex items-center gap-1">
-                                {/* Quick Plan Next Child Step */}
+                              <div className="flex items-center gap-0.5">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openTaskModal(null, 'blocked', [t.id], t.batch);
                                   }}
-                                  className="px-1.5 py-0.5 rounded bg-indigo-950/90 border border-indigo-500/60 hover:bg-indigo-900 text-indigo-200 text-[9px] font-bold flex items-center gap-0.5 shadow transition-colors"
+                                  className="px-1 py-0.2 rounded bg-black/40 border border-white/20 hover:bg-black/60 text-[8px] font-bold flex items-center gap-0.5 shadow"
                                   title="Plan & add child task depending on this"
                                 >
-                                  <Plus className="w-2.5 h-2.5" /> Step
+                                  <Plus className="w-2 h-2" /> Step
                                 </button>
 
-                                {/* Task Action Buttons (Start / Review / Done / Reopen) */}
                                 {status === 'ready' && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       startInProgress(t.id);
                                     }}
-                                    className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-semibold shadow"
+                                    className="px-1.5 py-0.2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[8px] font-bold shadow"
                                   >
                                     Start
                                   </button>
                                 )}
 
-                                {status === 'progress' && t.taskType === 'goal' ? (
+                                {status === 'progress' && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setReviewingTaskId(t.id);
-                                      setIsBlockPickerOpen(false);
-                                      setBlockParentId('');
-                                      setBlockNewParentName('');
+                                      if (t.taskType === 'goal') {
+                                        setReviewingTaskId(t.id);
+                                        setIsBlockPickerOpen(false);
+                                      } else {
+                                        finishTask(t.id);
+                                      }
                                     }}
-                                    className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-bold shadow flex items-center gap-1"
-                                  >
-                                    <Eye className="w-2.5 h-2.5" /> Review
-                                  </button>
-                                ) : status === 'progress' && t.taskType !== 'goal' ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      finishTask(t.id);
-                                    }}
-                                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-semibold shadow"
+                                    className="px-1.5 py-0.2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[8px] font-bold shadow"
                                   >
                                     Done
                                   </button>
-                                ) : null}
-
-                                {status === 'done' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      reopenTask(t.id);
-                                    }}
-                                    className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[9px]"
-                                  >
-                                    Reopen
-                                  </button>
                                 )}
 
-                                {/* Edit Icon */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openTaskModal(t.id);
                                   }}
-                                  className="p-0.5 text-zinc-400 hover:text-white"
-                                  title="Edit & Plan Task"
+                                  className="p-0.5 text-zinc-300 hover:text-white"
+                                  title="Edit"
                                 >
-                                  <Pencil className="w-3 h-3" />
+                                  <Pencil className="w-2.5 h-2.5" />
                                 </button>
                               </div>
                             </div>
