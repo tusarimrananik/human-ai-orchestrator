@@ -220,7 +220,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Study');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
   const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<'queue' | 'backlog' | 'dependency' | 'ranked' | 'batch'>('queue');
+  const [view, setView] = useState<'queue' | 'backlog' | 'dependency' | 'ranked' | 'batch'>('dependency');
   const [rankedViewTab, setRankedViewTab] = useState<'active' | 'done'>('active');
   const [search, setSearch] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -419,41 +419,44 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setMounted(true);
   }, [userId]);
 
-  // Convex is the durable cross-device source; this user-scoped envelope protects offline edits.
+  // Convex is the durable cross-device source; keeps phone and desktop 100% in sync in real time.
   useEffect(() => {
-    if (!mounted || remoteWorkspace === undefined || syncReadyRef.current) return;
+    if (!mounted || remoteWorkspace === undefined) return;
     const envelope = JSON.parse(localStorage.getItem(syncEnvelopeKey) || 'null') as
       | { payload: WorkspacePayload; baseRevision: number; dirty: boolean }
       | null;
 
-    if (envelope?.dirty) {
+    if (envelope?.dirty && !syncReadyRef.current) {
       remoteRevisionRef.current = envelope.baseRevision;
       pendingPayloadRef.current = envelope.payload;
       setSyncStatus(remoteWorkspace && remoteWorkspace.revision !== envelope.baseRevision ? 'conflict' : 'offline');
     } else if (remoteWorkspace) {
       const payload = remoteWorkspace.payload as WorkspacePayload;
-      remoteRevisionRef.current = remoteWorkspace.revision;
-      lastRemoteHashRef.current = JSON.stringify(payload);
-      const rankedTasks = migrateOptionalRanks(payload.tasks, payload.schemaVersion);
-      const syncedBatches = syncBatchPriorityWithTasks(payload.batchPriorityOrder as BatchTag[] || DEFAULT_BATCH_ORDER, rankedTasks);
-      setTasks(rankedTasks);
-      setBatchPriorityOrder(syncedBatches);
-      setParallelGroups(payload.parallelGroups);
-      setIsParallelModeActive(payload.isParallelModeActive);
-      setActiveTurnGroupName(payload.activeTurnGroupName);
-      localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
-      localStorage.setItem(batchOrderKey, JSON.stringify(syncedBatches));
-      localStorage.setItem(parallelGroupsKey, JSON.stringify(payload.parallelGroups));
-      localStorage.setItem(parallelModeKey, String(payload.isParallelModeActive));
-      localStorage.setItem(activeTurnKey, payload.activeTurnGroupName);
-      localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteWorkspace.revision, dirty: false }));
-      setSyncStatus('saved');
-    } else {
+      const remoteHash = JSON.stringify(payload);
+      if (remoteHash !== lastRemoteHashRef.current) {
+        remoteRevisionRef.current = remoteWorkspace.revision;
+        lastRemoteHashRef.current = remoteHash;
+        const rankedTasks = migrateOptionalRanks(payload.tasks, payload.schemaVersion);
+        const syncedBatches = syncBatchPriorityWithTasks(payload.batchPriorityOrder as BatchTag[] || DEFAULT_BATCH_ORDER, rankedTasks);
+        setTasks(rankedTasks);
+        setBatchPriorityOrder(syncedBatches);
+        setParallelGroups(payload.parallelGroups);
+        setIsParallelModeActive(payload.isParallelModeActive);
+        setActiveTurnGroupName(payload.activeTurnGroupName);
+        localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
+        localStorage.setItem(batchOrderKey, JSON.stringify(syncedBatches));
+        localStorage.setItem(parallelGroupsKey, JSON.stringify(payload.parallelGroups));
+        localStorage.setItem(parallelModeKey, String(payload.isParallelModeActive));
+        localStorage.setItem(activeTurnKey, payload.activeTurnGroupName);
+        localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteWorkspace.revision, dirty: false }));
+        setSyncStatus('saved');
+      }
+    } else if (!syncReadyRef.current) {
       remoteRevisionRef.current = 0;
       setSyncStatus('offline');
     }
     syncReadyRef.current = true;
-  }, [mounted, remoteWorkspace, userId]);
+  }, [mounted, remoteWorkspace, userId, storageKey, batchOrderKey, parallelGroupsKey, parallelModeKey, activeTurnKey, syncEnvelopeKey]);
 
   useEffect(() => {
     if (!mounted || !syncReadyRef.current) return;
