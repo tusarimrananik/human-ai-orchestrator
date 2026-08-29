@@ -1597,7 +1597,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         case 'status':
           return computedStatus(a).localeCompare(computedStatus(b)) || compareSourceOrder(a, b);
         default:
-          return compareSourceOrder(a, b);
+          return getBatchWeight(a.batch) - getBatchWeight(b.batch) || compareSourceOrder(a, b);
       }
     };
     return alignDagLevels(visibleDagTasks, compareTasks);

@@ -199,3 +199,18 @@ test('swapBatchTaskPositions moves all tasks of promotedBatch before demotedBatc
   const result = swapBatchTaskPositions(tasks, 'B2', 'B1');
   deepEqual(result.map((t) => t.id), ['b2-task1', 'b2-task2', 'b1-task1', 'b3-task1']);
 });
+
+test('groups tasks strictly by batch weight so a later batch never splits an existing batch', () => {
+  const tasks: T[] = [
+    { id: 'b2-task1', batch: 'B2', order: 0, dependencies: [] },
+    { id: 'b4-task1', batch: 'B4', order: 1, dependencies: [] },
+    { id: 'b2-task2', batch: 'B2', order: 2, dependencies: [] },
+  ];
+
+  const batchWeights = (b: string) => ({ B2: 0, B4: 1 }[b] ?? 99);
+  const compareSource = createSourceOrderComparator(tasks);
+  const result = alignDagLevels(tasks, (a, b) => batchWeights(a.batch) - batchWeights(b.batch) || compareSource(a, b));
+
+  // Both B2 tasks must be grouped together before B4
+  deepEqual(result.levels[0].map((t) => t.id), ['b2-task1', 'b2-task2', 'b4-task1']);
+});
