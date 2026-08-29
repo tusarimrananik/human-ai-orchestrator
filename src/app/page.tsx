@@ -1038,12 +1038,6 @@ function OrchestratorPage({ userId }: { userId: string }) {
   }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, dagSortMode]);
 
   const startInProgress = (id: string) => {
-    const maxOrder = Math.max(
-      ...tasks
-        .filter((t) => t.manualStatus === 'progress')
-        .map((t) => (typeof t.order === 'number' ? t.order : t.createdAt)),
-      Date.now()
-    );
     saveTasks(
       tasks.map((t) => {
         if (t.id === id) {
@@ -1052,7 +1046,6 @@ function OrchestratorPage({ userId }: { userId: string }) {
             manualStatus: 'progress',
             startedAt: Date.now(),
             completedAt: null,
-            order: maxOrder + 1,
           };
         }
         return t;
