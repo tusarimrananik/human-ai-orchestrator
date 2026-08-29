@@ -15,7 +15,7 @@ import {
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
-import { nextSyncStatusAfterSave } from '@/lib/workspace-sync';
+import { canonicalizeWorkspacePayload, nextSyncStatusAfterSave } from '@/lib/workspace-sync';
 import {
   Play,
   CheckCircle2,
@@ -433,13 +433,17 @@ function OrchestratorPage({ userId }: { userId: string }) {
       pendingPayloadRef.current = envelope.payload;
       setSyncStatus(remoteWorkspace && remoteWorkspace.revision !== envelope.baseRevision ? 'conflict' : 'offline');
     } else if (remoteWorkspace) {
-      const payload = remoteWorkspace.payload as WorkspacePayload;
-      const remoteHash = JSON.stringify(payload);
+      const rawPayload = remoteWorkspace.payload as WorkspacePayload;
+      const { payload, hash: remoteHash } = canonicalizeWorkspacePayload(rawPayload, {
+        normalizeTasks: (remoteTasks) => migrateOptionalRanks(remoteTasks, rawPayload.schemaVersion),
+        synchronizeBatchOrder: (order, normalizedTasks) =>
+          syncBatchPriorityWithTasks(order as BatchTag[] || DEFAULT_BATCH_ORDER, normalizedTasks),
+      });
       if (remoteHash !== lastRemoteHashRef.current) {
         remoteRevisionRef.current = remoteWorkspace.revision;
         lastRemoteHashRef.current = remoteHash;
-        const rankedTasks = migrateOptionalRanks(payload.tasks, payload.schemaVersion);
-        const syncedBatches = syncBatchPriorityWithTasks(payload.batchPriorityOrder as BatchTag[] || DEFAULT_BATCH_ORDER, rankedTasks);
+        const rankedTasks = payload.tasks;
+        const syncedBatches = payload.batchPriorityOrder;
         setTasks(rankedTasks);
         setBatchPriorityOrder(syncedBatches);
         setParallelGroups(payload.parallelGroups);
@@ -462,7 +466,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (!mounted || !syncReadyRef.current) return;
-    const payload: WorkspacePayload = {
+    const localPayload: WorkspacePayload = {
       schemaVersion: 2,
       tasks,
       batchPriorityOrder,
@@ -470,7 +474,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
       isParallelModeActive,
       activeTurnGroupName,
     };
-    const hash = JSON.stringify(payload);
+    const { payload, hash } = canonicalizeWorkspacePayload(localPayload, {
+      normalizeTasks: (localTasks) => normalizeTaskRanks(localTasks, (task) => task.manualStatus === 'done'),
+      synchronizeBatchOrder: (order, normalizedTasks) =>
+        syncBatchPriorityWithTasks(order, normalizedTasks),
+    });
     if (hash === lastRemoteHashRef.current) return;
     pendingPayloadRef.current = payload;
     localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: remoteRevisionRef.current, dirty: true }));
@@ -516,7 +524,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const forcePushToCloud = async () => {
     try {
       setSyncStatus('saving');
-      const payload: WorkspacePayload = {
+      const localPayload: WorkspacePayload = {
         schemaVersion: 2,
         tasks,
         batchPriorityOrder,
@@ -524,10 +532,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
         isParallelModeActive,
         activeTurnGroupName,
       };
+      const { payload, hash } = canonicalizeWorkspacePayload(localPayload, {
+        normalizeTasks: (localTasks) => normalizeTaskRanks(localTasks, (task) => task.manualStatus === 'done'),
+        synchronizeBatchOrder: (order, normalizedTasks) =>
+          syncBatchPriorityWithTasks(order, normalizedTasks),
+      });
       const res = await forceSaveRemote({ payload });
       if (res.ok) {
         remoteRevisionRef.current = res.revision;
-        lastRemoteHashRef.current = JSON.stringify(payload);
+        lastRemoteHashRef.current = hash;
         pendingPayloadRef.current = null;
         localStorage.setItem(syncEnvelopeKey, JSON.stringify({ payload, baseRevision: res.revision, dirty: false }));
         setSyncStatus('saved');
