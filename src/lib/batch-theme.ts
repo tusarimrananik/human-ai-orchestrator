@@ -8,25 +8,24 @@ export interface BatchTheme {
   descStyle: React.CSSProperties;
 }
 
-// Curated maximally separated hues spanning the color wheel
-// Consecutive slots jump between opposite/distinct spectrum quadrants:
-// Blue (215) -> Red (350) -> Green (145) -> Gold (42) -> Purple (275) -> Cyan (185) -> Magenta (325) -> Orange (22)...
+// Curated maximally separated hues spanning the color wheel:
+// 12 distinct anchor colors ensuring adjacent batches never look alike
 const CURATED_HUES: number[] = [
-  215, // Slot 0: Electric Sky Blue
-  350, // Slot 1: Crimson Ruby Red
-  145, // Slot 2: Emerald Green
-  42,  // Slot 3: Bright Amber Gold
-  275, // Slot 4: Electric Purple
-  185, // Slot 5: Neon Aqua / Cyan
-  325, // Slot 6: Hot Magenta Pink
-  22,  // Slot 7: Vivid Tangerine Orange
-  95,  // Slot 8: Bright Lime Green
-  245, // Slot 9: Deep Royal Indigo
-  165, // Slot 10: Seafoam Teal
-  300, // Slot 11: Bright Violet
+  215, // Slot 0 / B1: Electric Sky Blue
+  350, // Slot 1 / B2: Crimson Ruby Red
+  145, // Slot 2 / B3: Emerald Green
+  42,  // Slot 3 / B4: Bright Amber Gold
+  275, // Slot 4 / B5: Electric Purple
+  185, // Slot 5 / B6: Neon Aqua / Cyan
+  325, // Slot 6 / B7: Hot Magenta Pink
+  22,  // Slot 7 / B8: Vivid Tangerine Orange
+  95,  // Slot 8 / B9: Bright Lime Green
+  245, // Slot 9 / B10: Deep Royal Indigo
+  165, // Slot 10 / B11: Seafoam Teal
+  300, // Slot 11 / B12: Bright Violet
 ];
 
-// Golden angle in degrees (~137.50776405°) for slot 12+
+// Golden angle in degrees (~137.50776405°) for higher numbers / custom names
 const GOLDEN_ANGLE = 137.508;
 
 function slotToHue(slotIndex: number): number {
@@ -36,39 +35,35 @@ function slotToHue(slotIndex: number): number {
   return Math.round((215 + slotIndex * GOLDEN_ANGLE) % 360);
 }
 
-export function getBatchHue(rawBatch: string = 'Batch 1', allBatches?: readonly string[]): number {
+/**
+ * Returns a permanent, immutable hue strictly bound to the batch name itself.
+ * It NEVER changes when the batch is moved up or down in batchPriorityOrder.
+ */
+export function getBatchHue(rawBatch: string = 'Batch 1', _allBatches?: readonly string[]): number {
   const batch = !rawBatch || rawBatch === 'None' ? 'Batch 1' : rawBatch;
 
-  // 1. If workspace batch list is provided and includes this batch, assign its unique slot
-  if (allBatches && Array.isArray(allBatches)) {
-    const idx = allBatches.indexOf(batch);
-    if (idx !== -1) {
-      return slotToHue(idx);
-    }
-  }
-
-  // 2. If numbered batch name (e.g. "Batch 1", "Batch 2")
-  const match = batch.match(/^Batch\s+(\d+)$/i);
+  // 1. Numbered batches like "Batch 1", "Batch 2", "B3" get their dedicated permanent hue
+  const match = batch.match(/^(?:Batch\s*|B)(\d+)$/i);
   if (match) {
     const num = parseInt(match[1], 10);
     return slotToHue(Math.max(0, num - 1));
   }
 
-  // 3. Fallback deterministic slot for standalone custom names
+  // 2. Custom names get a stable deterministic slot starting after standard numbered batches (slot 12+)
   let hash = 0;
   for (let i = 0; i < batch.length; i++) {
     hash = (hash << 5) - hash + batch.charCodeAt(i);
     hash |= 0;
   }
-  const hashSlot = Math.abs(hash) % 24;
-  return slotToHue(hashSlot);
+  const customSlot = 12 + (Math.abs(hash) % 24);
+  return slotToHue(customSlot);
 }
 
-export function getBatchTheme(rawBatch: string = 'Batch 1', allBatches?: readonly string[]): BatchTheme {
+export function getBatchTheme(rawBatch: string = 'Batch 1', _allBatches?: readonly string[]): BatchTheme {
   const batch = !rawBatch || rawBatch === 'None' ? 'Batch 1' : rawBatch;
-  const match = batch.match(/^Batch\s+(\d+)$/i);
+  const match = batch.match(/^(?:Batch\s*|B)(\d+)$/i);
   const short = match ? `B${match[1]}` : batch.length > 5 ? batch.slice(0, 4) : batch;
-  const hue = getBatchHue(batch, allBatches);
+  const hue = getBatchHue(batch);
 
   // Vivid, full-element colored boxes with clear contrast
   const cardBg = `hsla(${hue}, 85%, 13%, 0.88)`;
