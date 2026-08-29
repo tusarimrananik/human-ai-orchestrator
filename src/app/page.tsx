@@ -229,6 +229,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [batchSortMode, setBatchSortMode] = useState<BatchSortMode>('manual');
   const [batchSequenceSortMode, setBatchSequenceSortMode] = useState<BatchSequenceSortMode>('custom');
   const [showEmptyBatches, setShowEmptyBatches] = useState<boolean>(true);
+  const [selectedBatchTaskIds, setSelectedBatchTaskIds] = useState<string[]>([]);
+  const [bulkTargetBatch, setBulkTargetBatch] = useState<string>('');
   const [isNewBatchInputOpen, setIsNewBatchInputOpen] = useState<boolean>(false);
   const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
   const remoteWorkspace = useQuery(api.workspace.get, {});
@@ -607,6 +609,35 @@ function OrchestratorPage({ userId }: { userId: string }) {
     const newOrder = [...batchPriorityOrder];
     newOrder.splice(targetIdx + 1, 0, nextName);
     saveBatchOrder(newOrder);
+  };
+
+  const toggleSelectBatchTask = (taskId: string) => {
+    setSelectedBatchTaskIds((prev) =>
+      prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const toggleSelectAllInBatch = (batchTasks: Task[]) => {
+    const taskIds = batchTasks.map((t) => t.id);
+    const allSelected = taskIds.length > 0 && taskIds.every((id) => selectedBatchTaskIds.includes(id));
+    if (allSelected) {
+      setSelectedBatchTaskIds((prev) => prev.filter((id) => !taskIds.includes(id)));
+    } else {
+      setSelectedBatchTaskIds((prev) => Array.from(new Set([...prev, ...taskIds])));
+    }
+  };
+
+  const clearBatchTaskSelection = () => {
+    setSelectedBatchTaskIds([]);
+  };
+
+  const moveSelectedTasksToBatch = (targetBatch: string) => {
+    if (!targetBatch || selectedBatchTaskIds.length === 0) return;
+    const updated = tasks.map((t) =>
+      selectedBatchTaskIds.includes(t.id) ? { ...t, batch: targetBatch as BatchTag } : t
+    );
+    saveTasks(updated);
+    setSelectedBatchTaskIds([]);
   };
 
   const handleDeleteBatch = (batchToDelete: string) => {
@@ -2977,7 +3008,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         ) : (
           /* Batch Task View (Grouped/Sorted by Batch Priority, Not Tree Structure) */
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-2.5 flex flex-col min-h-0 overflow-hidden select-none">
-            {/* Batch View Sub-header with batch sequence sorting, quick jump, and task sorting */}
+            {/* Batch View Sub-header with batch sequence sorting, quick jump, task sorting, and bulk move toolbar */}
             <div className="mb-2 flex items-center justify-between gap-2 flex-shrink-0 bg-zinc-950/80 border border-zinc-800/90 rounded-lg px-2.5 py-1.5 shadow-sm">
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
                 <span className="text-[10px] font-bold uppercase text-zinc-500 flex items-center gap-1 mr-1 flex-shrink-0">
@@ -3075,7 +3106,57 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 )}
               </div>
 
+              {/* Right tools or Bulk Move Toolbar */}
               <div className="flex items-center gap-2 flex-shrink-0">
+                {selectedBatchTaskIds.length > 0 ? (
+                  <div className="flex items-center gap-1.5 bg-indigo-950/90 border border-indigo-500/80 px-2.5 py-1 rounded-md shadow animate-in fade-in">
+                    <span className="text-[10px] font-bold text-indigo-200 flex items-center gap-1">
+                      <CheckSquare className="w-3 h-3 text-indigo-400" />
+                      <span className="bg-indigo-600 text-white px-1.5 py-0.2 rounded-full text-[9px] font-mono">
+                        {selectedBatchTaskIds.length}
+                      </span>
+                      selected
+                    </span>
+
+                    <span className="text-[9px] uppercase font-bold text-zinc-400 ml-1">Move to:</span>
+
+                    <select
+                      value={bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1'}
+                      onChange={(e) => setBulkTargetBatch(e.target.value)}
+                      style={getBatchTheme(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1', batchPriorityOrder).dropdownStyle}
+                      className="text-[9px] px-1.5 py-0.5 rounded font-bold border focus:outline-none cursor-pointer"
+                    >
+                      {batchPriorityOrder.map((b) => (
+                        <option
+                          key={b}
+                          value={b}
+                          style={{
+                            backgroundColor: getBatchTheme(b, batchPriorityOrder).dropdownStyle.backgroundColor,
+                            color: getBatchTheme(b, batchPriorityOrder).dropdownStyle.color,
+                          }}
+                        >
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => moveSelectedTasksToBatch(bulkTargetBatch || batchPriorityOrder[0] || 'Batch 1')}
+                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold shadow flex items-center gap-0.5 transition"
+                      title="Move all selected tasks to the selected batch"
+                    >
+                      <ArrowRight className="w-2.5 h-2.5" /> Move
+                    </button>
+
+                    <button
+                      onClick={clearBatchTaskSelection}
+                      className="text-[9px] text-zinc-400 hover:text-white px-1 py-0.5 rounded hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
                   <label htmlFor="batch-sort" className="text-[9px] font-bold uppercase text-zinc-400 flex items-center gap-0.5">
                     <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" /> Sort Tasks:
@@ -3173,6 +3254,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
                       {/* Batch Column Header */}
                       <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={batchTasks.length > 0 && batchTasks.every((t) => selectedBatchTaskIds.includes(t.id))}
+                            onChange={() => toggleSelectAllInBatch(batchTasks)}
+                            className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
+                            title={`Select all tasks in ${batchTag}`}
+                          />
                           <span
                             style={theme.badgeStyle}
                             className="text-[10px] font-mono uppercase font-bold px-1.5 py-0.5 rounded border shadow-sm"
@@ -3235,6 +3323,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                             const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
                             const totalSubsCount = (t.subTasks || []).length;
+                            const isSelected = selectedBatchTaskIds.includes(t.id);
 
                             return (
                               <div
@@ -3251,11 +3340,23 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   borderLeftWidth: '3px',
                                 }}
                                 className={`w-full h-[148px] p-2.5 rounded-lg border border-zinc-800 bg-zinc-900/90 shadow-sm flex flex-col justify-between transition-all select-none ${
+                                  isSelected ? 'ring-2 ring-indigo-500 bg-indigo-950/40' : ''
+                                } ${
                                   draggedTaskId === t.id ? 'opacity-60 ring-2 ring-indigo-500' : ''
                                 }`}
                               >
                                 <div className="flex items-center justify-between gap-1 flex-shrink-0">
-                                  <div className="flex items-center gap-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        toggleSelectBatchTask(t.id);
+                                      }}
+                                      className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+                                      title="Select task for bulk batch move"
+                                    />
                                     <GripVertical className="w-3 h-3 text-zinc-400/60 cursor-grab active:cursor-grabbing flex-shrink-0" />
                                     <span className="text-[9px] px-1 rounded font-semibold bg-black/30 border border-white/10 text-zinc-200 flex-shrink-0">
                                       {t.owner}
