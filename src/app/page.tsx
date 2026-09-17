@@ -1436,6 +1436,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   }, [view, visibleDagTasks, ownerFilter, batchFilter, parallelGroupFilter, search, batchPriorityOrder, hiddenStageIndices, dagStageAlignMode]);
 
   const startInProgress = (id: string) => {
+    const target = tasks.find((t) => t.id === id);
     saveTasks(
       tasks.map((t) => {
         if (t.id === id) {
@@ -1449,29 +1450,27 @@ function OrchestratorPage({ userId }: { userId: string }) {
         return t;
       })
     );
-  };
-
-  // Helper to advance turn counter and auto-rotate focus if turn limit is reached
-  const advanceTurnCounter = (groupName?: string, currentTasksList?: Task[]) => {
-    if (!groupName) return;
-    const currentGrp = parallelGroups.find((g) => g.name === groupName);
-    const turnTarget = currentGrp?.slotLimit || 1;
-    const nextCount = devTurnCompletedCount + 1;
-    const remainingTasks = (currentTasksList || tasks).filter(
-      (t) => t.isParallel && t.parallelGroup === groupName && computedStatus(t) !== 'done'
-    ).length;
-
-    if (nextCount >= turnTarget || remainingTasks === 0) {
+    // When parallel mode is active, starting a task in one group immediately alternates turn to the other group
+    if (isParallelModeActive && target?.isParallel && target?.parallelGroup && parallelGroups.length > 1) {
       const allGroupNames = parallelGroups.map((g) => g.name);
-      const currentIdx = allGroupNames.indexOf(groupName);
+      const currentIdx = allGroupNames.indexOf(target.parallelGroup);
       if (currentIdx !== -1) {
         const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
         switchActiveTurn(nextGroupName);
       }
-      setDevTurnCompletedCount(0);
-    } else {
-      setDevTurnCompletedCount(nextCount);
     }
+  };
+
+  // Helper to advance turn counter and auto-rotate focus (1 task per group alternation)
+  const advanceTurnCounter = (groupName?: string, currentTasksList?: Task[]) => {
+    if (!groupName || parallelGroups.length <= 1) return;
+    const allGroupNames = parallelGroups.map((g) => g.name);
+    const currentIdx = allGroupNames.indexOf(groupName);
+    if (currentIdx !== -1) {
+      const nextGroupName = allGroupNames[(currentIdx + 1) % allGroupNames.length];
+      switchActiveTurn(nextGroupName);
+    }
+    setDevTurnCompletedCount(0);
   };
 
   // Complete a task in progress, auto-refill open slots from queue, and auto-rotate turns
@@ -1723,8 +1722,19 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setTaskOwner(current?.owner || 'Me');
     const defaultBatch = current?.batch || initialBatch || batchPriorityOrder[0] || 'Batch 1';
     setTaskBatch(defaultBatch === 'None' ? (batchPriorityOrder[0] || 'Batch 1') : defaultBatch);
-    setTaskIsParallel(typeof current?.isParallel === 'boolean' ? current.isParallel : !!current?.parallelGroup);
-    setTaskParallelGroup(current?.parallelGroup || (parallelGroups[0]?.name || 'Development'));
+    const defaultGroup =
+      current?.parallelGroup ||
+      (parallelGroupFilter && parallelGroups.some((g) => g.name === parallelGroupFilter)
+        ? parallelGroupFilter
+        : activeTurnGroupName || parallelGroups[0]?.name || 'Development');
+    setTaskIsParallel(
+      typeof current?.isParallel === 'boolean'
+        ? current.isParallel
+        : isParallelModeActive
+        ? true
+        : !!current?.parallelGroup
+    );
+    setTaskParallelGroup(defaultGroup);
     setTaskSubTasks(current?.subTasks || []);
     setNewSubTaskInput('');
     setTaskDeadline(current?.deadline || '');
@@ -3197,6 +3207,68 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <span>Batch Grouped</span>
                   </button>
                 </div>
+
+                <div className="h-4 w-[1px] bg-zinc-800 mx-0.5" />
+
+                {/* Parallel Stream View Switcher */}
+                <div className="flex items-center rounded border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-inner">
+                  <button
+                    onClick={() => setParallelGroupFilter('')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                      !parallelGroupFilter
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                    title="View all tasks combined in one DAG"
+                  >
+                    <span>All Streams</span>
+                  </button>
+
+                  {parallelGroups.map((g) => {
+                    const count = tasks.filter((t) => t.isParallel && t.parallelGroup === g.name && t.manualStatus !== 'done').length;
+                    const isActiveTurn = activeTurnGroupName === g.name;
+                    return (
+                      <button
+                        key={g.id}
+                        onClick={() => setParallelGroupFilter(g.name)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                          parallelGroupFilter === g.name
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                        title={`View only ${g.name} parallel stream DAG`}
+                      >
+                        <Split className="w-2.5 h-2.5" />
+                        <span>{g.name}</span>
+                        <span className="px-1 py-0.2 rounded-full bg-black/40 text-[8px] font-mono">
+                          {count}
+                        </span>
+                        {isParallelModeActive && isActiveTurn && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Active Turn" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {isParallelModeActive && parallelGroups.length > 1 && (
+                  <div className="flex items-center gap-1.5 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-bold text-amber-300 shadow-sm">
+                    <Zap className="w-2.5 h-2.5 text-amber-400 fill-current" />
+                    <span>Turn: <strong className="text-white">{activeTurnGroupName}</strong></span>
+                    <button
+                      onClick={() => {
+                        const allGroupNames = parallelGroups.map((g) => g.name);
+                        const currentIdx = allGroupNames.indexOf(activeTurnGroupName);
+                        const next = allGroupNames[(currentIdx + 1) % allGroupNames.length];
+                        switchActiveTurn(next);
+                      }}
+                      className="text-[9px] underline text-amber-200 hover:text-white"
+                      title="Alternate to next group"
+                    >
+                      Alternate ⟳
+                    </button>
+                  </div>
+                )}
 
                 {view === 'queue' && rankedTasks.length > 0 && (
                   <button
@@ -4883,6 +4955,56 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </span>
               <button onClick={() => setIsGroupConfigOpen(false)} className="text-zinc-500 hover:text-zinc-300">
                 <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Global Parallel Work Mode Setting Toggle */}
+            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Zap className={`w-3.5 h-3.5 ${isParallelModeActive ? 'text-amber-400' : 'text-zinc-500'}`} />
+                  <span>Parallel Work Mode</span>
+                  {isParallelModeActive ? (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      ON (ACTIVE)
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      OFF
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-0.5 max-w-md">
+                  When enabled, tasks organize into parallel streams and alternate turn-by-turn (1 task from one group, then 1 task from another).
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (isParallelModeActive) {
+                    handleStopParallelWork();
+                  } else {
+                    handleStartParallelWork();
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow ${
+                  isParallelModeActive
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                }`}
+              >
+                {isParallelModeActive ? (
+                  <>
+                    <X className="w-3.5 h-3.5" />
+                    <span>Disable Parallel Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Enable Parallel Mode</span>
+                  </>
+                )}
               </button>
             </div>
 
