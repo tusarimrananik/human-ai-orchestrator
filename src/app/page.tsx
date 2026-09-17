@@ -562,8 +562,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }
   };
 
-  const saveTasks = (newTasks: Task[]) => {
-    const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done');
+  const saveTasksWithOrder = (newTasks: Task[], groupOrder?: string[]) => {
+    const orderToUse = groupOrder || currentGroupOrder;
+    const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done', orderToUse);
     setTasks(rankedTasks);
     if (typeof window !== 'undefined') {
       localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
@@ -575,12 +576,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }
   };
 
+  const saveTasks = (newTasks: Task[]) => {
+    saveTasksWithOrder(newTasks, currentGroupOrder);
+  };
+
   const changeTaskRank = (taskId: string, rank: number) => {
-    saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done'));
+    saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done', currentGroupOrder));
   };
 
   const removeTaskRank = (taskId: string) => {
-    saveTasks(clearTaskRank(tasks, taskId, (task) => task.manualStatus === 'done'));
+    saveTasks(clearTaskRank(tasks, taskId, (task) => task.manualStatus === 'done', currentGroupOrder));
   };
 
   const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
@@ -1523,6 +1528,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
     const sessionSeconds = target?.startedAt ? Math.floor((Date.now() - target.startedAt) / 1000) : 0;
     const total = (target?.totalTimeSpentSeconds || 0) + sessionSeconds;
 
+    const currentGroup = target?.parallelGroup === 'Parallel Group 2' || target?.parallelGroup === 'Study'
+      ? 'Parallel Group 2'
+      : 'Parallel Group 1';
+    const nextGroup = currentGroup === 'Parallel Group 1' ? 'Parallel Group 2' : 'Parallel Group 1';
+    const nextGroupOrder = nextGroup === 'Parallel Group 2'
+      ? ['Parallel Group 2', 'Parallel Group 1']
+      : ['Parallel Group 1', 'Parallel Group 2'];
+
+    // Update activeTurnGroupName immediately and save to localStorage
+    setActiveTurnGroupName(nextGroup);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(activeTurnKey, nextGroup);
+    }
+
     let updated = tasks.map((t) => {
       if (t.id === id) {
         return {
@@ -1536,12 +1555,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       return t;
     });
 
-    // Once done, alternate turn so the other parallel group comes to 1st place
-    if (target?.isParallel && target?.parallelGroup) {
-      advanceTurnCounter(target.parallelGroup, updated);
-    }
-
-    saveTasks(updated);
+    saveTasksWithOrder(updated, nextGroupOrder);
     setReviewingTaskId(null);
   };
 

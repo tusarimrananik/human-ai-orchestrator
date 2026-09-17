@@ -232,8 +232,11 @@ export function getInterleavedRankedTasks<T extends RankableTask>(
 ): T[] {
   const activeTasks = tasks.filter((t) => !isDone(t));
 
+  const normalizeGroup = (g?: string) =>
+    g === 'Parallel Group 2' || g === 'Study' ? 'Parallel Group 2' : 'Parallel Group 1';
+
   const groupsPresent = Array.from(
-    new Set(activeTasks.map((t) => t.parallelGroup || 'Parallel Group 1'))
+    new Set(activeTasks.map((t) => normalizeGroup(t.parallelGroup)))
   );
 
   if (groupsPresent.length <= 1) {
@@ -246,13 +249,13 @@ export function getInterleavedRankedTasks<T extends RankableTask>(
 
   // Preserve group order (Parallel Group 1 first, Parallel Group 2 second, etc.)
   const allGroups = [
-    ...groupOrder.filter((g) => groupsPresent.includes(g)),
-    ...groupsPresent.filter((g) => !groupOrder.includes(g)),
+    ...groupOrder.map(normalizeGroup).filter((g) => groupsPresent.includes(g)),
+    ...groupsPresent.filter((g) => !groupOrder.map(normalizeGroup).includes(g)),
   ];
 
   const groupRankedMap = new Map<string, T[]>();
   for (const grp of allGroups) {
-    const grpTasks = activeTasks.filter((t) => (t.parallelGroup || 'Parallel Group 1') === grp);
+    const grpTasks = activeTasks.filter((t) => normalizeGroup(t.parallelGroup) === grp);
     groupRankedMap.set(grp, rankActiveTasks(grpTasks, isDone));
   }
 
