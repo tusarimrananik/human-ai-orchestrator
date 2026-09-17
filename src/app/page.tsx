@@ -100,6 +100,7 @@ interface Task {
   completedAt?: number | null;
   totalTimeSpentSeconds?: number;
   rank?: number;
+  savedRank?: number;
 }
 
 type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
@@ -1547,6 +1548,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         return {
           ...t,
           manualStatus: 'done' as const,
+          savedRank: t.rank || t.savedRank,
           startedAt: null,
           completedAt: Date.now(),
           totalTimeSpentSeconds: total,
@@ -1693,19 +1695,32 @@ function OrchestratorPage({ userId }: { userId: string }) {
   };
 
   const reopenTask = (id: string) => {
-    saveTasks(
-      tasks.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              manualStatus: 'todo',
-              startedAt: null,
-              completedAt: null,
-              totalTimeSpentSeconds: 0,
-            }
-          : t
-      )
+    const target = tasks.find((t) => t.id === id);
+    const group =
+      target?.parallelGroup === 'Parallel Group 2' || target?.parallelGroup === 'Study'
+        ? 'Parallel Group 2'
+        : 'Parallel Group 1';
+    const activeInGroup = tasks.filter(
+      (t) =>
+        (t.parallelGroup === 'Parallel Group 2' || t.parallelGroup === 'Study'
+          ? 'Parallel Group 2'
+          : 'Parallel Group 1') === group && t.manualStatus !== 'done'
     );
+    const restoredRank = target?.savedRank || target?.rank || activeInGroup.length + 1;
+
+    const reopenedTasks = tasks.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            manualStatus: 'todo' as const,
+            startedAt: null,
+            completedAt: null,
+            totalTimeSpentSeconds: 0,
+          }
+        : t
+    );
+
+    saveTasks(setTaskRank(reopenedTasks, id, restoredRank, (t) => t.manualStatus === 'done'));
   };
 
   const deleteTask = (id: string) => {
