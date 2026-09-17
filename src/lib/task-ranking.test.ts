@@ -118,7 +118,7 @@ test('clearing parent rank also clears dependent child rank', () => {
   deepEqual(result.find((t) => t.id === 'child')?.rank, undefined);
 });
 
-test('sequential execution queue ranks: ranks alternate between groups and are strictly unique 1, 2, 3, 4', () => {
+test('ranking is separate in each group: group 1 has #1 and group 2 has #1', () => {
   const tasks: Task[] = [
     { id: 'g1-a', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
     { id: 'g1-b', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
@@ -129,27 +129,27 @@ test('sequential execution queue ranks: ranks alternate between groups and are s
   const result = normalizeTaskRanks(tasks, isDone);
 
   deepEqual(result.find((t) => t.id === 'g1-a')?.rank, 1);
-  deepEqual(result.find((t) => t.id === 'g2-a')?.rank, 2);
-  deepEqual(result.find((t) => t.id === 'g1-b')?.rank, 3);
-  deepEqual(result.find((t) => t.id === 'g2-b')?.rank, 4);
+  deepEqual(result.find((t) => t.id === 'g1-b')?.rank, 2);
+  deepEqual(result.find((t) => t.id === 'g2-a')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g2-b')?.rank, 2);
 });
 
-test('setting rank in execution queue updates ranks sequentially without duplicates', () => {
+test('user can set an item in Group 2 as #1 without colliding with Group 1', () => {
   const tasks: Task[] = [
     { id: 'g1-a', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
-    { id: 'g1-b', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
     { id: 'g2-a', rank: 1, order: 2, createdAt: 12, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+    { id: 'g2-b', rank: 2, order: 3, createdAt: 13, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
   ];
 
-  // Set g1-b to rank 1
-  const result = setTaskRank(tasks, 'g1-b', 1, isDone);
+  // Set g2-b as #1 in Group 2
+  const result = setTaskRank(tasks, 'g2-b', 1, isDone);
 
-  deepEqual(result.find((t) => t.id === 'g1-b')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g1-a')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g2-b')?.rank, 1);
   deepEqual(result.find((t) => t.id === 'g2-a')?.rank, 2);
-  deepEqual(result.find((t) => t.id === 'g1-a')?.rank, 3);
 });
 
-test('interleaved execution alternates by rank and assigns sequential unique ranks 1, 2, 3, 4...', () => {
+test('interleaved execution alternates by group turns: Group 1 #1, then Group 2 #1, then Group 1 #2', () => {
   const tasks: Task[] = [
     { id: 'g1-task1', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
     { id: 'g1-task2', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
@@ -164,19 +164,19 @@ test('interleaved execution alternates by rank and assigns sequential unique ran
     interleaved.map((t) => [t.id, t.parallelGroup, t.rank]),
     [
       ['g1-task1', 'Parallel Group 1', 1],
-      ['g2-task1', 'Parallel Group 2', 2],
-      ['g1-task2', 'Parallel Group 1', 3],
-      ['g2-task2', 'Parallel Group 2', 4],
-      ['g1-task3', 'Parallel Group 1', 5],
+      ['g2-task1', 'Parallel Group 2', 1],
+      ['g1-task2', 'Parallel Group 1', 2],
+      ['g2-task2', 'Parallel Group 2', 2],
+      ['g1-task3', 'Parallel Group 1', 3],
     ]
   );
 });
 
-test('completing the first task promotes Group 2 task to 1st place (#1)', () => {
+test('completing the first task promotes Group 2 #1 task to 1st place in the queue', () => {
   const tasks: Task[] = [
     { id: 'g1-task1', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'done' },
-    { id: 'g2-task1', rank: 2, order: 3, createdAt: 13, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
-    { id: 'g1-task2', rank: 3, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g2-task1', rank: 1, order: 3, createdAt: 13, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+    { id: 'g1-task2', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
   ];
 
   // Group 2 is now active turn

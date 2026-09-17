@@ -567,9 +567,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }
   };
 
-  const saveTasksWithOrder = (newTasks: Task[], groupOrder?: string[]) => {
-    const orderToUse = groupOrder || currentGroupOrder;
-    const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done', orderToUse);
+  const saveTasks = (newTasks: Task[]) => {
+    const rankedTasks = normalizeTaskRanks(newTasks, (task) => task.manualStatus === 'done');
     setTasks(rankedTasks);
     if (typeof window !== 'undefined') {
       localStorage.setItem(storageKey, JSON.stringify(rankedTasks));
@@ -581,16 +580,12 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }
   };
 
-  const saveTasks = (newTasks: Task[]) => {
-    saveTasksWithOrder(newTasks, currentGroupOrder);
-  };
-
   const changeTaskRank = (taskId: string, rank: number) => {
-    saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done', currentGroupOrder));
+    saveTasks(setTaskRank(tasks, taskId, rank, (task) => task.manualStatus === 'done'));
   };
 
   const removeTaskRank = (taskId: string) => {
-    saveTasks(clearTaskRank(tasks, taskId, (task) => task.manualStatus === 'done', currentGroupOrder));
+    saveTasks(clearTaskRank(tasks, taskId, (task) => task.manualStatus === 'done'));
   };
 
   const saveParallelGroups = (newGroups: ParallelGroupConfig[]) => {
@@ -1560,7 +1555,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       return t;
     });
 
-    saveTasksWithOrder(updated, nextGroupOrder);
+    saveTasks(updated);
     setReviewingTaskId(null);
   };
 
@@ -2732,14 +2727,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
               <label
                 style={batchTheme.badgeStyle}
                 className="flex items-center gap-0.5 rounded-lg border px-2 py-1 text-xs font-black shadow-md cursor-pointer"
-                title={`Rank #${t.rank ?? (typeof stepIndex === 'number' ? stepIndex + 1 : '—')} (Type to reorder)`}
+                title={`Rank #${t.rank ?? '—'} in ${t.parallelGroup || 'Parallel Group 1'} (Type to reorder)`}
               >
                 <span className="opacity-80 font-mono text-xs">#</span>
                 <input
                   type="number"
                   min={1}
-                  max={rankedTasks.length}
-                  value={t.rank ?? (typeof stepIndex === 'number' ? stepIndex + 1 : '')}
+                  max={Math.max(groupTaskCount, 1)}
+                  value={t.rank ?? ''}
                   onChange={(e) =>
                     e.target.value === ''
                       ? removeTaskRank(t.id)
@@ -2775,6 +2770,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
               {t.taskType === 'goal' && (
                 <span className="text-[8px] px-1.5 py-0.5 rounded font-bold bg-amber-500/30 text-amber-200 border border-amber-400/50 flex items-center gap-0.5">
                   <Target className="w-2.5 h-2.5" /> Goal
+                </span>
+              )}
+              {t.parallelGroup && (
+                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${
+                  (t.parallelGroup === 'Parallel Group 2' || t.parallelGroup === 'Study')
+                    ? 'bg-purple-950/90 text-purple-200 border-purple-500/60'
+                    : 'bg-indigo-950/90 text-indigo-200 border-indigo-500/60'
+                }`}>
+                  <Split className="w-2 h-2" /> {(t.parallelGroup === 'Parallel Group 2' || t.parallelGroup === 'Study') ? 'Parallel Group 2' : 'Parallel Group 1'}
                 </span>
               )}
               <span
