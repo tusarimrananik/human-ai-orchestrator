@@ -1217,23 +1217,25 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setDraggedTaskId(null);
   };
 
-  const q = search.toLowerCase();
-  const filtered = tasks.filter((t) => {
-    const subText = (t.subTasks || []).map((s) => s.name).join(' ');
-    const matchesSearch =
-      !q || (t.name + ' ' + (t.description || '') + ' ' + subText + ' ' + (t.notes || '')).toLowerCase().includes(q);
-    const matchesOwner = !ownerFilter || t.owner === ownerFilter;
-    const matchesBatch = !batchFilter || t.batch === batchFilter;
-    const matchesParallelGroup =
-      !parallelGroupFilter ||
-      (parallelGroupFilter === 'parallel_only'
-        ? t.isParallel || !!t.parallelGroup
-        : parallelGroupFilter === 'non_parallel_only'
-        ? !t.isParallel && !t.parallelGroup
-        : t.parallelGroup === parallelGroupFilter);
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return tasks.filter((t) => {
+      const subText = (t.subTasks || []).map((s) => s.name).join(' ');
+      const matchesSearch =
+        !q || (t.name + ' ' + (t.description || '') + ' ' + subText + ' ' + (t.notes || '')).toLowerCase().includes(q);
+      const matchesOwner = !ownerFilter || t.owner === ownerFilter;
+      const matchesBatch = !batchFilter || t.batch === batchFilter;
+      const matchesParallelGroup =
+        !parallelGroupFilter ||
+        (parallelGroupFilter === 'parallel_only'
+          ? t.isParallel || !!t.parallelGroup
+          : parallelGroupFilter === 'non_parallel_only'
+          ? !t.isParallel && !t.parallelGroup
+          : t.parallelGroup === parallelGroupFilter);
 
-    return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
-  });
+      return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
+    });
+  }, [tasks, search, ownerFilter, batchFilter, parallelGroupFilter]);
 
   // 1. Compute full unhidden DAG stage indices for all active tasks
   const activeUnfinishedTasks = useMemo(() => {
@@ -1289,50 +1291,63 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setHiddenStageIndices([]);
   };
 
-  const rankedTasks = rankActiveTasks(filtered, (task) => task.manualStatus === 'done');
+  const rankedTasks = useMemo(
+    () => rankActiveTasks(filtered, (task) => task.manualStatus === 'done'),
+    [filtered]
+  );
 
-  const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
-    blocked: [],
-    ready: [],
-    progress: [],
-    done: [],
-  };
+  const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = useMemo(() => {
+    const res: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = {
+      blocked: [],
+      ready: [],
+      progress: [],
+      done: [],
+    };
 
-  filtered.forEach((t) => {
-    const st = computedStatus(t);
-    groups[st].push(t);
-  });
+    filtered.forEach((t) => {
+      const st = computedStatus(t);
+      res[st].push(t);
+    });
 
-  // In Progress column is sorted strictly by Order (so existing active tasks stay on top, newly promoted tasks stay at the bottom)
-  groups.progress.sort((a, b) => {
-    const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
-    const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
-    return ordA - ordB;
-  });
-
-  // Ready, Blocked, Done columns sort by Batch Rank first, then Order within that batch
-  (['blocked', 'ready', 'done'] as const).forEach((key) => {
-    groups[key].sort((a, b) => {
-      const bwA = getBatchWeight(a.batch);
-      const bwB = getBatchWeight(b.batch);
-      if (bwA !== bwB) return bwA - bwB;
+    // In Progress column is sorted strictly by Order
+    res.progress.sort((a, b) => {
       const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
       const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
       return ordA - ordB;
     });
-  });
+
+    // Ready, Blocked, Done columns sort by Batch Rank first, then Order within that batch
+    (['blocked', 'ready', 'done'] as const).forEach((key) => {
+      res[key].sort((a, b) => {
+        const bwA = getBatchWeight(a.batch);
+        const bwB = getBatchWeight(b.batch);
+        if (bwA !== bwB) return bwA - bwB;
+        const ordA = typeof a.order === 'number' ? a.order : a.createdAt;
+        const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
+        return ordA - ordB;
+      });
+    });
+
+    return res;
+  }, [filtered, batchPriorityOrder]);
 
   // Straight horizontal dependency lines calculation for DAG
   useLayoutEffect(() => {
     if (!isDagView(view) || !stageRef.current || visibleDagTasks.length === 0) {
-      setSvgContent({ width: 0, height: 0, paths: [] });
+      setSvgContent((prev) => {
+        if (prev.width === 0 && prev.height === 0 && prev.paths.length === 0) return prev;
+        return { width: 0, height: 0, paths: [] };
+      });
       return;
     }
 
     const timer = setTimeout(() => {
       const stage = stageRef.current;
       if (!stage) {
-        setSvgContent({ width: 0, height: 0, paths: [] });
+        setSvgContent((prev) => {
+          if (prev.width === 0 && prev.height === 0 && prev.paths.length === 0) return prev;
+          return { width: 0, height: 0, paths: [] };
+        });
         return;
       }
 
@@ -1365,7 +1380,17 @@ function OrchestratorPage({ userId }: { userId: string }) {
           paths.push({ key: `${sourceId}->${targetId}`, d });
       });
 
-      setSvgContent({ width, height, paths });
+      setSvgContent((prev) => {
+        if (
+          prev.width === width &&
+          prev.height === height &&
+          prev.paths.length === paths.length &&
+          prev.paths.every((p, i) => p.key === paths[i].key && p.d === paths[i].d)
+        ) {
+          return prev;
+        }
+        return { width, height, paths };
+      });
     }, 60);
 
     return () => clearTimeout(timer);
@@ -2668,7 +2693,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <button
               onClick={() => setView('ranked')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'ranked' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                view === 'ranked' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="Linear execution list in ranked order"
             >
@@ -2677,7 +2702,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <button
               onClick={() => setView('batch')}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
-                view === 'batch' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                view === 'batch' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
               }`}
               title="Columns grouped by batch"
             >
@@ -3387,7 +3412,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                   style={batchTheme.descStyle}
                                   className="text-[9px] truncate leading-none px-1 py-0.5 rounded border"
                                 >
-                                  {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
+                                  {typeof t.description === 'string' ? t.description.replace(/^Key objectives:\s*•?\s*/i, '') : String(t.description)}
                                 </p>
                               ) : null}
                             </div>
@@ -3643,15 +3668,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     const ordB = typeof b.order === 'number' ? b.order : b.createdAt;
                     switch (batchSortMode) {
                       case 'name':
-                        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || ordA - ordB;
+                        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }) || ordA - ordB;
                       case 'owner':
-                        return a.owner.localeCompare(b.owner) || ordA - ordB;
+                        return (a.owner || '').localeCompare(b.owner || '') || ordA - ordB;
                       case 'status': {
                         const statusWeight = (st: string) => ({ ready: 0, progress: 1, blocked: 2, done: 3 }[st] ?? 9);
                         return statusWeight(computedStatus(a)) - statusWeight(computedStatus(b)) || ordA - ordB;
                       }
                       case 'created':
-                        return b.createdAt - a.createdAt;
+                        return (b.createdAt || 0) - (a.createdAt || 0);
                       default:
                         return ordA - ordB;
                     }
@@ -3883,7 +3908,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                                   {t.description ? (
                                     <p className="text-[10px] truncate leading-tight px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-950/60 text-zinc-300">
-                                      {t.description.replace(/^Key objectives:\s*•?\s*/i, '')}
+                                      {typeof t.description === 'string' ? t.description.replace(/^Key objectives:\s*•?\s*/i, '') : String(t.description)}
                                     </p>
                                   ) : null}
 
