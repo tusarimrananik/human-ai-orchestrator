@@ -439,11 +439,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
       | { payload: WorkspacePayload; baseRevision: number; dirty: boolean }
       | null;
 
+    // Do NOT overwrite local state if a local save is pending or in flight
+    if (saveInFlightRef.current || pendingPayloadRef.current !== null) {
+      return;
+    }
+
     if (envelope?.dirty && !syncReadyRef.current) {
       remoteRevisionRef.current = envelope.baseRevision;
       pendingPayloadRef.current = envelope.payload;
       setSyncStatus(remoteWorkspace && remoteWorkspace.revision !== envelope.baseRevision ? 'conflict' : 'offline');
-    } else if (remoteWorkspace) {
+    } else if (remoteWorkspace && remoteWorkspace.revision > remoteRevisionRef.current) {
       const rawPayload = remoteWorkspace.payload as WorkspacePayload;
       const { payload, hash: remoteHash } = canonicalizeWorkspacePayload(rawPayload, {
         normalizeTasks: (remoteTasks) => migrateOptionalRanks(remoteTasks, rawPayload.schemaVersion),
