@@ -1333,9 +1333,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setHiddenStageIndices([]);
   };
 
+  const currentGroupOrder = useMemo(() => {
+    if (activeTurnGroupName === 'Parallel Group 2') {
+      return ['Parallel Group 2', 'Parallel Group 1'];
+    }
+    return ['Parallel Group 1', 'Parallel Group 2'];
+  }, [activeTurnGroupName]);
+
   const rankedTasks = useMemo(
-    () => getInterleavedRankedTasks(filtered, (task) => task.manualStatus === 'done'),
-    [filtered]
+    () => getInterleavedRankedTasks(filtered, (task) => task.manualStatus === 'done', currentGroupOrder),
+    [filtered, currentGroupOrder]
   );
 
   const groups: Record<'blocked' | 'ready' | 'progress' | 'done', Task[]> = useMemo(() => {
@@ -2676,12 +2683,32 @@ function OrchestratorPage({ userId }: { userId: string }) {
         {/* Left: Step indicator, Checkbox, Rank badge & clear */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {typeof stepIndex === 'number' && (
-            <div className="flex flex-col items-center justify-center flex-shrink-0 bg-zinc-900/90 border border-zinc-700/80 px-2 py-1 rounded-lg shadow-sm">
-              <span className="text-[7px] uppercase font-bold text-zinc-400">TURN</span>
-              <span className="text-xs font-mono font-black text-amber-300">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (t.parallelGroup && t.parallelGroup !== activeTurnGroupName) {
+                  switchActiveTurn(t.parallelGroup);
+                }
+              }}
+              className={`flex flex-col items-center justify-center flex-shrink-0 border px-2 py-1 rounded-lg shadow-sm transition ${
+                stepIndex === 0
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 ring-1 ring-amber-500/40'
+                  : 'bg-zinc-900/90 border-zinc-700/80 text-zinc-400 hover:border-amber-500/50 hover:text-amber-200 cursor-pointer'
+              }`}
+              title={
+                stepIndex === 0
+                  ? 'First to execute'
+                  : `Click to make ${t.parallelGroup || 'Parallel Group 1'} execute first (TURN #1)`
+              }
+            >
+              <span className="text-[7px] uppercase font-bold tracking-wider">
+                {stepIndex === 0 ? 'ACTIVE TURN' : 'TURN'}
+              </span>
+              <span className="text-xs font-mono font-black">
                 #{stepIndex + 1}
               </span>
-            </div>
+            </button>
           )}
           <input
             type="checkbox"
@@ -3456,6 +3483,48 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {/* Active Turn Selector & Rotator */}
+                {isParallelModeActive && (
+                  <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg shadow-inner">
+                    <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1 pl-1.5 pr-0.5">
+                      <Zap className="w-3 h-3 text-amber-400 fill-current" />
+                      <span>Start Turn:</span>
+                    </span>
+                    <button
+                      onClick={() => switchActiveTurn('Parallel Group 1')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                        activeTurnGroupName === 'Parallel Group 1'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      title="Make Parallel Group 1 execute first (TURN #1)"
+                    >
+                      Group 1
+                    </button>
+                    <button
+                      onClick={() => switchActiveTurn('Parallel Group 2')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                        activeTurnGroupName === 'Parallel Group 2'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      title="Make Parallel Group 2 execute first (TURN #1)"
+                    >
+                      Group 2
+                    </button>
+                    <button
+                      onClick={() => {
+                        const next = activeTurnGroupName === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2';
+                        switchActiveTurn(next);
+                      }}
+                      className="p-1 text-amber-300 hover:text-white rounded hover:bg-white/10 transition"
+                      title="Alternate start turn between Group 1 and Group 2"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Active vs Done Tab Switcher */}
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg">
                   <button
