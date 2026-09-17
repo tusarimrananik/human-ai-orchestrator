@@ -220,7 +220,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [batchPriorityOrder, setBatchPriorityOrder] = useState<BatchTag[]>(DEFAULT_BATCH_ORDER);
   const [parallelGroups, setParallelGroups] = useState<ParallelGroupConfig[]>(DEFAULT_PARALLEL_GROUPS);
-  const [isParallelModeActive, setIsParallelModeActive] = useState<boolean>(true);
+  const [isParallelModeActive, setIsParallelModeActive] = useState<boolean>(false);
   const [activeTurnGroupName, setActiveTurnGroupName] = useState<string>('Parallel Group 1');
   const [dagLayoutMode, setDagLayoutMode] = useState<'split' | 'unified'>('split');
   const [devTurnCompletedCount, setDevTurnCompletedCount] = useState<number>(0);
@@ -992,6 +992,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   // Master Action: "Start Parallel Work" - Activates parallel mode & automatically fills slots from Ready state
   const handleStartParallelWork = () => {
     setIsParallelModeActive(true);
+    setDagLayoutMode('split');
     if (typeof window !== 'undefined') {
       localStorage.setItem(parallelModeKey, 'true');
     }
@@ -3568,34 +3569,37 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   </button>
                 </div>
 
-                <div className="h-4 w-[1px] bg-zinc-800 mx-0.5" />
-
-                {/* Parallel Stream View Layout Mode */}
-                <div className="flex items-center rounded border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-inner">
-                  <button
-                    onClick={() => setDagLayoutMode('split')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
-                      dagLayoutMode === 'split'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                    title="Parallel Group 1 and Parallel Group 2 together divided by a vertical line"
-                  >
-                    <Split className="w-2.5 h-2.5" />
-                    <span>Divided View (Group 1 | 2)</span>
-                  </button>
-                  <button
-                    onClick={() => setDagLayoutMode('unified')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
-                      dagLayoutMode === 'unified'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                    title="Combine all tasks in one single continuous grid"
-                  >
-                    <span>Unified DAG</span>
-                  </button>
-                </div>
+                {/* Parallel Stream View Layout Mode - Only visible when parallel mode is active */}
+                {isParallelModeActive && (
+                  <>
+                    <div className="h-4 w-[1px] bg-zinc-800 mx-0.5" />
+                    <div className="flex items-center rounded border border-zinc-800 bg-zinc-900/90 p-0.5 shadow-inner">
+                      <button
+                        onClick={() => setDagLayoutMode('split')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                          dagLayoutMode === 'split'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                        title="Parallel Group 1 and Parallel Group 2 together divided by a vertical line"
+                      >
+                        <Split className="w-2.5 h-2.5" />
+                        <span>Divided View (Group 1 | 2)</span>
+                      </button>
+                      <button
+                        onClick={() => setDagLayoutMode('unified')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                          dagLayoutMode === 'unified'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                        title="Combine all tasks in one single continuous grid"
+                      >
+                        <span>Unified DAG</span>
+                      </button>
+                    </div>
+                  </>
+                )}
 
                 {isParallelModeActive && parallelGroups.length > 1 && (
                   <div className="flex items-center gap-1.5 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-bold text-amber-300 shadow-sm">
@@ -3675,7 +3679,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </svg>
 
               <div className="pt-1">
-                {dagLayoutMode === 'split' ? (
+                {isParallelModeActive && dagLayoutMode === 'split' ? (
                   /* Side-by-Side: Parallel Group 1 and Parallel Group 2 Divided by a Vertical Line */
                   <div className="flex flex-row min-w-max pb-6 items-start gap-0">
                     {/* Left Side: Parallel Group 1 */}
