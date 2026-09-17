@@ -120,13 +120,7 @@ type WorkspacePayload = {
   activeTurnGroupName: string;
 };
 
-function migrateOptionalRanks(tasks: Task[], schemaVersion?: number): Task[] {
-  if ((schemaVersion || 1) < 2) {
-    return tasks.map((task) => {
-      const { rank: _rank, ...withoutRank } = task;
-      return withoutRank;
-    });
-  }
+function migrateOptionalRanks(tasks: Task[], _schemaVersion?: number): Task[] {
   return normalizeTaskRanks(tasks, (task) => task.manualStatus === 'done');
 }
 
@@ -3458,7 +3452,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   <ListTodo className="w-4 h-4 text-indigo-400" /> Ranked Tasks Execution Queue
                 </h2>
                 <p className="text-[11px] text-zinc-400 mt-0.5">
-                  Complete tasks sequentially from #1 downward. Type any number into the # badge to reorder.
+                  Alternates turn-by-turn between parallel groups: #1 from Group 1, then #1 from Group 2, #2 from Group 1, then #2 from Group 2.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -3513,19 +3507,105 @@ function OrchestratorPage({ userId }: { userId: string }) {
             </div>
             <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
               {rankedViewTab === 'active' ? (
-                rankedTasks.length === 0 ? (
-                  <div className="py-24 text-center space-y-2">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500">
-                      <ListTodo className="w-6 h-6" />
+                <>
+                  {rankedTasks.length === 0 ? (
+                    <div className="py-12 text-center space-y-2">
+                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500">
+                        <ListTodo className="w-5 h-5" />
+                      </div>
+                      <div className="text-sm font-bold text-zinc-300">No ranked tasks in queue yet</div>
+                      <div className="text-xs text-zinc-500 max-w-sm mx-auto">
+                        Type a rank number (#1, #2) on any card or click &quot;Queue as #1&quot; below to start the alternating execution queue.
+                      </div>
                     </div>
-                    <div className="text-sm font-bold text-zinc-300">No ranked tasks</div>
-                    <div className="text-xs text-zinc-500 max-w-sm mx-auto">
-                      Go to the DAG Graph and type a rank number (e.g. #1, #2) on any task card to add it to your execution queue.
+                  ) : (
+                    <div className="space-y-2.5">
+                      {rankedTasks.map((task, idx) => renderRankedTaskRow(task, idx))}
                     </div>
-                  </div>
-                ) : (
-                  rankedTasks.map((task, idx) => renderRankedTaskRow(task, idx))
-                )
+                  )}
+
+                  {/* Unranked Active Tasks section */}
+                  {filtered.filter((t) => t.manualStatus !== 'done' && (typeof t.rank !== 'number' || t.rank <= 0)).length > 0 && (
+                    <div className="mt-6 pt-4 border-t border-zinc-800/80">
+                      <div className="flex items-center justify-between mb-2.5 px-1">
+                        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <ListTodo className="w-3.5 h-3.5 text-zinc-500" />
+                          <span>
+                            Unranked Active Tasks (
+                            {filtered.filter((t) => t.manualStatus !== 'done' && (typeof t.rank !== 'number' || t.rank <= 0)).length}
+                            )
+                          </span>
+                        </span>
+                        <button
+                          onClick={() => {
+                            const unranked = filtered.filter((t) => t.manualStatus !== 'done' && (typeof t.rank !== 'number' || t.rank <= 0));
+                            let nextList = [...tasks];
+                            unranked.forEach((t) => {
+                              const grp = t.parallelGroup || 'Parallel Group 1';
+                              const grpRanked = nextList.filter(
+                                (x) => (x.parallelGroup || 'Parallel Group 1') === grp && typeof x.rank === 'number' && x.rank > 0
+                              );
+                              const nextRank = grpRanked.length + 1;
+                              nextList = setTaskRank(nextList, t.id, nextRank, (x) => x.manualStatus === 'done');
+                            });
+                            saveTasks(nextList);
+                          }}
+                          className="text-[10px] font-bold px-2.5 py-1 rounded bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-200 transition flex items-center gap-1 shadow-sm"
+                          title="Queue all unranked active tasks into the alternating execution list"
+                        >
+                          <Plus className="w-2.5 h-2.5" /> Queue All Into Execution
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        {filtered
+                          .filter((t) => t.manualStatus !== 'done' && (typeof t.rank !== 'number' || t.rank <= 0))
+                          .map((t) => {
+                            const grp = t.parallelGroup || 'Parallel Group 1';
+                            const existingGroupRankedCount = tasks.filter(
+                              (x) => (x.parallelGroup || 'Parallel Group 1') === grp && typeof x.rank === 'number' && x.rank > 0
+                            ).length;
+                            const nextRank = existingGroupRankedCount + 1;
+                            const status = computedStatus(t);
+
+                            return (
+                              <div
+                                key={t.id}
+                                className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700 transition"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span
+                                    className={`text-[8px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5 flex-shrink-0 ${
+                                      grp === 'Parallel Group 2'
+                                        ? 'bg-purple-950/90 text-purple-200 border-purple-500/60'
+                                        : 'bg-indigo-950/90 text-indigo-200 border-indigo-500/60'
+                                    }`}
+                                  >
+                                    <Split className="w-2 h-2" /> {grp}
+                                  </span>
+                                  <span
+                                    className="text-xs font-semibold text-zinc-200 truncate cursor-pointer hover:underline"
+                                    onClick={() => openTaskModal(t.id)}
+                                  >
+                                    {t.name}
+                                  </span>
+                                  <span className="text-[8px] font-bold uppercase px-1.5 py-0.2 rounded border bg-black/40 border-white/10 text-zinc-400 flex-shrink-0">
+                                    {status}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => changeTaskRank(t.id, nextRank)}
+                                  className="text-[9px] font-bold px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1 shadow-sm flex-shrink-0"
+                                  title={`Queue as #${nextRank} in ${grp}`}
+                                >
+                                  <Plus className="w-2.5 h-2.5" /> Queue as #{nextRank}
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 groups.done.length === 0 ? (
                   <div className="py-24 text-center space-y-2">
