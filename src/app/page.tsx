@@ -3184,48 +3184,41 @@ function OrchestratorPage({ userId }: { userId: string }) {
       {/* Mobile Top Header (Visible only on mobile screens) */}
       <header className="md:hidden h-12 px-3 border-b border-zinc-800/80 bg-zinc-900/95 flex items-center justify-between gap-2 flex-shrink-0 z-20">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
-            <Zap className="w-3.5 h-3.5 fill-current text-amber-300" />
+          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
+            <Zap className="w-4 h-4 fill-current text-amber-300" />
           </div>
-          <span className="font-bold text-sm text-white tracking-tight">Orchestrator</span>
+          <div className="flex flex-col">
+            <span className="font-bold text-sm text-white tracking-tight leading-none">Orchestrator</span>
+            <span className="text-[9px] text-zinc-400 font-mono mt-0.5">
+              {syncStatus === 'saved' ? (
+                <span className="text-emerald-400 font-semibold">● Synced</span>
+              ) : syncStatus === 'saving' ? (
+                <span className="text-amber-400 font-semibold animate-pulse">● Saving...</span>
+              ) : (
+                <span>● Offline</span>
+              )}
+            </span>
+          </div>
         </div>
 
-        {/* Mobile Turn Switcher */}
-        <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg text-xs">
-          <button
-            onClick={() => switchActiveTurn('Parallel Group 1')}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
-              activeTurnGroupName === 'Parallel Group 1'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-zinc-400'
-            }`}
-          >
-            Group 1
-          </button>
-          <button
-            onClick={() => switchActiveTurn('Parallel Group 2')}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
-              activeTurnGroupName === 'Parallel Group 2'
-                ? 'bg-purple-600 text-white shadow'
-                : 'text-zinc-400'
-            }`}
-          >
-            Group 2
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              syncStatus === 'saved'
-                ? 'bg-emerald-400'
-                : syncStatus === 'saving'
-                ? 'bg-amber-400 animate-pulse'
-                : 'bg-zinc-500'
-            }`}
-            title={`Sync: ${syncStatus}`}
-          />
-        </div>
+        {/* Mobile Turn Switcher Button */}
+        <button
+          onClick={() =>
+            switchActiveTurn(
+              activeTurnGroupName === 'Parallel Group 1' ? 'Parallel Group 2' : 'Parallel Group 1'
+            )
+          }
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow border active:scale-95 ${
+            activeTurnGroupName === 'Parallel Group 2'
+              ? 'bg-purple-950/80 text-purple-200 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+              : 'bg-indigo-950/80 text-indigo-200 border-indigo-500/60 shadow-[0_0_12px_rgba(99,102,241,0.3)]'
+          }`}
+          title="Click to alternate active turn"
+        >
+          <Zap className="w-3 h-3 text-amber-400 fill-current" />
+          <span>Turn: {activeTurnGroupName === 'Parallel Group 2' ? 'Group 2' : 'Group 1'}</span>
+          <span className="text-[10px] opacity-70">⇄</span>
+        </button>
       </header>
 
       {/* Desktop Top Header (Hidden on mobile screens) */}
@@ -3559,18 +3552,61 @@ function OrchestratorPage({ userId }: { userId: string }) {
       <main className="flex-1 p-2 md:p-2.5 overflow-hidden min-h-0 pb-16 md:pb-2.5">
         {view === 'ranked' ? (
           <div className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/60 shadow-xl">
-            <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800/80 bg-zinc-900/80 px-4 py-3">
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <ListTodo className="w-4 h-4 text-indigo-400" /> Ranked Tasks Execution Queue
-                </h2>
-                <p className="text-[11px] text-zinc-400 mt-0.5">
-                  Tasks execute sequentially from #1 downward. Completing a task moves the next task to #1.
-                </p>
+            <div className="flex flex-shrink-0 flex-col md:flex-row md:items-center justify-between border-b border-zinc-800/80 bg-zinc-900/80 px-3 py-2.5 md:px-4 md:py-3 gap-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <ListTodo className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                    <span>Ranked Execution Queue</span>
+                  </h2>
+                  <p className="hidden md:block text-[11px] text-zinc-400 mt-0.5">
+                    Tasks execute sequentially from #1 downward. Completing a task moves the next task to #1.
+                  </p>
+                </div>
+
+                {/* Mobile Quick + Task button */}
+                <button
+                  onClick={() => openTaskModal()}
+                  className="md:hidden px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-bold text-white text-xs shadow flex items-center gap-1 transition active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" /> + Task
+                </button>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Active Turn Switcher */}
+
+              <div className="flex items-center justify-between md:justify-end gap-2 flex-wrap">
+                {/* Active vs Done Tab Switcher */}
                 <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg text-xs">
+                  <button
+                    onClick={() => setRankedViewTab('active')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                      rankedViewTab === 'active'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>Active Queue</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+                      {rankedTasks.length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setRankedViewTab('done')}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
+                      rankedViewTab === 'done'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Done</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+                      {groups.done.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Desktop Start Turn Switcher (Hidden on mobile since top app bar handles it) */}
+                <div className="hidden md:flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg text-xs">
                   <span className="text-[10px] text-zinc-400 px-1.5 font-medium flex items-center gap-1">
                     <Zap className="w-3 h-3 text-amber-400" /> Start Turn:
                   </span>
@@ -3596,37 +3632,6 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   </button>
                 </div>
 
-                {/* Active vs Done Tab Switcher */}
-                <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg">
-                  <button
-                    onClick={() => setRankedViewTab('active')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
-                      rankedViewTab === 'active'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    <span>Active Queue</span>
-                    <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
-                      {rankedTasks.length}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setRankedViewTab('done')}
-                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
-                      rankedViewTab === 'done'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Done</span>
-                    <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
-                      {groups.done.length}
-                    </span>
-                  </button>
-                </div>
-
                 {selectedBatchTaskIds.length > 0 && (
                   <button
                     onClick={deleteSelectedTasks}
@@ -3639,7 +3644,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
                 <button
                   onClick={() => openTaskModal()}
-                  className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-white text-xs shadow flex items-center gap-1 transition"
+                  className="hidden md:flex px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-white text-xs shadow items-center gap-1 transition"
                 >
                   <Plus className="w-3.5 h-3.5" /> New Task
                 </button>
@@ -3648,13 +3653,29 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
               {rankedViewTab === 'active' ? (
                 rankedTasks.length === 0 ? (
-                  <div className="py-24 text-center space-y-2">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500">
-                      <ListTodo className="w-6 h-6" />
+                  <div className="py-14 md:py-24 text-center space-y-3 px-4">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shadow-inner">
+                      <ListTodo className="w-7 h-7" />
                     </div>
-                    <div className="text-sm font-bold text-zinc-300">No ranked tasks</div>
-                    <div className="text-xs text-zinc-500 max-w-sm mx-auto">
-                      Go to the DAG Graph and type a rank number (e.g. #1, #2) on any task card to add it to your execution queue.
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-zinc-200">Execution Queue is Empty</h3>
+                      <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">
+                        Assign rank numbers to tasks from your DAG or create a new task to start executing.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center justify-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setView('dependency')}
+                        className="px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold shadow flex items-center gap-1.5 transition active:scale-95"
+                      >
+                        <GitFork className="w-3.5 h-3.5 text-indigo-400" /> Open Full DAG
+                      </button>
+                      <button
+                        onClick={() => openTaskModal()}
+                        className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> + New Task
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -5624,18 +5645,20 @@ function OrchestratorPage({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Mobile Bottom Navigation Bar (Docked on phone screens) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 border-t border-zinc-800/90 backdrop-blur-md px-3 py-1.5 flex items-center justify-around text-[10px] font-bold shadow-2xl">
+      {/* Mobile Bottom Navigation Bar (Docked on phone screens with safe area padding) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 border-t border-zinc-800/90 backdrop-blur-md px-3 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),10px)] flex items-center justify-around text-[10px] shadow-2xl">
         <button
           onClick={() => setView('ranked')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition relative ${
-            view === 'ranked' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition relative active:scale-95 ${
+            view === 'ranked'
+              ? 'text-indigo-400 font-bold bg-indigo-500/15'
+              : 'text-zinc-400 font-medium hover:text-zinc-200'
           }`}
         >
           <ListTodo className="w-4 h-4" />
           <span>Queue</span>
           {rankedTasks.length > 0 && (
-            <span className="absolute top-1 right-2 px-1 py-0.1 bg-indigo-500 text-white rounded-full text-[8px] font-mono">
+            <span className="absolute -top-0.5 right-1.5 px-1 py-0.1 bg-indigo-500 text-white rounded-full text-[8px] font-mono">
               {rankedTasks.length}
             </span>
           )}
@@ -5643,8 +5666,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
         <button
           onClick={() => setView('queue')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
-            view === 'queue' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition active:scale-95 ${
+            view === 'queue'
+              ? 'text-indigo-400 font-bold bg-indigo-500/15'
+              : 'text-zinc-400 font-medium hover:text-zinc-200'
           }`}
         >
           <Target className="w-4 h-4" />
@@ -5654,7 +5679,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         {/* Center Floating Action Button (FAB) for New Task */}
         <button
           onClick={() => openTaskModal()}
-          className="flex items-center justify-center -mt-5 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] border-4 border-zinc-950 transition active:scale-95"
+          className="flex items-center justify-center -mt-5 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/40 border-4 border-zinc-950 transition active:scale-90"
           title="Create New Task"
         >
           <Plus className="w-6 h-6" />
@@ -5662,8 +5687,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
         <button
           onClick={() => setView('dependency')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
-            view === 'dependency' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition active:scale-95 ${
+            view === 'dependency'
+              ? 'text-indigo-400 font-bold bg-indigo-500/15'
+              : 'text-zinc-400 font-medium hover:text-zinc-200'
           }`}
         >
           <GitFork className="w-4 h-4" />
@@ -5672,8 +5699,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
         <button
           onClick={() => setView('batch')}
-          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
-            view === 'batch' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition active:scale-95 ${
+            view === 'batch'
+              ? 'text-indigo-400 font-bold bg-indigo-500/15'
+              : 'text-zinc-400 font-medium hover:text-zinc-200'
           }`}
         >
           <Boxes className="w-4 h-4" />
