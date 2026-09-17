@@ -242,6 +242,25 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [renameInput, setRenameInput] = useState<string>('');
   const [isNewBatchInputOpen, setIsNewBatchInputOpen] = useState<boolean>(false);
   const [newBatchNameInput, setNewBatchNameInput] = useState<string>('');
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth < 768;
+      const isMobileApp =
+        typeof window !== 'undefined' &&
+        (new URLSearchParams(window.location.search).get('app') === 'mobile' ||
+          /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+      const mobile = isNarrow || isMobileApp;
+      setIsMobile(mobile);
+      if (mobile) {
+        setView((prev) => (prev === 'dependency' ? 'ranked' : prev));
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   const remoteWorkspace = useQuery(api.workspace.get, {});
   const saveRemoteWorkspace = useMutation(api.workspace.save);
   const forceSaveRemote = useMutation(api.workspace.forceSave);
@@ -2695,7 +2714,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       <div
         key={t.id}
         style={batchTheme.cardStyle}
-        className="border-2 rounded-xl p-3.5 shadow-lg flex items-center justify-between gap-3.5 select-none transition"
+        className="border-2 rounded-xl p-3 md:p-3.5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none transition"
       >
         {/* Left: Checkbox, Up/Down arrows, Rank badge & clear */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -2844,7 +2863,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center justify-end gap-2 flex-shrink-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
           {durationDisplay && (
             <div className="flex items-center gap-1 font-mono px-2.5 py-1 rounded text-[10px] font-bold bg-blue-500/30 text-blue-100 border border-blue-400/60 shadow">
               <Timer className="w-3 h-3" />
@@ -3162,8 +3181,55 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-200 flex flex-col antialiased overflow-hidden select-none font-sans text-xs">
-      {/* Top Header */}
-      <header className="h-11 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between gap-2 flex-shrink-0 z-20">
+      {/* Mobile Top Header (Visible only on mobile screens) */}
+      <header className="md:hidden h-12 px-3 border-b border-zinc-800/80 bg-zinc-900/95 flex items-center justify-between gap-2 flex-shrink-0 z-20">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md">
+            <Zap className="w-3.5 h-3.5 fill-current text-amber-300" />
+          </div>
+          <span className="font-bold text-sm text-white tracking-tight">Orchestrator</span>
+        </div>
+
+        {/* Mobile Turn Switcher */}
+        <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg text-xs">
+          <button
+            onClick={() => switchActiveTurn('Parallel Group 1')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+              activeTurnGroupName === 'Parallel Group 1'
+                ? 'bg-indigo-600 text-white shadow'
+                : 'text-zinc-400'
+            }`}
+          >
+            Group 1
+          </button>
+          <button
+            onClick={() => switchActiveTurn('Parallel Group 2')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+              activeTurnGroupName === 'Parallel Group 2'
+                ? 'bg-purple-600 text-white shadow'
+                : 'text-zinc-400'
+            }`}
+          >
+            Group 2
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              syncStatus === 'saved'
+                ? 'bg-emerald-400'
+                : syncStatus === 'saving'
+                ? 'bg-amber-400 animate-pulse'
+                : 'bg-zinc-500'
+            }`}
+            title={`Sync: ${syncStatus}`}
+          />
+        </div>
+      </header>
+
+      {/* Desktop Top Header (Hidden on mobile screens) */}
+      <header className="hidden md:flex h-11 px-3 border-b border-zinc-800/80 bg-zinc-900/90 items-center justify-between gap-2 flex-shrink-0 z-20">
         <div className="flex items-center gap-2 flex-shrink-0">
           <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center text-white">
             <Zap className="w-3 h-3 fill-current" />
@@ -3403,8 +3469,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
         </div>
       </header>
 
-      {/* Filter Row with Selection & Bulk Actions */}
-      <div className="px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 flex items-center justify-between gap-2 flex-shrink-0">
+      {/* Desktop Filter Row with Selection & Bulk Actions (Hidden on mobile screens) */}
+      <div className="hidden md:flex px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 items-center justify-between gap-2 flex-shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="relative flex-shrink-0 w-48">
             <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
@@ -3490,7 +3556,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-2.5 overflow-hidden min-h-0">
+      <main className="flex-1 p-2 md:p-2.5 overflow-hidden min-h-0 pb-16 md:pb-2.5">
         {view === 'ranked' ? (
           <div className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/60 shadow-xl">
             <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800/80 bg-zinc-900/80 px-4 py-3">
@@ -5557,6 +5623,63 @@ function OrchestratorPage({ userId }: { userId: string }) {
           </div>
         </div>
       )}
+
+      {/* Mobile Bottom Navigation Bar (Docked on phone screens) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 border-t border-zinc-800/90 backdrop-blur-md px-3 py-1.5 flex items-center justify-around text-[10px] font-bold shadow-2xl">
+        <button
+          onClick={() => setView('ranked')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition relative ${
+            view === 'ranked' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <ListTodo className="w-4 h-4" />
+          <span>Queue</span>
+          {rankedTasks.length > 0 && (
+            <span className="absolute top-1 right-2 px-1 py-0.1 bg-indigo-500 text-white rounded-full text-[8px] font-mono">
+              {rankedTasks.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setView('queue')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
+            view === 'queue' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Target className="w-4 h-4" />
+          <span>Queue DAG</span>
+        </button>
+
+        {/* Center Floating Action Button (FAB) for New Task */}
+        <button
+          onClick={() => openTaskModal()}
+          className="flex items-center justify-center -mt-5 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.6)] border-4 border-zinc-950 transition active:scale-95"
+          title="Create New Task"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+
+        <button
+          onClick={() => setView('dependency')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
+            view === 'dependency' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <GitFork className="w-4 h-4" />
+          <span>Full DAG</span>
+        </button>
+
+        <button
+          onClick={() => setView('batch')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition ${
+            view === 'batch' ? 'text-indigo-400 bg-indigo-950/60' : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Boxes className="w-4 h-4" />
+          <span>Batches</span>
+        </button>
+      </nav>
 
       <input
         type="file"
