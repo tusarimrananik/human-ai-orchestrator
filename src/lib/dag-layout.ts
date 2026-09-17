@@ -64,7 +64,7 @@ export function insertDagTaskBefore<T extends DagTask>(tasks: readonly T[], targ
   return copy.map((task) => (task.id === targetId ? { ...task, dependencies: [preparedNewTask.id] } : task));
 }
 
-/** Adds a task after target, making it depend on target. */
+/** Inserts a task after target in the DAG, making it depend on target and rewiring target's existing children to depend on the new task. */
 export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], targetId: string, newTask: T): T[] {
   const preparedNewTask: T = { ...newTask, dependencies: [targetId] };
   const targetIndex = tasks.findIndex((task) => task.id === targetId);
@@ -72,7 +72,18 @@ export function addDagTaskAfter<T extends DagTask>(tasks: readonly T[], targetId
 
   const copy = [...tasks];
   copy.splice(targetIndex + 1, 0, preparedNewTask);
-  return copy;
+
+  // Rewire any existing children of targetId to depend on preparedNewTask instead of targetId
+  return copy.map((task) => {
+    if (task.id === preparedNewTask.id) return task;
+    if ((task.dependencies || []).includes(targetId)) {
+      return {
+        ...task,
+        dependencies: task.dependencies!.map((depId) => (depId === targetId ? preparedNewTask.id : depId)),
+      };
+    }
+    return task;
+  });
 }
 
 /** Adds a sibling task sharing target's exact parents. */

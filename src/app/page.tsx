@@ -3390,8 +3390,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 openTaskModal(null, 'blocked', [t.id], t.batch, { taskId: t.id, position: 'after' });
                               }}
                               className="absolute -right-4 top-1/2 z-30 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full border border-indigo-400 bg-zinc-900 text-indigo-200 opacity-0 shadow-md transition hover:scale-110 hover:bg-indigo-600 hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 group-hover:opacity-100"
-                              title={`Add a parallel-capable task after ${t.name}`}
-                              aria-label={`Add a task after ${t.name}`}
+                              title={`Insert downstream task after ${t.name}`}
+                              aria-label={`Insert task after ${t.name}`}
                             >
                               <Plus className="h-2.5 w-2.5" />
                             </button>

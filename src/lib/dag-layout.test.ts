@@ -119,12 +119,14 @@ test('inserts a task between a target and all existing parents', () => {
   deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['x']);
 });
 
-test('adds multiple children as independent parallel branches', () => {
+test('splices a task after target and rewires existing children to depend on it', () => {
   const root: T = { id: 'a', batch: 'B1', order: 0, dependencies: [] };
   const first = addDagTaskAfter([root], 'a', { id: 'b', batch: 'B2', order: 1, dependencies: [] });
+  deepEqual(first.find((task) => task.id === 'b')?.dependencies, ['a']);
+
   const result = addDagTaskAfter(first, 'a', { id: 'c', batch: 'B2', order: 2, dependencies: [] });
-  deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['a']);
   deepEqual(result.find((task) => task.id === 'c')?.dependencies, ['a']);
+  deepEqual(result.find((task) => task.id === 'b')?.dependencies, ['c']);
 });
 
 test('adds a parallel sibling above target with identical parent dependencies', () => {
