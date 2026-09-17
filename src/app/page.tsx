@@ -182,7 +182,9 @@ export default function Page() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-4 text-zinc-100">
         <section className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-center shadow-2xl">
-          <div className="mb-2 text-2xl">⚡</div>
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-400 ring-1 ring-indigo-500/20">
+            <Zap className="h-5 w-5 fill-indigo-400/20" />
+          </div>
           <h1 className="text-base font-bold">Human + AI Work Orchestrator</h1>
           <p className="mt-1 text-xs text-zinc-400">Sign in to securely sync your task graph across devices.</p>
           <button
@@ -2622,8 +2624,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
       {/* Top Header */}
       <header className="h-11 px-3 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between gap-2 flex-shrink-0 z-20">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center font-black text-white text-[11px]">
-            ⚡
+          <div className="w-5 h-5 rounded bg-indigo-600 flex items-center justify-center text-white">
+            <Zap className="w-3 h-3 fill-current" />
           </div>
           <div className="flex items-center bg-zinc-950 border border-zinc-800 p-0.5 rounded-md">
             <button
@@ -2880,11 +2882,11 @@ function OrchestratorPage({ userId }: { userId: string }) {
             className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] text-indigo-300 focus:outline-none font-medium"
           >
             <option value="">All Streams (Parallel & Standard)</option>
-            <option value="parallel_only">⚡ All Parallel Work Only</option>
+            <option value="parallel_only">All Parallel Work Only</option>
             <option value="non_parallel_only">Standard (Non-Parallel) Only</option>
             {parallelGroups.map((g) => (
               <option key={g.id} value={g.name}>
-                📁 {g.name} Stream
+                {g.name} Stream
               </option>
             ))}
           </select>
@@ -2984,7 +2986,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
               {rankedViewTab === 'active' ? (
                 rankedTasks.length === 0 ? (
                   <div className="py-24 text-center space-y-2">
-                    <div className="text-2xl">📋</div>
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500">
+                      <ListTodo className="w-6 h-6" />
+                    </div>
                     <div className="text-sm font-bold text-zinc-300">No ranked tasks</div>
                     <div className="text-xs text-zinc-500 max-w-sm mx-auto">
                       Go to the DAG Graph and type a rank number (e.g. #1, #2) on any task card to add it to your execution queue.
@@ -2996,7 +3000,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
               ) : (
                 groups.done.length === 0 ? (
                   <div className="py-24 text-center space-y-2">
-                    <div className="text-2xl">🎉</div>
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
                     <div className="text-sm font-bold text-zinc-300">No completed tasks yet</div>
                     <div className="text-xs text-zinc-500 max-w-sm mx-auto">
                       Complete tasks from your active queue and they will be archived here.
@@ -3013,7 +3019,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
           <div className="h-full w-full bg-zinc-900/40 border border-zinc-800/80 rounded-lg p-3 overflow-auto relative">
             {view === 'queue' && rankedTasks.length === 0 ? (
               <div className="py-24 text-center space-y-3">
-                <div className="text-3xl">🎯</div>
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Target className="w-7 h-7" />
+                </div>
                 <div className="text-sm font-bold text-zinc-200">Your Queue DAG is empty</div>
                 <div className="text-xs text-zinc-400 max-w-sm mx-auto">
                   Go to <strong className="text-indigo-400">Backlog DAG</strong> or <strong className="text-indigo-400">Full DAG</strong>, select the tasks you want to do (dependencies are auto-selected), and click <strong className="text-indigo-400">Move to Queue</strong>.
@@ -3027,7 +3035,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
               </div>
             ) : view === 'backlog' && filtered.filter((t) => typeof t.rank !== 'number' || t.rank <= 0).length === 0 ? (
               <div className="py-24 text-center space-y-3">
-                <div className="text-3xl">🎉</div>
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
                 <div className="text-sm font-bold text-zinc-200">No unqueued tasks remaining</div>
                 <div className="text-xs text-zinc-400 max-w-sm mx-auto">
                   All active tasks in this project are already in your <strong className="text-indigo-400">Queue DAG</strong>.
@@ -4025,7 +4035,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     className="p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
                   >
                     <Check className="w-4 h-4" />
-                    <span>✓ Done</span>
+                    <span>Done</span>
                   </button>
 
                   <button
@@ -4033,7 +4043,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     className="p-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
                   >
                     <RotateCcw className="w-4 h-4" />
-                    <span>🔄 Retry</span>
+                    <span>Retry</span>
                   </button>
 
                   <button
@@ -4041,7 +4051,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     className="p-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow"
                   >
                     <Ban className="w-4 h-4" />
-                    <span>🚫 Blocked</span>
+                    <span>Blocked</span>
                   </button>
                 </div>
               </div>
@@ -4230,8 +4240,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     onChange={() => setTaskType('goal')}
                     className="text-amber-500"
                   />
-                  <span className="text-amber-300 font-semibold flex items-center gap-0.5">
-                    🎯 Goal Task (Review: Done / Retry / Blocked)
+                  <span className="text-amber-300 font-semibold flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-amber-400" />
+                    Goal Task (Review: Done / Retry / Blocked)
                   </span>
                 </label>
               </div>
@@ -4322,7 +4333,10 @@ function OrchestratorPage({ userId }: { userId: string }) {
                       onChange={() => setTaskIsParallel(true)}
                       className="text-indigo-500"
                     />
-                    <span className="text-indigo-300 font-semibold">⚡ Parallel Group Work</span>
+                    <span className="text-indigo-300 font-semibold flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400/20" />
+                      Parallel Group Work
+                    </span>
                   </label>
                 </div>
               </div>
@@ -4337,7 +4351,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   >
                     {parallelGroups.map((g) => (
                       <option key={g.id} value={g.name}>
-                        📁 {g.name} [{g.slotLimit} active slots]
+                        {g.name} [{g.slotLimit} active slots]
                       </option>
                     ))}
                   </select>

@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Hourglass,
   Lock,
+  Zap,
 } from 'lucide-react';
 import { TaskStatus, WorkerType } from '@prisma/client';
 import { EnrichedTask } from '@/lib/engine';
@@ -72,8 +73,9 @@ export default function WhatShouldIDoNow({
               </p>
             </div>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-            ⚡ Zero guess start dates
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
+            <Zap className="w-3 h-3 text-amber-400 fill-amber-400/20" />
+            <span>Zero guess start dates</span>
           </span>
         </div>
 
@@ -145,8 +147,9 @@ export default function WhatShouldIDoNow({
             <span>YOU ARE CURRENTLY BLOCKED: Remaining work is waiting on active AI runs or external events.</span>
           </div>
         ) : (
-          <div className="bg-zinc-950/40 border border-zinc-800 rounded-lg p-2 text-center text-zinc-400 text-xs">
-            🎉 All active tasks are completed!
+          <div className="bg-zinc-950/40 border border-zinc-800 rounded-lg p-2.5 text-center text-zinc-400 text-xs flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>All active tasks are completed!</span>
           </div>
         )}
       </div>

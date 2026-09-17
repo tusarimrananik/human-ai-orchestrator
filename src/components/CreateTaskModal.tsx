@@ -211,10 +211,10 @@ export default function CreateTaskModal({
                 onChange={(e) => setPriority(e.target.value as Priority)}
                 className="w-full bg-zinc-950 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               >
-                <option value={Priority.CRITICAL}>🔥 Critical</option>
-                <option value={Priority.HIGH}>⚡ High</option>
-                <option value={Priority.MEDIUM}>🔹 Medium</option>
-                <option value={Priority.LOW}>☕ Low</option>
+                <option value={Priority.CRITICAL}>Critical</option>
+                <option value={Priority.HIGH}>High</option>
+                <option value={Priority.MEDIUM}>Medium</option>
+                <option value={Priority.LOW}>Low</option>
               </select>
             </div>
 
