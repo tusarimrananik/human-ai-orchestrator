@@ -773,6 +773,22 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setBulkNewBatchInput('');
   };
 
+  const deleteSelectedTasks = () => {
+    if (selectedBatchTaskIds.length === 0) return;
+    const toDeleteSet = new Set(selectedBatchTaskIds);
+    saveTasks(
+      tasks
+        .filter((x) => !toDeleteSet.has(x.id))
+        .map((x) => ({
+          ...x,
+          dependencies: (x.dependencies || []).filter((d) => !toDeleteSet.has(d)),
+        }))
+    );
+    setSelectedBatchTaskIds([]);
+    setIsBulkCreatingNewBatch(false);
+    setBulkNewBatchInput('');
+  };
+
   const moveSelectedTasksToBatch = (rawTargetBatch: string) => {
     const targetBatch = rawTargetBatch.trim();
     if (!targetBatch || selectedBatchTaskIds.length === 0) return;
@@ -912,6 +928,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
           title="Add all selected tasks and their dependencies into the execution Queue DAG"
         >
           <Target className="w-3 h-3" /> Move to Queue
+        </button>
+
+        <button
+          onClick={deleteSelectedTasks}
+          className="px-2.5 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold shadow flex items-center gap-1 transition"
+          title="Delete all selected tasks"
+        >
+          <Trash2 className="w-3 h-3" /> Delete ({selectedBatchTaskIds.length})
         </button>
 
         <button
@@ -1236,6 +1260,19 @@ function OrchestratorPage({ userId }: { userId: string }) {
       return matchesSearch && matchesOwner && matchesBatch && matchesParallelGroup;
     });
   }, [tasks, search, ownerFilter, batchFilter, parallelGroupFilter]);
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((t) => selectedBatchTaskIds.includes(t.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIds = new Set(filtered.map((t) => t.id));
+      setSelectedBatchTaskIds((prev) => prev.filter((id) => !filteredIds.has(id)));
+    } else {
+      const filteredIds = filtered.map((t) => t.id);
+      setSelectedBatchTaskIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
 
   // 1. Compute full unhidden DAG stage indices for all active tasks
   const activeUnfinishedTasks = useMemo(() => {
@@ -2120,8 +2157,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
         style={batchTheme.cardStyle}
         className="border-2 rounded-xl p-3.5 shadow-md flex items-center justify-between gap-3.5 select-none transition opacity-85 hover:opacity-100"
       >
-        {/* Left: Checkmark & Info */}
+        {/* Left: Checkbox, Checkmark & Info */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          <input
+            type="checkbox"
+            checked={selectedBatchTaskIds.includes(t.id)}
+            onChange={(e) => {
+              e.stopPropagation();
+              toggleSelectBatchTask(t.id);
+            }}
+            className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+            title="Select task"
+          />
           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 flex-shrink-0">
             <Check className="w-4 h-4" />
           </div>
@@ -2222,8 +2269,18 @@ function OrchestratorPage({ userId }: { userId: string }) {
         style={batchTheme.cardStyle}
         className="border-2 rounded-xl p-3.5 shadow-lg flex items-center justify-between gap-3.5 select-none transition"
       >
-        {/* Left: Rank badge & clear */}
+        {/* Left: Checkbox, Rank badge & clear */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          <input
+            type="checkbox"
+            checked={selectedBatchTaskIds.includes(t.id)}
+            onChange={(e) => {
+              e.stopPropagation();
+              toggleSelectBatchTask(t.id);
+            }}
+            className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+            title="Select task"
+          />
           <div className="flex flex-col items-center justify-center flex-shrink-0">
             <label
               style={batchTheme.badgeStyle}
@@ -2887,16 +2944,35 @@ function OrchestratorPage({ userId }: { userId: string }) {
         </div>
       </header>
 
-      {/* Filter Row with Parallel Group View Filter */}
+      {/* Filter Row with Selection & Bulk Actions */}
       <div className="px-3 py-1.5 border-b border-zinc-800/60 bg-zinc-900/30 flex items-center justify-between gap-2 flex-shrink-0">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
-          <input
-            placeholder="Search tasks or sub-tasks..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
-          />
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="relative flex-shrink-0 w-48">
+            <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
+            <input
+              placeholder="Search tasks..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded pl-6 pr-2 py-0.5 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+            />
+          </div>
+
+          <button
+            onClick={toggleSelectAll}
+            className={`px-2 py-0.5 rounded border text-[11px] font-semibold transition flex items-center gap-1 shadow-sm flex-shrink-0 ${
+              allFilteredSelected
+                ? 'bg-indigo-600 text-white border-indigo-500'
+                : selectedBatchTaskIds.length > 0
+                ? 'bg-zinc-800 text-indigo-300 border-indigo-500/50 hover:bg-zinc-700'
+                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800'
+            }`}
+            title={allFilteredSelected ? 'Deselect all visible tasks' : 'Select all visible tasks'}
+          >
+            <CheckSquare className="w-3 h-3" />
+            <span>{allFilteredSelected ? 'Deselect All' : `Select All (${filtered.length})`}</span>
+          </button>
+
+          {renderBulkMoveBar()}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -2998,6 +3074,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     </span>
                   </button>
                 </div>
+
+                {selectedBatchTaskIds.length > 0 && (
+                  <button
+                    onClick={deleteSelectedTasks}
+                    className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 font-semibold text-white text-xs shadow flex items-center gap-1 transition"
+                    title="Delete all selected tasks"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedBatchTaskIds.length})
+                  </button>
+                )}
 
                 <button
                   onClick={() => openTaskModal()}
