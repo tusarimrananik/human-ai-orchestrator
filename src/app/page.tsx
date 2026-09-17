@@ -604,6 +604,42 @@ function OrchestratorPage({ userId }: { userId: string }) {
     }
   };
 
+  const moveTaskInExecutionQueue = (taskId: string, direction: 'up' | 'down') => {
+    const taskIndex = rankedTasks.findIndex((t) => t.id === taskId);
+    if (taskIndex === -1) return;
+
+    const currentTask = rankedTasks[taskIndex];
+    const targetGroup = currentTask.parallelGroup || 'Parallel Group 1';
+
+    // If task is at index 1 (2nd place) and moving UP to 1st place:
+    // Switch the active group turn to this task's group so this group executes first!
+    if (direction === 'up' && taskIndex === 1) {
+      switchActiveTurn(targetGroup);
+      return;
+    }
+
+    // If task is at index 0 (1st place) and moving DOWN to 2nd place:
+    // Switch the active turn to the other group!
+    if (direction === 'down' && taskIndex === 0) {
+      const otherGroup = targetGroup === 'Parallel Group 1' ? 'Parallel Group 2' : 'Parallel Group 1';
+      switchActiveTurn(otherGroup);
+      return;
+    }
+
+    // If moving within the same group:
+    const sameGroupRanked = rankedTasks.filter(
+      (t) => (t.parallelGroup || 'Parallel Group 1') === targetGroup
+    );
+    const posInGroup = sameGroupRanked.findIndex((t) => t.id === taskId);
+    if (posInGroup === -1) return;
+
+    const targetPos = direction === 'up' ? posInGroup - 1 : posInGroup + 1;
+    if (targetPos >= 0 && targetPos < sameGroupRanked.length) {
+      const targetRank = targetPos + 1;
+      changeTaskRank(taskId, targetRank);
+    }
+  };
+
   const shiftBatchPriority = (batch: BatchTag, direction: 'left' | 'right') => {
     const idx = batchPriorityOrder.indexOf(batch);
     if (idx === -1) return;
@@ -2720,35 +2756,66 @@ function OrchestratorPage({ userId }: { userId: string }) {
             className="w-4 h-4 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
             title="Select task"
           />
-          <div className="flex flex-col items-center justify-center flex-shrink-0">
-            <label
-              style={batchTheme.badgeStyle}
-              className="flex items-center gap-0.5 rounded-lg border px-2 py-1 text-xs font-black shadow-md cursor-pointer"
-              title={`Rank #${t.rank ?? '—'} in ${t.parallelGroup || 'Parallel Group 1'} (Type to reorder)`}
-            >
-              <span className="opacity-80 font-mono text-xs">#</span>
-              <input
-                type="number"
-                min={1}
-                max={Math.max(groupTaskCount, 1)}
-                value={t.rank ?? ''}
-                onChange={(e) =>
-                  e.target.value === ''
-                    ? removeTaskRank(t.id)
-                    : changeTaskRank(t.id, Number(e.target.value))
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-col items-center justify-center">
+              <button
+                disabled={stepIndex === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveTaskInExecutionQueue(t.id, 'up');
+                }}
+                className="p-1 rounded text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 disabled:opacity-20 transition"
+                title={
+                  stepIndex === 1
+                    ? `Promote ${t.parallelGroup || 'Parallel Group 1'} to 1st Place (TURN #1)`
+                    : 'Move up in execution sequence'
                 }
-                className="w-8 bg-transparent text-center font-mono font-bold text-xs outline-none"
-                style={{ color: batchTheme.cardStyle.color }}
-                aria-label={`Rank ${t.name}`}
-              />
-            </label>
-            <button
-              onClick={() => removeTaskRank(t.id)}
-              className="text-[9px] opacity-70 hover:opacity-100 hover:text-rose-300 mt-1 font-semibold"
-              title="Remove from ranked queue"
-            >
-              clear
-            </button>
+              >
+                <ArrowUp className="w-3 h-3" />
+              </button>
+              <button
+                disabled={typeof stepIndex === 'number' && stepIndex === rankedTasks.length - 1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveTaskInExecutionQueue(t.id, 'down');
+                }}
+                className="p-1 rounded text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 disabled:opacity-20 transition"
+                title="Move down in execution sequence"
+              >
+                <ArrowDown className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center justify-center">
+              <label
+                style={batchTheme.badgeStyle}
+                className="flex items-center gap-0.5 rounded-lg border px-2 py-1 text-xs font-black shadow-md cursor-pointer"
+                title={`Rank #${t.rank ?? '—'} in ${t.parallelGroup || 'Parallel Group 1'} (Type to reorder)`}
+              >
+                <span className="opacity-80 font-mono text-xs">#</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.max(groupTaskCount, 1)}
+                  value={t.rank ?? ''}
+                  onChange={(e) =>
+                    e.target.value === ''
+                      ? removeTaskRank(t.id)
+                      : changeTaskRank(t.id, Number(e.target.value))
+                  }
+                  className="w-8 bg-transparent text-center font-mono font-bold text-xs outline-none"
+                  style={{ color: batchTheme.cardStyle.color }}
+                  aria-label={`Rank ${t.name}`}
+                />
+              </label>
+              <button
+                onClick={() => removeTaskRank(t.id)}
+                className="text-[9px] opacity-70 hover:opacity-100 hover:text-rose-300 mt-1 font-semibold"
+                title="Remove from ranked queue"
+              >
+                clear
+              </button>
+            </div>
           </div>
 
           {/* Center: Info */}
