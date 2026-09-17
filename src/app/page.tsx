@@ -16,7 +16,7 @@ import {
   moveTaskAndDescendantsToGroup,
   cascadeParentParallelGroups,
 } from '@/lib/dag-layout';
-import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
+import { clearTaskRank, getInterleavedRankedTasks, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
 import { canonicalizeWorkspacePayload, nextSyncStatusAfterSave } from '@/lib/workspace-sync';
 import { getVisibleDagEdges, isDagView } from '@/lib/dag-edges';
@@ -1340,7 +1340,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
   };
 
   const rankedTasks = useMemo(
-    () => rankActiveTasks(filtered, (task) => task.manualStatus === 'done'),
+    () => getInterleavedRankedTasks(filtered, (task) => task.manualStatus === 'done'),
     [filtered]
   );
 
@@ -2213,13 +2213,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
                   <label
                     style={batchTheme.badgeStyle}
                     className="flex flex-shrink-0 items-center gap-0.5 rounded border px-1 py-0.2 text-[8px] font-black shadow-sm cursor-pointer"
-                    title="Execution rank"
+                    title={`Execution rank in ${t.parallelGroup || 'Parallel Group 1'}`}
                   >
                     #
                     <input
                       type="number"
                       min={1}
-                      max={rankedTasks.length + (t.rank ? 0 : 1)}
+                      max={tasks.filter((x) => (x.parallelGroup || 'Parallel Group 1') === (t.parallelGroup || 'Parallel Group 1')).length + (t.rank ? 0 : 1)}
                       placeholder="—"
                       value={t.rank ?? ''}
                       onChange={(e) => e.target.value === '' ? removeTaskRank(t.id) : changeTaskRank(t.id, Number(e.target.value))}
@@ -2659,7 +2659,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
     );
   };
 
-  const renderRankedTaskRow = (t: Task) => {
+  const renderRankedTaskRow = (t: Task, stepIndex?: number) => {
     const status = computedStatus(t);
     const durationDisplay = getTaskDurationDisplay(t);
     const batchTheme = getBatchTheme(t.batch, batchPriorityOrder);
@@ -2669,6 +2669,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
     const waiting = depNames.filter((d) => d.manualStatus !== 'done').map((d) => d.name);
     const completedSubsCount = (t.subTasks || []).filter((s) => s.status === 'done').length;
     const totalSubsCount = (t.subTasks || []).length;
+    const groupTaskCount = tasks.filter(
+      (x) => (x.parallelGroup || 'Parallel Group 1') === (t.parallelGroup || 'Parallel Group 1')
+    ).length;
 
     return (
       <div
@@ -2676,8 +2679,16 @@ function OrchestratorPage({ userId }: { userId: string }) {
         style={batchTheme.cardStyle}
         className="border-2 rounded-xl p-3.5 shadow-lg flex items-center justify-between gap-3.5 select-none transition"
       >
-        {/* Left: Checkbox, Rank badge & clear */}
+        {/* Left: Step indicator, Checkbox, Rank badge & clear */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {typeof stepIndex === 'number' && (
+            <div className="flex flex-col items-center justify-center flex-shrink-0 bg-zinc-900/90 border border-zinc-700/80 px-2 py-1 rounded-lg shadow-sm">
+              <span className="text-[7px] uppercase font-bold text-zinc-400">TURN</span>
+              <span className="text-xs font-mono font-black text-amber-300">
+                #{stepIndex + 1}
+              </span>
+            </div>
+          )}
           <input
             type="checkbox"
             checked={selectedBatchTaskIds.includes(t.id)}
@@ -2692,13 +2703,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
             <label
               style={batchTheme.badgeStyle}
               className="flex items-center gap-0.5 rounded-lg border px-2 py-1 text-xs font-black shadow-md cursor-pointer"
-              title="Execution Rank (Type to reorder)"
+              title={`Rank #${t.rank ?? '—'} in ${t.parallelGroup || 'Parallel Group 1'} (Type to reorder)`}
             >
               <span className="opacity-80 font-mono text-xs">#</span>
               <input
                 type="number"
                 min={1}
-                max={rankedTasks.length}
+                max={Math.max(groupTaskCount, 1)}
                 value={t.rank ?? ''}
                 onChange={(e) =>
                   e.target.value === ''
@@ -3513,7 +3524,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     </div>
                   </div>
                 ) : (
-                  rankedTasks.map((task) => renderRankedTaskRow(task))
+                  rankedTasks.map((task, idx) => renderRankedTaskRow(task, idx))
                 )
               ) : (
                 groups.done.length === 0 ? (

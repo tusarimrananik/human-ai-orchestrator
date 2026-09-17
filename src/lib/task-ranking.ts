@@ -4,6 +4,7 @@ export interface RankableTask {
   order?: number;
   createdAt?: number;
   dependencies?: string[];
+  parallelGroup?: string;
 }
 
 function hasRank(task: RankableTask): boolean {
@@ -156,8 +157,35 @@ export function normalizeTaskRanks<T extends RankableTask>(
   tasks: readonly T[],
   isDone: (task: T) => boolean
 ): T[] {
-  const ranked = rankActiveTasks(tasks, isDone);
-  const rankById = new Map(ranked.map((task, index) => [task.id, index + 1]));
+  // If tasks are scoped across distinct parallel groups, normalize within each group independently
+  const distinctGroups = Array.from(
+    new Set(tasks.map((t) => t.parallelGroup || 'Parallel Group 1'))
+  );
+
+  if (distinctGroups.length <= 1) {
+    const ranked = rankActiveTasks(tasks, isDone);
+    const rankById = new Map(ranked.map((task, index) => [task.id, index + 1]));
+
+    return tasks.map((task) => {
+      const rank = rankById.get(task.id);
+      if (rank === undefined) {
+        const { rank: _rank, ...withoutRank } = task;
+        return withoutRank as T;
+      }
+      return { ...task, rank };
+    });
+  }
+
+  // Multi-group: normalize each parallel group independently (no number can be used twice in the same group)
+  const rankById = new Map<string, number>();
+
+  for (const grp of distinctGroups) {
+    const grpTasks = tasks.filter((t) => (t.parallelGroup || 'Parallel Group 1') === grp);
+    const ranked = rankActiveTasks(grpTasks, isDone);
+    ranked.forEach((task, index) => {
+      rankById.set(task.id, index + 1);
+    });
+  }
 
   return tasks.map((task) => {
     const rank = rankById.get(task.id);
@@ -178,13 +206,17 @@ export function setTaskRank<T extends RankableTask>(
   const target = tasks.find((task) => task.id === taskId);
   if (!target || isDone(target)) return normalizeTaskRanks(tasks, isDone);
 
-  const currentRanked = rankActiveTasks(tasks, isDone).filter((task) => task.id !== taskId);
+  const targetGroup = target.parallelGroup || 'Parallel Group 1';
+  const sameGroupTasks = tasks.filter((t) => (t.parallelGroup || 'Parallel Group 1') === targetGroup);
+  const otherGroupTasks = tasks.filter((t) => (t.parallelGroup || 'Parallel Group 1') !== targetGroup);
+
+  const currentRanked = rankActiveTasks(sameGroupTasks, isDone).filter((task) => task.id !== taskId);
   const nextIndex = Math.min(Math.max(Math.trunc(requestedRank) - 1, 0), currentRanked.length);
   currentRanked.splice(nextIndex, 0, target);
 
   const provisionalRankById = new Map(currentRanked.map((task, index) => [task.id, index + 1]));
 
-  const provisionalTasks = tasks.map((task) => {
+  const provisionalSameGroup = sameGroupTasks.map((task) => {
     const provRank = provisionalRankById.get(task.id);
     if (provRank !== undefined) {
       return { ...task, rank: provRank };
@@ -192,7 +224,7 @@ export function setTaskRank<T extends RankableTask>(
     return { ...task };
   });
 
-  return normalizeTaskRanks(provisionalTasks, isDone);
+  return normalizeTaskRanks([...provisionalSameGroup, ...otherGroupTasks], isDone);
 }
 
 export function clearTaskRank<T extends RankableTask>(
@@ -212,4 +244,50 @@ export function clearTaskRank<T extends RankableTask>(
     }),
     isDone
   );
+}
+
+/**
+ * Returns tasks in alternating execution order between parallel groups:
+ * First task #1 from Parallel Group 1, then #1 from Parallel Group 2,
+ * followed by #2 from Parallel Group 1, then #2 from Parallel Group 2, etc.
+ */
+export function getInterleavedRankedTasks<T extends RankableTask>(
+  tasks: readonly T[],
+  isDone: (task: T) => boolean,
+  groupOrder = ['Parallel Group 1', 'Parallel Group 2']
+): T[] {
+  const activeTasks = tasks.filter((t) => !isDone(t));
+  const groupsPresent = Array.from(
+    new Set(activeTasks.map((t) => t.parallelGroup || 'Parallel Group 1'))
+  );
+
+  if (groupsPresent.length <= 1) {
+    return rankActiveTasks(tasks, isDone);
+  }
+
+  // Preserve group order (Parallel Group 1 first, Parallel Group 2 second, etc.)
+  const allGroups = [
+    ...groupOrder.filter((g) => groupsPresent.includes(g)),
+    ...groupsPresent.filter((g) => !groupOrder.includes(g)),
+  ];
+
+  const groupRankedMap = new Map<string, T[]>();
+  for (const grp of allGroups) {
+    const grpTasks = activeTasks.filter((t) => (t.parallelGroup || 'Parallel Group 1') === grp);
+    groupRankedMap.set(grp, rankActiveTasks(grpTasks, isDone));
+  }
+
+  const maxLen = Math.max(0, ...Array.from(groupRankedMap.values()).map((list) => list.length));
+  const interleaved: T[] = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const grp of allGroups) {
+      const list = groupRankedMap.get(grp);
+      if (list && i < list.length) {
+        interleaved.push(list[i]);
+      }
+    }
+  }
+
+  return interleaved;
 }

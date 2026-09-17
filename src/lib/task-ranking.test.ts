@@ -1,6 +1,6 @@
 import { deepEqual } from 'node:assert/strict';
 import { test } from 'node:test';
-import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from './task-ranking';
+import { clearTaskRank, getInterleavedRankedTasks, normalizeTaskRanks, rankActiveTasks, setTaskRank } from './task-ranking';
 
 type Task = {
   id: string;
@@ -8,6 +8,7 @@ type Task = {
   order?: number;
   createdAt: number;
   dependencies?: string[];
+  parallelGroup?: string;
   manualStatus: 'todo' | 'progress' | 'done';
 };
 
@@ -115,4 +116,58 @@ test('clearing parent rank also clears dependent child rank', () => {
   const active = rankActiveTasks(result, isDone);
   deepEqual(active.map((t) => [t.id, t.rank]), [['independent', 1]]);
   deepEqual(result.find((t) => t.id === 'child')?.rank, undefined);
+});
+
+test('per-group ranking: a number cannot be used twice in the same parallel group, but both groups can have #1', () => {
+  const tasks: Task[] = [
+    { id: 'g1-a', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g1-b', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g2-a', rank: 1, order: 2, createdAt: 12, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+    { id: 'g2-b', rank: 2, order: 3, createdAt: 13, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+  ];
+
+  const result = normalizeTaskRanks(tasks, isDone);
+
+  deepEqual(result.find((t) => t.id === 'g1-a')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g1-b')?.rank, 2);
+  deepEqual(result.find((t) => t.id === 'g2-a')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g2-b')?.rank, 2);
+});
+
+test('setting rank in Group 1 only shifts Group 1 and does not collide with Group 2', () => {
+  const tasks: Task[] = [
+    { id: 'g1-a', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g1-b', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g2-a', rank: 1, order: 2, createdAt: 12, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+  ];
+
+  // Set g1-b to rank 1
+  const result = setTaskRank(tasks, 'g1-b', 1, isDone);
+
+  deepEqual(result.find((t) => t.id === 'g1-b')?.rank, 1);
+  deepEqual(result.find((t) => t.id === 'g1-a')?.rank, 2);
+  deepEqual(result.find((t) => t.id === 'g2-a')?.rank, 1);
+});
+
+test('interleaved execution alternates by rank: #1 from Group 1, then #1 from Group 2, #2 from Group 1, then #2 from Group 2', () => {
+  const tasks: Task[] = [
+    { id: 'g1-task1', rank: 1, order: 0, createdAt: 10, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g1-task2', rank: 2, order: 1, createdAt: 11, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g1-task3', rank: 3, order: 2, createdAt: 12, parallelGroup: 'Parallel Group 1', manualStatus: 'todo' },
+    { id: 'g2-task1', rank: 1, order: 3, createdAt: 13, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+    { id: 'g2-task2', rank: 2, order: 4, createdAt: 14, parallelGroup: 'Parallel Group 2', manualStatus: 'todo' },
+  ];
+
+  const interleaved = getInterleavedRankedTasks(tasks, isDone);
+
+  deepEqual(
+    interleaved.map((t) => [t.id, t.parallelGroup, t.rank]),
+    [
+      ['g1-task1', 'Parallel Group 1', 1],
+      ['g2-task1', 'Parallel Group 2', 1],
+      ['g1-task2', 'Parallel Group 1', 2],
+      ['g2-task2', 'Parallel Group 2', 2],
+      ['g1-task3', 'Parallel Group 1', 3],
+    ]
+  );
 });
