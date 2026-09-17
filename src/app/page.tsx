@@ -322,6 +322,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [showAddChild, setShowAddChild] = useState(false);
   const [newChildName, setNewChildName] = useState('');
   const [newChildOwner, setNewChildOwner] = useState<'Me' | 'AI' | 'Other'>('AI');
+  const [parentSearch, setParentSearch] = useState('');
+  const [childSearch, setChildSearch] = useState('');
 
   // Local map of status overrides for parent tasks edited inside the modal
   const [parentStatusOverrides, setParentStatusOverrides] = useState<Record<string, 'todo' | 'progress' | 'done'>>({});
@@ -1737,6 +1739,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setNewParentName('');
     setShowAddChild(false);
     setNewChildName('');
+    setParentSearch('');
+    setChildSearch('');
 
     if (current) {
       setTaskManualStatus(computedStatus(current));
@@ -4587,15 +4591,40 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 </div>
               )}
 
+              {/* Search filter for prerequisites */}
+              <div className="relative">
+                <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
+                <input
+                  placeholder="Search prerequisites..."
+                  value={parentSearch}
+                  onChange={(e) => setParentSearch(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded pl-6 pr-6 py-0.5 text-[10px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-rose-500/60"
+                />
+                {parentSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setParentSearch('')}
+                    className="absolute right-1.5 top-1 text-zinc-500 hover:text-zinc-300"
+                    title="Clear filter"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
               {/* List of Parent Candidates */}
               <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
                   <div className="text-[10px] text-zinc-600 italic py-1 text-center">
                     No existing tasks to select as parent.
                   </div>
+                ) : tasks.filter((t) => t.id !== editId && (!parentSearch.trim() || t.name.toLowerCase().includes(parentSearch.toLowerCase().trim()) || (t.owner || '').toLowerCase().includes(parentSearch.toLowerCase().trim()) || (t.batch || '').toLowerCase().includes(parentSearch.toLowerCase().trim()))).length === 0 ? (
+                  <div className="text-[10px] text-zinc-500 italic py-1 text-center">
+                    No prerequisites matching &quot;{parentSearch}&quot;
+                  </div>
                 ) : (
                   tasks
-                    .filter((t) => t.id !== editId)
+                    .filter((t) => t.id !== editId && (!parentSearch.trim() || t.name.toLowerCase().includes(parentSearch.toLowerCase().trim()) || (t.owner || '').toLowerCase().includes(parentSearch.toLowerCase().trim()) || (t.batch || '').toLowerCase().includes(parentSearch.toLowerCase().trim())))
                     .map((candidate) => {
                       const isDirectChecked = selectedParents.includes(candidate.id);
                       const currentCandidateStatus =
@@ -4710,15 +4739,40 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 </div>
               )}
 
+              {/* Search filter for downstream children */}
+              <div className="relative">
+                <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1.5" />
+                <input
+                  placeholder="Search downstream tasks..."
+                  value={childSearch}
+                  onChange={(e) => setChildSearch(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded pl-6 pr-6 py-0.5 text-[10px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60"
+                />
+                {childSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setChildSearch('')}
+                    className="absolute right-1.5 top-1 text-zinc-500 hover:text-zinc-300"
+                    title="Clear filter"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
               {/* List of Child Candidates */}
               <div className="max-h-32 overflow-y-auto border border-zinc-800 bg-zinc-950 rounded p-1.5 space-y-1.5">
                 {tasks.filter((t) => t.id !== editId).length === 0 ? (
                   <div className="text-[10px] text-zinc-600 italic py-1 text-center">
                     No existing tasks to select as children. Click "+ Create Child Task" above.
                   </div>
+                ) : tasks.filter((t) => t.id !== editId && (!childSearch.trim() || t.name.toLowerCase().includes(childSearch.toLowerCase().trim()) || (t.owner || '').toLowerCase().includes(childSearch.toLowerCase().trim()) || (t.batch || '').toLowerCase().includes(childSearch.toLowerCase().trim()))).length === 0 ? (
+                  <div className="text-[10px] text-zinc-500 italic py-1 text-center">
+                    No downstream tasks matching &quot;{childSearch}&quot;
+                  </div>
                 ) : (
                   tasks
-                    .filter((t) => t.id !== editId)
+                    .filter((t) => t.id !== editId && (!childSearch.trim() || t.name.toLowerCase().includes(childSearch.toLowerCase().trim()) || (t.owner || '').toLowerCase().includes(childSearch.toLowerCase().trim()) || (t.batch || '').toLowerCase().includes(childSearch.toLowerCase().trim())))
                     .map((candidate) => {
                       const isChildChecked = selectedChildren.includes(candidate.id);
                       return (
