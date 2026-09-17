@@ -3219,8 +3219,6 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     <span>Unhide {hiddenStageIndices.length} {hiddenStageIndices.length === 1 ? 'stage' : 'stages'}</span>
                   </button>
                 )}
-
-                {renderBulkMoveBar()}
               </div>
 
               <svg
@@ -3680,10 +3678,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 )}
               </div>
 
-              {/* Right tools or Bulk Move Toolbar */}
+              {/* Right tools */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {renderBulkMoveBar()}
-
                 <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5">
                   <label htmlFor="batch-sort" className="text-[9px] font-bold uppercase text-zinc-400 flex items-center gap-0.5">
                     <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" /> Sort Tasks:
