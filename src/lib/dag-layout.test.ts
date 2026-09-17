@@ -8,6 +8,8 @@ import {
   createSourceOrderComparator,
   insertDagTaskBefore,
   swapBatchTaskPositions,
+  moveTaskAndDescendantsToGroup,
+  cascadeParentParallelGroups,
 } from './dag-layout';
 
 type T = { id: string; batch: string; order: number; dependencies: string[] };
@@ -253,4 +255,34 @@ test('stageAlignment="batch" sorts every downstream stage strictly by batch prio
   );
 
   deepEqual(result.levels[1].map((t) => t.id), ['child-2-b1', 'child-1-b2']);
+});
+
+test('moveTaskAndDescendantsToGroup moves parent and all downstream children to target group', () => {
+  const tasks = [
+    { id: 'parent-1', parallelGroup: 'Parallel Group 1', dependencies: [] },
+    { id: 'child-1', parallelGroup: 'Parallel Group 1', dependencies: ['parent-1'] },
+    { id: 'grandchild-1', parallelGroup: 'Parallel Group 1', dependencies: ['child-1'] },
+    { id: 'other-task', parallelGroup: 'Parallel Group 1', dependencies: [] },
+  ];
+
+  const updated = moveTaskAndDescendantsToGroup(tasks, 'parent-1', 'Parallel Group 2');
+
+  deepEqual(updated.find((t) => t.id === 'parent-1')?.parallelGroup, 'Parallel Group 2');
+  deepEqual(updated.find((t) => t.id === 'child-1')?.parallelGroup, 'Parallel Group 2');
+  deepEqual(updated.find((t) => t.id === 'grandchild-1')?.parallelGroup, 'Parallel Group 2');
+  deepEqual(updated.find((t) => t.id === 'other-task')?.parallelGroup, 'Parallel Group 1');
+});
+
+test('cascadeParentParallelGroups cascades group to stranded children whose parent is in Parallel Group 2', () => {
+  const tasks = [
+    { id: 'parent-group2', parallelGroup: 'Parallel Group 2', dependencies: [] },
+    { id: 'child-stranded', parallelGroup: 'Parallel Group 1', dependencies: ['parent-group2'] },
+    { id: 'unrelated-task', parallelGroup: 'Parallel Group 1', dependencies: [] },
+  ];
+
+  const reconciled = cascadeParentParallelGroups(tasks);
+
+  deepEqual(reconciled.find((t) => t.id === 'parent-group2')?.parallelGroup, 'Parallel Group 2');
+  deepEqual(reconciled.find((t) => t.id === 'child-stranded')?.parallelGroup, 'Parallel Group 2');
+  deepEqual(reconciled.find((t) => t.id === 'unrelated-task')?.parallelGroup, 'Parallel Group 1');
 });

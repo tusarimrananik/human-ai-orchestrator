@@ -12,6 +12,9 @@ import {
   createSourceOrderComparator,
   insertDagTaskBefore,
   swapBatchTaskPositions,
+  getDescendantTaskIds,
+  moveTaskAndDescendantsToGroup,
+  cascadeParentParallelGroups,
 } from '@/lib/dag-layout';
 import { clearTaskRank, normalizeTaskRanks, rankActiveTasks, setTaskRank } from '@/lib/task-ranking';
 import { getBatchTheme, syncBatchPriorityWithTasks } from '@/lib/batch-theme';
@@ -394,8 +397,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
           })),
           storedEnvelope?.payload?.schemaVersion
         );
-        setTasks(loadedTasks);
-        setBatchPriorityOrder((prev) => syncBatchPriorityWithTasks(prev, loadedTasks));
+        const reconciledTasks = cascadeParentParallelGroups(loadedTasks);
+        setTasks(reconciledTasks);
+        setBatchPriorityOrder((prev) => syncBatchPriorityWithTasks(prev, reconciledTasks));
       } else {
         const a = uid(), b = uid(), c = uid(), d = uid();
         const initialTasks: Task[] = [
@@ -455,7 +459,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       if (remoteHash !== lastRemoteHashRef.current) {
         remoteRevisionRef.current = remoteWorkspace.revision;
         lastRemoteHashRef.current = remoteHash;
-        const rankedTasks = payload.tasks;
+        const rankedTasks = cascadeParentParallelGroups(payload.tasks);
         const syncedBatches = payload.batchPriorityOrder;
         setTasks(rankedTasks);
         setBatchPriorityOrder(syncedBatches);
@@ -1401,6 +1405,13 @@ function OrchestratorPage({ userId }: { userId: string }) {
       const paths: Array<{ key: string; d: string }> = [];
 
       getVisibleDagEdges(visibleDagTasks).forEach(({ sourceId, targetId }) => {
+          if (isParallelModeActive && dagLayoutMode === 'split') {
+            const srcTask = tasks.find((t) => t.id === sourceId);
+            const tgtTask = tasks.find((t) => t.id === targetId);
+            if (srcTask && tgtTask && (srcTask.parallelGroup || 'Parallel Group 1') !== (tgtTask.parallelGroup || 'Parallel Group 1')) {
+              return;
+            }
+          }
           const source = stage.querySelector(`[data-node-id="${CSS.escape(sourceId)}"]`);
           const target = stage.querySelector(`[data-node-id="${CSS.escape(targetId)}"]`);
           if (!source || !target) return;
@@ -1727,8 +1738,14 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setTaskOwner(current?.owner || 'Me');
     const defaultBatch = current?.batch || initialBatch || batchPriorityOrder[0] || 'Batch 1';
     setTaskBatch(defaultBatch === 'None' ? (batchPriorityOrder[0] || 'Batch 1') : defaultBatch);
+    const initialParent = (initialParentIds && initialParentIds.length > 0)
+      ? tasks.find((t) => initialParentIds.includes(t.id))
+      : undefined;
+    const insertionParent = insertion?.taskId ? tasks.find((t) => t.id === insertion.taskId) : undefined;
     const defaultGroup =
       current?.parallelGroup ||
+      initialParent?.parallelGroup ||
+      insertionParent?.parallelGroup ||
       (parallelGroupFilter && (parallelGroupFilter === 'Parallel Group 1' || parallelGroupFilter === 'Parallel Group 2')
         ? parallelGroupFilter
         : activeTurnGroupName || 'Parallel Group 1');
@@ -1931,7 +1948,21 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
     let updatedTasks: Task[];
     if (editId) {
+      const originalTask = tasks.find((t) => t.id === editId);
+      const originalGroup = originalTask?.parallelGroup || 'Parallel Group 1';
+      const targetGroup = taskIsParallel ? (taskParallelGroup || 'Parallel Group 1') : '';
+
       updatedTasks = baseList.map((t) => (t.id === editId ? { ...t, ...data } : t));
+
+      if (targetGroup && originalGroup !== targetGroup) {
+        // Cascade the changed parallel group down to all descendant tasks
+        const descendantIds = getDescendantTaskIds(updatedTasks, editId);
+        if (descendantIds.size > 0) {
+          updatedTasks = updatedTasks.map((t) =>
+            descendantIds.has(t.id) ? { ...t, parallelGroup: targetGroup, isParallel: true } : t
+          );
+        }
+      }
     } else {
       const newTask: Task = {
         ...data,
@@ -2283,20 +2314,21 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     </span>
                   ) : null}
 
-                  {/* Group 1 / Group 2 ⇄ Switcher */}
+                  {/* Group 1 / Group 2 ⇄ Switcher (moves task and all its dependent children) */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       const nextGroup = (t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2';
-                      saveTasks(tasks.map((task) => (task.id === t.id ? { ...task, parallelGroup: nextGroup, isParallel: true } : task)));
+                      const updated = moveTaskAndDescendantsToGroup(tasks, t.id, nextGroup);
+                      saveTasks(updated);
                     }}
                     className={`text-[7px] font-bold px-1 py-0.2 rounded border transition flex items-center gap-0.5 flex-shrink-0 ${
                       (t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2'
                         ? 'bg-purple-950/90 text-purple-200 border-purple-500/60 hover:bg-purple-900'
                         : 'bg-indigo-950/90 text-indigo-200 border-indigo-500/60 hover:bg-indigo-900'
                     }`}
-                    title={`Click to switch to ${(t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2'}`}
+                    title={`Click to switch ${t.name} and all downstream children to ${(t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2'}`}
                   >
                     <Split className="w-2 h-2" />
                     <span>{(t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Group 2' : 'Group 1'}</span>

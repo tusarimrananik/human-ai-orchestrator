@@ -315,3 +315,73 @@ export function alignDagLevels<T extends DagTask>(
 
   return { levels, orderedLevels, lanes, laneCount };
 }
+
+/** Recursively collects all downstream child/descendant task IDs for a given root task. */
+export function getDescendantTaskIds<T extends DagTask>(
+  taskList: readonly T[],
+  rootTaskId: string
+): Set<string> {
+  const descendants = new Set<string>();
+  const queue = [rootTaskId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    for (const t of taskList) {
+      if ((t.dependencies || []).includes(currentId) && !descendants.has(t.id)) {
+        descendants.add(t.id);
+        queue.push(t.id);
+      }
+    }
+  }
+
+  return descendants;
+}
+
+/** Moves a task AND all its recursive downstream children/dependencies to the target parallel group. */
+export function moveTaskAndDescendantsToGroup<T extends DagTask>(
+  taskList: readonly T[],
+  rootTaskId: string,
+  targetGroup: string
+): T[] {
+  const affectedIds = getDescendantTaskIds(taskList, rootTaskId);
+  affectedIds.add(rootTaskId);
+
+  return taskList.map((t) =>
+    affectedIds.has(t.id)
+      ? { ...t, parallelGroup: targetGroup, isParallel: true }
+      : t
+  );
+}
+
+/**
+ * Reconciles parent-child parallel groups so any child whose parent is in a non-default
+ * parallel group (e.g. "Parallel Group 2") automatically follows that parent.
+ */
+export function cascadeParentParallelGroups<T extends DagTask>(
+  taskList: readonly T[],
+  defaultGroupName = 'Parallel Group 1'
+): T[] {
+  const currentList = [...taskList];
+  const nonDefaultParents = currentList.filter(
+    (t) => t.parallelGroup && t.parallelGroup !== defaultGroupName
+  );
+
+  const affected = new Map<string, string>(); // taskId -> newGroupName
+
+  nonDefaultParents.forEach((parent) => {
+    const descendants = getDescendantTaskIds(currentList, parent.id);
+    descendants.forEach((childId) => {
+      affected.set(childId, parent.parallelGroup);
+    });
+  });
+
+  if (affected.size === 0) return currentList;
+
+  return currentList.map((t) => {
+    const targetGroup = affected.get(t.id);
+    if (targetGroup && t.parallelGroup !== targetGroup) {
+      return { ...t, parallelGroup: targetGroup, isParallel: true };
+    }
+    return t;
+  });
+}
