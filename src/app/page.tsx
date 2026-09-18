@@ -2433,41 +2433,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
                       <span>30m</span>
                     </button>
                   )}
-
-                  {/* Group 1 / Group 2 ⇄ Switcher (moves task and all its dependent children) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const nextGroup = (t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2';
-                      const updated = moveTaskAndDescendantsToGroup(tasks, t.id, nextGroup);
-                      saveTasks(updated);
-                    }}
-                    className={`text-[8px] md:text-[7px] font-bold px-1.5 py-0.5 md:px-1 md:py-0.2 rounded border transition flex items-center gap-0.5 flex-shrink-0 ${
-                      (t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2'
-                        ? 'bg-purple-950/90 text-purple-200 border-purple-500/60 hover:bg-purple-900'
-                        : 'bg-indigo-950/90 text-indigo-200 border-indigo-500/60 hover:bg-indigo-900'
-                    }`}
-                    title={`Click to switch ${t.name} and all downstream children to ${(t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Parallel Group 1' : 'Parallel Group 2'}`}
-                  >
-                    <Split className="w-2 h-2" />
-                    <span>{(t.parallelGroup || 'Parallel Group 1') === 'Parallel Group 2' ? 'Group 2' : 'Group 1'}</span>
-                    <span className="text-[7px] opacity-70">⇄</span>
-                  </button>
                 </div>
 
                 <div className="flex items-center gap-1 md:gap-0.5 flex-shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openTaskModal(null, 'blocked', [t.id], t.batch);
-                    }}
-                    className="px-1.5 py-0.5 md:px-1 md:py-0.2 rounded bg-black/40 border border-white/20 hover:bg-black/60 text-[9px] md:text-[8px] font-bold flex items-center gap-0.5 shadow"
-                    title="Plan & add child task depending on this"
-                  >
-                    <Plus className="w-2 h-2" /> Step
-                  </button>
-
                   {status === 'ready' && (
                     <button
                       onClick={(e) => {
