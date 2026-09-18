@@ -40,6 +40,7 @@ import {
   ArrowRight,
   GripVertical,
   Timer,
+  Hourglass,
   Layers,
   CornerDownRight,
   Link2,
@@ -101,6 +102,7 @@ interface Task {
   totalTimeSpentSeconds?: number;
   rank?: number;
   savedRank?: number;
+  deadlineMinutes?: number; // Target work duration countdown in minutes (e.g. 15, 25, 30, 45, 60...)
 }
 
 type DagSortMode = 'manual' | 'batch' | 'name' | 'owner' | 'status';
@@ -301,6 +303,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
   const [taskManualStatus, setTaskManualStatus] = useState<'blocked' | 'ready' | 'progress' | 'done'>('ready');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskEstimate, setTaskEstimate] = useState('');
+  const [taskDeadlineMinutes, setTaskDeadlineMinutes] = useState<number | undefined>(undefined);
+  const [customDeadlineMinutesInput, setCustomDeadlineMinutesInput] = useState<string>('');
 
   // Goal Task Review Modal State
   const [reviewingTaskId, setReviewingTaskId] = useState<string | null>(null);
@@ -1792,6 +1796,8 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setNewSubTaskInput('');
     setTaskDeadline(current?.deadline || '');
     setTaskEstimate(current?.estimate || '');
+    setTaskDeadlineMinutes(current?.deadlineMinutes);
+    setCustomDeadlineMinutesInput(current?.deadlineMinutes ? String(current.deadlineMinutes) : '');
 
     setSelectedParents(current?.dependencies || initialParentIds || []);
     const existingChildren = id ? tasks.filter((t) => (t.dependencies || []).includes(id)).map((t) => t.id) : [];
@@ -1971,6 +1977,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
       subTasks: taskSubTasks,
       deadline: taskDeadline,
       estimate: taskEstimate.trim(),
+      deadlineMinutes: taskDeadlineMinutes,
       notes: '',
       dependencies: selectedParents,
       manualStatus: manualSt,
@@ -2034,13 +2041,66 @@ function OrchestratorPage({ userId }: { userId: string }) {
     setIsModalOpen(false);
   };
 
-  const getTaskDurationDisplay = (t: Task): string | null => {
-    let totalSec = t.totalTimeSpentSeconds || 0;
-    if (t.manualStatus === 'progress' && t.startedAt) {
-      totalSec += Math.floor((now - t.startedAt) / 1000);
+  const getTaskDurationDisplay = (
+    t: Task
+  ): { text: string; isCountdown: boolean; isOvertime: boolean; badgeClass: string } | null => {
+    const isProgress = t.manualStatus === 'progress';
+    let spentSec = t.totalTimeSpentSeconds || 0;
+    if (isProgress && t.startedAt) {
+      spentSec += Math.floor((now - t.startedAt) / 1000);
     }
-    if (totalSec <= 0) return null;
-    return formatElapsed(totalSec);
+
+    // If deadline countdown timer is configured
+    if (t.deadlineMinutes && t.deadlineMinutes > 0) {
+      const targetSec = t.deadlineMinutes * 60;
+      const remainingSec = targetSec - spentSec;
+
+      if (isProgress) {
+        if (remainingSec <= 0) {
+          const overtime = Math.abs(remainingSec);
+          return {
+            text: overtime === 0 ? '0s (Time up!)' : `+${formatElapsed(overtime)} OT`,
+            isCountdown: true,
+            isOvertime: true,
+            badgeClass: 'bg-rose-500/30 text-rose-100 border-rose-500/80 animate-pulse',
+          };
+        }
+        return {
+          text: `${formatElapsed(remainingSec)} left`,
+          isCountdown: true,
+          isOvertime: false,
+          badgeClass:
+            remainingSec <= 300
+              ? 'bg-amber-500/30 text-amber-100 border-amber-500/80 animate-pulse'
+              : 'bg-indigo-500/30 text-indigo-100 border-indigo-400/80 shadow',
+        };
+      }
+
+      // If not yet started, show the configured target duration
+      return {
+        text: `${t.deadlineMinutes}m timer`,
+        isCountdown: true,
+        isOvertime: false,
+        badgeClass: 'bg-zinc-800/80 text-zinc-300 border-zinc-700/80 shadow-sm',
+      };
+    }
+
+    if (spentSec <= 0) return null;
+    return {
+      text: formatElapsed(spentSec),
+      isCountdown: false,
+      isOvertime: false,
+      badgeClass: 'bg-blue-500/30 text-blue-100 border-blue-400/60 shadow',
+    };
+  };
+
+  const cycleTaskDeadlineMinutes = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const task = tasks.find((t) => t.id === taskId);
+    const presets = [15, 25, 30, 45, 60, undefined];
+    const currentIdx = presets.indexOf(task?.deadlineMinutes);
+    const nextMinutes = presets[(currentIdx + 1) % presets.length];
+    saveTasks(tasks.map((t) => (t.id === taskId ? { ...t, deadlineMinutes: nextMinutes } : t)));
   };
 
   const getUpstreamChain = (taskId: string, stack = new Set<string>()): Task[] => {
@@ -2347,10 +2407,32 @@ function OrchestratorPage({ userId }: { userId: string }) {
                     {status}
                   </span>
                   {durationDisplay ? (
-                    <span className="font-mono text-[9px] md:text-[8px] font-bold text-blue-300 flex-shrink-0">
-                      {durationDisplay}
-                    </span>
-                  ) : null}
+                    <button
+                      type="button"
+                      onClick={(e) => cycleTaskDeadlineMinutes(t.id, e)}
+                      className={`font-mono text-[9px] md:text-[8px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-0.5 flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition ${durationDisplay.badgeClass}`}
+                      title="Click to cycle timer: 15m → 25m → 30m → 45m → 60m → None"
+                    >
+                      {durationDisplay.isOvertime ? (
+                        <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                      ) : durationDisplay.isCountdown ? (
+                        <Hourglass className="w-2.5 h-2.5 text-amber-300" />
+                      ) : (
+                        <Timer className="w-2.5 h-2.5" />
+                      )}
+                      <span>{durationDisplay.text}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => cycleTaskDeadlineMinutes(t.id, e)}
+                      className="font-mono text-[8px] md:text-[7px] text-zinc-400 hover:text-amber-300 px-1 py-0.2 rounded border border-dashed border-zinc-700/80 hover:border-amber-500/50 flex items-center gap-0.5 flex-shrink-0 transition"
+                      title="Click to set 30m countdown timer"
+                    >
+                      <Timer className="w-2 h-2" />
+                      <span>30m</span>
+                    </button>
+                  )}
 
                   {/* Group 1 / Group 2 ⇄ Switcher (moves task and all its dependent children) */}
                   <button
@@ -2665,7 +2747,7 @@ function OrchestratorPage({ userId }: { userId: string }) {
           {durationDisplay && (
             <div className="flex items-center gap-1 font-mono px-2.5 py-1 rounded text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
               <Timer className="w-3 h-3 text-zinc-400" />
-              <span>{durationDisplay}</span>
+              <span>{durationDisplay.text}</span>
             </div>
           )}
 
@@ -2865,11 +2947,32 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
         {/* Right: Actions */}
         <div className="flex items-center justify-end gap-2 flex-shrink-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-t-0">
-          {durationDisplay && (
-            <div className="flex items-center gap-1 font-mono px-2.5 py-1 rounded text-[10px] font-bold bg-blue-500/30 text-blue-100 border border-blue-400/60 shadow">
+          {durationDisplay ? (
+            <button
+              type="button"
+              onClick={(e) => cycleTaskDeadlineMinutes(t.id, e)}
+              className={`flex items-center gap-1.5 font-mono px-2.5 py-1 rounded-lg text-xs font-bold border shadow hover:scale-105 active:scale-95 transition cursor-pointer ${durationDisplay.badgeClass}`}
+              title="Click to cycle timer: 15m → 25m → 30m → 45m → 60m → None"
+            >
+              {durationDisplay.isOvertime ? (
+                <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+              ) : durationDisplay.isCountdown ? (
+                <Hourglass className="w-3.5 h-3.5 text-amber-300" />
+              ) : (
+                <Timer className="w-3.5 h-3.5" />
+              )}
+              <span>{durationDisplay.text}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => cycleTaskDeadlineMinutes(t.id, e)}
+              className="flex items-center gap-1 font-mono px-2 py-1 rounded-lg text-xs text-zinc-400 border border-dashed border-zinc-700/80 hover:text-amber-300 hover:border-amber-500/50 hover:bg-amber-500/10 transition"
+              title="Click to set 30m countdown timer"
+            >
               <Timer className="w-3 h-3" />
-              <span>{durationDisplay}</span>
-            </div>
+              <span>+ 30m</span>
+            </button>
           )}
 
           {status === 'ready' && (
@@ -3098,9 +3201,15 @@ function OrchestratorPage({ userId }: { userId: string }) {
 
         <div className="flex items-center justify-between text-[10px] text-zinc-300 pt-0.5">
           {durationDisplay ? (
-            <div className="flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
-              <Timer className="w-2.5 h-2.5" />
-              <span>{durationDisplay}</span>
+            <div className={`flex items-center gap-1 font-mono px-1.5 py-0.5 rounded text-[10px] font-bold border ${durationDisplay.badgeClass}`}>
+              {durationDisplay.isOvertime ? (
+                <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+              ) : durationDisplay.isCountdown ? (
+                <Hourglass className="w-2.5 h-2.5 text-amber-300" />
+              ) : (
+                <Timer className="w-2.5 h-2.5" />
+              )}
+              <span>{durationDisplay.text}</span>
             </div>
           ) : t.estimate ? (
             <div className="text-zinc-400 flex items-center gap-1">
@@ -4455,9 +4564,9 @@ function OrchestratorPage({ userId }: { userId: string }) {
                                 <div className="flex items-center justify-between text-[10px] pt-1 border-t border-white/10 flex-shrink-0">
                                   <div className="flex items-center gap-1">
                                     {durationDisplay ? (
-                                      <div className="flex items-center gap-1 font-mono px-1 py-0.2 rounded text-[9px] font-bold bg-blue-500/30 text-blue-200 animate-pulse border border-blue-400/50">
+                                      <div className={`flex items-center gap-1 font-mono px-1 py-0.2 rounded text-[9px] font-bold border ${durationDisplay.badgeClass}`}>
                                         <Timer className="w-2.5 h-2.5" />
-                                        <span>{durationDisplay}</span>
+                                        <span>{durationDisplay.text}</span>
                                       </div>
                                     ) : t.estimate ? (
                                       <div className="text-zinc-400 flex items-center gap-1 text-[9px]">
@@ -4910,6 +5019,82 @@ function OrchestratorPage({ userId }: { userId: string }) {
                 placeholder="Add task details or specifications..."
                 className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"
               />
+            </div>
+
+            {/* Dedicated Deadline Countdown Timer Section */}
+            <div className="p-3 bg-zinc-950/90 border border-amber-500/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-amber-300 flex items-center gap-1.5">
+                  <Timer className="w-3.5 h-3.5 text-amber-400" /> Deadline Timer (Countdown)
+                </label>
+                {taskDeadlineMinutes ? (
+                  <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Hourglass className="w-2.5 h-2.5" />
+                    {taskDeadlineMinutes}m countdown
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-zinc-500">No time limit</span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                Choose how long you want to work on this. When started, the timer counts down from your target (e.g. 30 minutes) to 0.
+              </p>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {[15, 25, 30, 45, 60, 90, 120].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setTaskDeadlineMinutes(m);
+                      setCustomDeadlineMinutesInput(String(m));
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition border shadow-sm ${
+                      taskDeadlineMinutes === m
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400 ring-2 ring-amber-500/40'
+                        : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {m === 25 ? '25m 🍅' : m === 60 ? '60m (1h)' : `${m}m`}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTaskDeadlineMinutes(undefined);
+                    setCustomDeadlineMinutesInput('');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border ${
+                    !taskDeadlineMinutes
+                      ? 'bg-zinc-800 text-zinc-200 border-zinc-600 font-bold'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  None
+                </button>
+              </div>
+
+              {/* Custom Minutes Input */}
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-[10px] text-zinc-400 font-medium">Or Custom Minutes:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  placeholder="e.g. 30"
+                  value={customDeadlineMinutesInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomDeadlineMinutesInput(val);
+                    const num = parseInt(val, 10);
+                    setTaskDeadlineMinutes(num > 0 ? num : undefined);
+                  }}
+                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500 text-center"
+                />
+                <span className="text-[10px] text-zinc-500 font-mono">minutes</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
